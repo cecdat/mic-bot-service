@@ -3,5 +3,8 @@ click
 Flask-HTTPAuth
 Flask-SQLAlchemy
 mysql-connector-python
+pymysql
+cryptography
 Werkzeug
 requests
+APScheduler

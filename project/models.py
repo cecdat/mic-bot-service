@@ -15,6 +15,7 @@ class BotNode(db.Model):
     status = db.Column(db.Integer, default=1)
     activity_status = db.Column(db.String(50), default='Idle')
     command = db.Column(db.String(50), nullable=True)
+    command_status = db.Column(db.String(50), nullable=True, default=None)  # pending, received, executed
     last_seen = db.Column(db.String(255))
     heartbeat_timeout = db.Column(db.Integer, default=600)
     ip_address = db.Column(db.String(45))

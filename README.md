@@ -1,4 +1,4 @@
-# Points API Server - Mic-Bot 指挥中心
+# Mic-Bot 中央控制服务器
 
 这是一个功能强大的、容器化的API服务与前端面板，旨在作为 `mic-bot` 分布式执行节点的中央指挥与控制（C2）服务器。它通过安全的、基于Token的API接收来自不同节点的任务状态，将所有配置和监控数据集中存储在MySQL数据库中，并最终通过一个基于LayUI的、美观优雅的Web界面进行统一的管理、监控和任务下发。
 
@@ -33,6 +33,33 @@
 * 一台拥有公网IP的服务器。
 * 已安装 [Docker](https://get.docker.com/) 和 [Docker Compose](https://docs.docker.com/compose/install/)。
 
+## 🔄 数据库版本管理
+
+系统包含自动数据库版本管理功能，可在升级时自动应用数据结构变更。
+
+### 版本管理原理
+1. 系统使用 `db_version` 表记录数据库结构版本
+2. 每次启动服务时，`init.sh` 脚本会检查当前数据库版本
+3. 如果发现有新版本的升级脚本需要应用，会自动执行并记录新版本
+
+### 创建新的升级脚本
+当需要修改数据库结构时，请按照以下步骤操作：
+1. 复制 `example_upgrade_template.sql` 并命名为 `upgrade_db_vX.Y.sql`（X.Y为新版本号）
+2. 在新脚本中添加你的SQL变更语句
+3. 更新 `init.sh` 中的版本检查逻辑，确保新脚本在适当的时候被应用
+4. 在脚本中添加版本记录语句，例如：
+   ```sql
+   INSERT INTO db_version (version, description) VALUES ('X.Y', '变更描述');
+   ```
+
+### 手动执行升级
+如果需要手动执行升级，可以使用以下命令：
+```bash
+docker-compose exec points-api-new mysql -uuser -ppassword rewards_db < upgrade_db_vX.Y.sql
+```
+
+## 🚀 首次部署步骤
+
 ### 2. 下载并配置项目
 * 将本项目的全部文件上传到您服务器的一个目录中（例如 `/root/points_api_new`）。
 * 打开 `docker-compose.yaml` 文件，根据您的需要修改 `db` 服务中的 `MYSQL_...` 环境变量，特别是 **`MYSQL_ROOT_PASSWORD`**，请务必修改为一个强密码。
@@ -45,29 +72,27 @@
 * 首次启动时，请等待约30-60秒，让MySQL服务完成初始化。
 
 ### 4. 初始化数据库
-这是**首次部署**时最关键的一步，它会在您的MySQL中创建所有必需的数据表。
-* 在项目根目录下，执行以下命令：
-    ```bash
-    docker-compose exec points-api-new flask init-db
-    ```
-* 看到 `Initialized the database.` 的提示即表示成功。
+首次启动时，系统会通过 `init.sh` 脚本自动完成数据库初始化，包括创建必需的数据表和版本记录。无需手动执行命令。
 
 ### 5. 创建您的管理员账号
-数据库初始化后是空的，我们需要手动创建第一个网页管理员账号。
-* 执行以下命令，将 `<你的用户名>` 和 `<你的密码>` 替换为您想要设置的凭证：
-    ```bash
-    docker-compose exec points-api-new flask add-user <你的用户名> <你的密码>
-    ```
-    *示例*: `docker-compose exec points-api-new flask add-user admin MyPassword123`
-* 看到 `Created user '...'` 的提示即表示成功。
+数据库初始化完成后，您可以通过网页注册功能创建第一个管理员账号：
+1. 访问 `http://你的服务器IP:2002/register`
+2. 填写用户名、密码（请确保足够复杂）和邮箱
+3. 点击注册按钮完成账号创建
+4. 系统会自动将第一个注册的用户设置为管理员权限
 
 ### 6. 登录并开始使用
 * **访问网页**: 打开浏览器，访问 `http://你的服务器IP:2002`。
-* **登录**: 使用您刚刚创建的管理员用户名和密码进行登录。
+* **登录**: 使用您通过注册创建的管理员用户名和密码进行登录。
 * **开始配置**:
-    1.  导航到“**节点管理**”页面，创建一个新节点以获取 API Token。
-    2.  导航到“**推送配置**”页面，添加您的 Bark URL 并订阅您关心的事件。
-    3.  导航到“**账户管理**”页面，开始添加和分配您的 `mic-bot` 账户。
+    1. 导航到“**节点管理**”页面，创建一个新节点以获取 API Token。
+    2. 导航到“**推送配置**”页面，添加您的 Bark URL 并订阅您关心的事件。
+    3. 导航到“**账户管理**”页面，开始添加和分配您的 `mic-bot` 账户。
+
+## 🔒 安全提示
+* 请确保您的管理员密码足够复杂，包含字母、数字和特殊字符。
+* 定期更改密码以增强安全性。
+* 不要在公共网络环境下使用默认密码或弱密码。
 
 ## 📄 许可证
 本项目采用 [MIT](https://opensource.org/licenses/MIT) 许可证。

@@ -1,2 +1,4 @@
-data/
 project/__pycache__
+instance/
+../mic-bot-node/sessions/
+data/

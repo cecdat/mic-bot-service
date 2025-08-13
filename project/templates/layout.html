@@ -33,6 +33,9 @@
                 <li class="layui-nav-item {% if request.path == url_for('frontend.push') %}layui-this{% endif %}">
                     <a href="{{ url_for('frontend.push') }}"><i class="layui-icon layui-icon-notice"></i> 推送配置</a>
                 </li>
+                <li class="layui-nav-item {% if request.path == url_for('frontend.change_password') %}layui-this{% endif %}">
+                    <a href="{{ url_for('frontend.change_password') }}"><i class="layui-icon layui-icon-password"></i> 修改密码</a>
+                </li>
             </ul>
         </div>
     </div>

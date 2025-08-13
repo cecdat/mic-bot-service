@@ -9,8 +9,13 @@ services:
       # 挂载代码以实现热更新
       - ./run.py:/app/run.py
       - ./project:/app/project
+      - ./delete_users.py:/app/delete_users.py
       # 将实例文件夹持久化
       - ./instance:/app/instance
+      # 确保delete_users.py文件被挂载
+      - type: bind
+        source: ./delete_users.py
+        target: /app/delete_users.py
     environment:
       - FLASK_APP=run
       - FLASK_ENV=production

@@ -19,5 +19,7 @@ EXPOSE 5000
 ENV FLASK_APP=run
 ENV FLASK_ENV=production
 
-# 使用 Flask CLI 启动应用
-CMD ["flask", "run", "--host=0.0.0.0"]
+# 添加执行权限并使用初始化脚本启动
+COPY init.sh .
+RUN chmod +x init.sh
+CMD ["./init.sh"]

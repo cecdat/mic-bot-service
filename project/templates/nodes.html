@@ -15,10 +15,11 @@
 
 {% raw %}
 <script type="text/html" id="table-actions">
-    <a class="layui-btn layui-btn-xs layui-btn-warm" lay-event="trigger" {{# if(d.activity_status !== 'Idle' || d.status !== 'Online'){ }} disabled {{# } }}>运行</a>
-    <a class="layui-btn layui-btn-xs layui-btn-danger" lay-event="stop" {{# if(d.activity_status !== 'Running'){ }} disabled {{# } }}>停止</a>
-    <a class="layui-btn layui-btn-xs" lay-event="edit">配置</a>
-    <a class="layui-btn layui-btn-xs layui-btn-primary" lay-event="del">删除</a>
+    <span class="layui-badge layui-bg-warm" title="运行" {{# if(d.activity_status !== 'Idle' || d.status !== 'Online'){ }} style='opacity: 0.5; cursor: not-allowed;' {{# } }} lay-event="trigger"><i class="layui-icon layui-icon-play"></i></span>
+    <span class="layui-badge layui-bg-danger" title="停止" {{# if(d.activity_status !== 'Running'){ }} style='opacity: 0.5; cursor: not-allowed;' {{# } }} lay-event="stop"><i class="layui-icon layui-icon-pause"></i></span>
+    <span class="layui-badge layui-bg-primary" title="重置bot状态" lay-event="reset"><i class="layui-icon layui-icon-refresh"></i></span>
+    <span class="layui-badge layui-bg-blue" title="编辑" lay-event="edit"><i class="layui-icon layui-icon-edit"></i></span>
+    <span class="layui-badge layui-bg-gray" title="删除" lay-event="del"><i class="layui-icon layui-icon-delete"></i></span>
 </script>
 {% endraw %}
 
@@ -70,14 +71,34 @@
 {% endblock %}
 
 
+{% block custom_css %}
+<style>
+/* 调整分页区域样式，解决文字显示不全问题 */
+.layui-table-page {
+    margin-top: 15px !important;  /* 减少上边距 */
+    padding: 6px 15px !important; /* 调整内边距 */
+}
+
+/* 确保分页按钮文字完整显示 */
+.layui-laypage a, .layui-laypage span {
+    height: 28px !important;
+    line-height: 28px !important;
+    padding: 0 10px !important;
+}
+</style>
+{% endblock %}
+
 {% block custom_js %}
 <script>
 layui.use(['table', 'form', 'layer'], function(){
+    // 移除自动刷新功能
+    let tableIns; // 表格实例变量
+
     var table = window.table;
     var form = window.form;
     var layer = window.layer;
 
-    var tableIns = table.render({
+    tableIns = table.render({
         elem: '#nodes-table',
         url: '/web_api/nodes',
         height: 'full-160',
@@ -111,6 +132,8 @@ layui.use(['table', 'form', 'layer'], function(){
         }
     });
     
+
+
     table.on('tool(nodesTable)', function(obj){
         var data = obj.data;
         if(obj.event === 'edit'){
@@ -124,6 +147,8 @@ layui.use(['table', 'form', 'layer'], function(){
             stopNode(data.id);
         } else if (obj.event === 'del') {
             deleteNode(data.id, data.node_name);
+        } else if (obj.event === 'reset') {
+            resetNode(data.id, data.node_name);
         }
     });
 
@@ -316,6 +341,31 @@ layui.use(['table', 'form', 'layer'], function(){
                 layer.closeAll('loading');
                 layer.alert('请求失败: ' + e.message, {icon: 2});
             });
+            layer.close(index);
+        });
+    }
+
+    function resetNode(nodeId, nodeName) {
+        layer.confirm(`确定要重置节点 [${nodeName}] 的Bot状态吗？`, {
+            icon: 3, title: '确认重置',
+            btn: ['确认', '取消']
+        }, function(index) {
+            layer.load(1);
+            fetchWithAuth(`/web_api/nodes/${nodeId}/reset`, { method: 'POST' })
+                .then(response => response.json())
+                .then(result => {
+                    layer.closeAll('loading');
+                    if (result.status === 'success') {
+                        layer.msg(result.message || '节点状态已重置', { icon: 1 });
+                        tableIns.reload();
+                    } else {
+                        layer.msg(result.message || '重置节点状态失败', { icon: 2 });
+                    }
+                })
+                .catch(error => {
+                    layer.closeAll('loading');
+                    layer.msg('重置节点状态失败: ' + error.message, { icon: 2 });
+                });
             layer.close(index);
         });
     }

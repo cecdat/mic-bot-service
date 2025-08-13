@@ -25,6 +25,13 @@ def node_checkin():
         node.status = 1
         node.last_seen = timestamp
         node.ip_address = ip_address
+        
+        # 处理bot_status参数
+        if 'bot_status' in data:
+            bot_status = data.get('bot_status')
+            if bot_status in ['Running', 'Idle']:
+                node.activity_status = bot_status
+                
         if 'heartbeat_timeout' in data:
             node.heartbeat_timeout = data.get('heartbeat_timeout')
         db.session.commit()
@@ -45,16 +52,37 @@ def command_poll():
     for _ in range(55):
         # Re-fetch from DB each loop to get the latest command
         node_fresh = BotNode.query.get(node.id)
-        if node_fresh and node_fresh.command:
+        if node_fresh and node_fresh.command and node_fresh.command_status == 'pending':
             command_to_run = node_fresh.command
-            # Clear command immediately after reading it
-            node_fresh.command = None
-            db.session.commit()
+            # Update command status to received
+            if node_fresh.command_status != 'received':
+                node_fresh.command_status = 'received'
+                db.session.commit()
             return jsonify({"command": command_to_run})
         time.sleep(1)
     
     # Return no command after timeout
     return jsonify({"command": None})
+
+@bp.route('/confirm_command', methods=['POST'])
+@bot_api_required
+def confirm_command():
+    node = g.node
+    data = request.get_json()
+    command = data.get('command')
+    
+    try:
+        node_fresh = BotNode.query.get(node.id)
+        if node_fresh and node_fresh.command == command:
+            # Clear command and update status
+            node_fresh.command = None
+            node_fresh.command_status = 'executed'
+            db.session.commit()
+            return jsonify({"status": "success", "message": "Command confirmed"})
+        return jsonify({"status": "error", "message": "No pending command to confirm"}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @bp.route('/update_activity', methods=['POST'])
 @bot_api_required

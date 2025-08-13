@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, session
 from .db import db
 from .models import Account, BotAccount, BotNode, PushConfig, WebUser
 from .auth import web_login_required
+from . import scheduler
 import datetime
 import json
 import secrets
@@ -136,6 +137,9 @@ def manage_nodes():
         
         db.session.commit()
         
+        # 更新定时任务
+        scheduler.update_node_task(node.id, node.cron_schedule, node.node_name)
+        
         if request.method == 'POST':
             return jsonify({"status": "success", "node_name": node.node_name, "api_token": new_token})
         else:
@@ -152,6 +156,7 @@ def trigger_node(node_id):
         return jsonify({"status": "error", "message": f"节点正忙 ({node.activity_status})，无法触发。"}), 409
         
     node.command = 'RUN_TASKS'
+    node.command_status = 'pending'  # 设置命令状态为待处理
     db.session.commit()
     return jsonify({"status": "success", "message": f"已向节点 {node.node_name} 发送触发指令。"})
 
@@ -161,12 +166,22 @@ def stop_node(node_id):
     node = BotNode.query.get(node_id)
     if not node: return jsonify({"status": "error", "message": "未找到该节点"}), 404
     
-    if node.activity_status != 'Running':
-        return jsonify({"status": "error", "message": "节点当前未在运行任务，无法停止。"}), 409
-        
     node.command = 'STOP_TASKS'
+    node.command_status = 'pending'  # 设置命令状态为待处理
     db.session.commit()
     return jsonify({"status": "success", "message": f"已向节点 {node.node_name} 发送停止指令。"})
+
+@bp.route('/nodes/<int:node_id>/reset', methods=['POST'])
+@web_login_required
+def reset_node_status(node_id):
+    node = BotNode.query.get(node_id)
+    if not node: return jsonify({"status": "error", "message": "未找到该节点"}), 404
+    
+    node.activity_status = 'Idle'
+    db.session.commit()
+    
+    return jsonify({"status": "success", "message": f"节点 {node.node_name} 的Bot状态已重置为待机"})
+
 
 @bp.route('/nodes/<int:node_id>', methods=['DELETE'])
 @web_login_required
@@ -183,6 +198,9 @@ def delete_node(node_id):
             for account in node.accounts:
                 account.assigned_node_id = None
             db.session.commit()
+        
+        # 删除节点前先移除定时任务
+        scheduler.update_node_task(node.id, None, node.node_name)
         
         # 删除节点
         node_name = node.node_name
@@ -234,6 +252,7 @@ def manage_bot_accounts():
                 if not account:
                     account = BotAccount(email=email)
                     db.session.add(account)
+                    db.session.flush()  # 刷新以获取id
                     # 创建对应的Account记录
                     new_account = Account(bot_account_id=account.id, total_points=0, daily_gain=0)
                     db.session.add(new_account)
