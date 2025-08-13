@@ -238,6 +238,13 @@ layui.use(['table', 'form', 'layer'], function(){
                 layer.closeAll('page');
                 tableIns.reload();
                 layer.msg('保存成功', {icon: 1});
+                
+                // 设置标志，通知监控面板刷新数据
+                localStorage.setItem('accountsUpdated', 'true');
+                // 如果当前不在监控面板页面，尝试刷新父页面
+                if (window.parent && window.parent.location.pathname !== '/') {
+                    window.parent.location.reload();
+                }
             } else {
                 layer.alert('操作失败: ' + result.message, {icon: 2});
             }

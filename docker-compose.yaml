@@ -1,7 +1,7 @@
 services:
-  points-api:
+  points:
     build: .
-    container_name: points-api-service # 使用唯一的容器名
+    container_name: api # 使用唯一的容器名
     restart: unless-stopped
     ports:
       - "2002:5000" # 使用 2002 端口

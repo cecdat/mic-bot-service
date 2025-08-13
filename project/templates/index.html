@@ -76,7 +76,8 @@ layui.use(['layer', 'element'], function(){
     
     async function fetchPoints() {
         try {
-            const response = await fetchWithAuth('/web_api/get_points');
+            // 默认获取所有账户数据，而不仅仅是当天的
+            const response = await fetchWithAuth('/web_api/get_points?filter=all');
             const data = await response.json();
             
             const container = document.getElementById('accounts-container');
@@ -142,8 +143,20 @@ layui.use(['layer', 'element'], function(){
         }
     }
     
+    // 初始加载数据
     fetchPoints();
+    
+    // 定期刷新数据
     setInterval(fetchPoints, 60000);
+    
+    // 监听本地存储变化，用于实时刷新
+    window.addEventListener('storage', function(event) {
+        if (event.key === 'accountsUpdated' && event.newValue === 'true') {
+            // 清除标志并刷新数据
+            localStorage.setItem('accountsUpdated', 'false');
+            fetchPoints();
+        }
+    });
 });
 </script>
 {% endblock %}

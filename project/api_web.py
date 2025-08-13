@@ -29,10 +29,11 @@ def web_login():
 @web_login_required
 def get_points():
     # [核心修改] 增加 filter 参数
-    show_all = request.args.get('filter', 'today') == 'all'
+    show_all = request.args.get('filter', 'all') == 'all'
     
-    query = db.session.query(Account, BotAccount.email)\
+    query = db.session.query(Account, BotAccount.email, BotNode.node_name)\
         .outerjoin(BotAccount, Account.bot_account_id == BotAccount.id)\
+        .outerjoin(BotNode, BotAccount.assigned_node_id == BotNode.id)\
         .order_by(Account.last_updated.desc())
     
     today_str = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
@@ -42,12 +43,21 @@ def get_points():
         query = query.filter(db.func.date(Account.last_updated) == today_str)
         
     results = query.all()
+
+    # 如果没有结果且不是查询所有数据，则尝试查询所有数据
+    if not results and not show_all:
+        query = db.session.query(Account, BotAccount.email, BotNode.node_name)\
+            .outerjoin(BotAccount, Account.bot_account_id == BotAccount.id)\
+            .outerjoin(BotNode, BotAccount.assigned_node_id == BotNode.id)\
+            .order_by(Account.last_updated.desc())
+        results = query.all()
     
     points_data = []
     
-    for account, email in results:
+    for account, email, node_name in results:
         acc_dict = {c.name: getattr(account, c.name) for c in account.__table__.columns}
         acc_dict['email'] = email or "未知账户 (孤立数据)"
+        acc_dict['node_name'] = node_name or None
 
         if acc_dict.get('status_details'):
             acc_dict['status_details'] = json.loads(acc_dict['status_details'])
@@ -217,25 +227,28 @@ def manage_bot_accounts():
         return jsonify(accounts_data)
 
     if request.method == 'POST':
-        data = request.get_json()
-        email = data.get('email')
-        try:
-            account = BotAccount.query.filter_by(email=email).first()
-            if not account:
-                account = BotAccount(email=email)
-                db.session.add(account)
+            data = request.get_json()
+            email = data.get('email')
+            try:
+                account = BotAccount.query.filter_by(email=email).first()
+                if not account:
+                    account = BotAccount(email=email)
+                    db.session.add(account)
+                    # 创建对应的Account记录
+                    new_account = Account(bot_account_id=account.id, total_points=0, daily_gain=0)
+                    db.session.add(new_account)
 
-            account.password = data.get('password')
-            account.proxy = json.dumps(data.get('proxy', {}))
-            account.user_agents = json.dumps(data.get('userAgents', {}))
-            account.hot_search_endpoints = json.dumps(data.get('hotSearchEndpoints', []))
-            account.assigned_node_id = data.get('assigned_node_id')
-            
-            db.session.commit()
-            return jsonify({"status": "success", "message": "Account saved."})
-        except Exception as e:
-            db.session.rollback()
-            return jsonify({"status": "error", "message": str(e)}), 500
+                account.password = data.get('password')
+                account.proxy = json.dumps(data.get('proxy', {}))
+                account.user_agents = json.dumps(data.get('userAgents', {}))
+                account.hot_search_endpoints = json.dumps(data.get('hotSearchEndpoints', []))
+                account.assigned_node_id = data.get('assigned_node_id')
+                
+                db.session.commit()
+                return jsonify({"status": "success", "message": "Account saved."})
+            except Exception as e:
+                db.session.rollback()
+                return jsonify({"status": "error", "message": str(e)}), 500
 
 @bp.route('/bot_accounts/<int:account_id>', methods=['DELETE'])
 @web_login_required
