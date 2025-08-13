@@ -1,0 +1,149 @@
+{% extends "layout.html" %}
+
+{% block title %}监控面板{% endblock %}
+
+{% block content %}
+<div class="layui-card">
+    <div class="layui-card-header" style="padding: 10px 15px; font-size: 14px; display: flex; justify-content: space-between; align-items: center;">
+        <h2 class="page-title" style="display: inline-block; margin: 0;">
+            监控面板
+        </h2>
+        <small class="layui-text-em" id="last-updated" style="margin-left: 15px; font-size: 14px;"></small>
+    </div>
+    <div class="layui-card-body" style="padding: 12px;">
+        <div class="layui-row layui-col-space15" id="accounts-container">
+            </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block custom_js %}
+<script>
+layui.use(['layer', 'element'], function(){
+    var layer = window.layer;
+    var element = window.element;
+    
+    const POINTS_PER_YUAN = 179.25;
+    const bgColors = ['#1E9FFF', '#FF5722', '#5FB878', '#FFB800', '#009688', '#2F4056', '#c0392b', '#8e44ad'];
+
+    function calculateValue(points) {
+        if (typeof points !== 'number' || isNaN(points)) return 'N/A';
+        return '¥ ' + (points / POINTS_PER_YUAN).toFixed(2);
+    }
+
+    function getStatusIcons(statusDetails) {
+        let html = '';
+        const platforms = [
+            { key: 'pc', icon: 'layui-icon-auz', name: '桌面端' },
+            { key: 'mobile', icon: 'layui-icon-cellphone', name: '移动端' }
+        ];
+
+        platforms.forEach(p => {
+            const details = statusDetails ? statusDetails[p.key] : null;
+            let iconClass = 'text-secondary';
+            let title = `${p.name}: 状态未知`;
+
+            if (details) {
+                if (details.status === true) {
+                    iconClass = 'text-success';
+                    title = `${p.name}: 正常 (Code: ${details.code}, ${details.message})`;
+                } else {
+                    if ([1, 2].includes(details.code)) {
+                        iconClass = 'text-danger';
+                    } else if ([3, 4].includes(details.code)) {
+                        iconClass = 'text-warning';
+                    } else {
+                        iconClass = 'text-danger';
+                    }
+                    title = `${p.name}: 异常 - ${details.message} (Code: ${details.code})`;
+                }
+            }
+            html += `<i class="layui-icon ${p.icon} status-icon ${iconClass}" title="${title}"></i>`;
+        });
+        return html;
+    }
+
+    function getCardStatusClass(statusDetails) {
+        if (!statusDetails || (!statusDetails.pc && !statusDetails.mobile)) {
+            return 'status-unknown';
+        }
+        if ((statusDetails.pc && statusDetails.pc.status !== true) || 
+            (statusDetails.mobile && statusDetails.mobile.status !== true)) {
+            return 'status-error';
+        }
+        return 'status-normal';
+    }
+    
+    async function fetchPoints() {
+        try {
+            const response = await fetchWithAuth('/web_api/get_points');
+            const data = await response.json();
+            
+            const container = document.getElementById('accounts-container');
+            const lastUpdatedEl = document.getElementById('last-updated');
+            
+            if (container && lastUpdatedEl) {
+                container.innerHTML = '';
+                lastUpdatedEl.textContent = `最后刷新: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`;
+            
+                if (!Array.isArray(data) || data.length === 0) {
+                    container.innerHTML = `<div class="layui-col-md12"><div class="layui-card"><div class="layui-card-body" style="text-align: center; color: #999;">暂无账户数据，请先到“账户管理”页面添加账户。</div></div></div>`;
+                    return;
+                }
+
+                const nodeColorMap = {};
+                let colorIndex = 0;
+                data.forEach(account => {
+                    const nodeName = account.node_name || '未知节点';
+                    if (!nodeColorMap[nodeName]) {
+                        nodeColorMap[nodeName] = bgColors[colorIndex++ % bgColors.length];
+                    }
+                    const cardColor = nodeColorMap[nodeName];
+                    const lastUpdated = account.last_updated ? new Date(account.last_updated).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : 'N/A';
+                    const statusIcons = getStatusIcons(account.status_details);
+                    const cardStatusClass = getCardStatusClass(account.status_details);
+                    
+                    const desktopGain = account.desktop_gain || 0;
+                    const mobileGain = account.mobile_gain || 0;
+                    const totalDailyGain = desktopGain + mobileGain;
+
+                    const cardHtml = `
+                        <div class="layui-col-md3 layui-col-sm6">
+                            <div class="layui-card info-card ${cardStatusClass}" style="box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05); transition: all 0.3s;">
+                                <div class="layui-card-header">
+                                    ${account.email}
+                                    <span class="layui-badge layui-bg-blue" style="float: right;">${nodeName}</span>
+                                </div>
+                                <div class="layui-card-body">
+                                    <div class="stat-grid" style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                                        <div class="stat-item" style="text-align: center; flex: 1; padding: 0 5px;">
+                                            <p style="font-size: 12px; color: #666; margin-bottom: 3px;">总积分</p>
+                                            <h3 style="font-size: 18px; font-weight: bold; margin: 0;">${account.total_points || 0}</h3>
+                                        </div>
+                                        <div class="stat-item">
+                                            <p style="font-size: 12px; color: #666; margin-bottom: 3px;">今日收益</p>
+                                            <h3 class="success" style="font-size: 18px; font-weight: bold; margin: 0;">${totalDailyGain}</h3>
+                                        </div>
+                                    </div>
+                                    <div class="card-footer" style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #999; padding-top: 8px; margin-top: 8px; border-top: 1px solid #f2f2f2;">
+                                        <span class="status-icon-group">${statusIcons}</span>
+                                        <span>
+                                            <i class="layui-icon layui-icon-log"></i> ${lastUpdated}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+                    container.insertAdjacentHTML('beforeend', cardHtml);
+                });
+            }
+        } catch (error) {
+            console.error('获取数据失败:', error);
+        }
+    }
+    
+    fetchPoints();
+    setInterval(fetchPoints, 60000);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - Mic-Bot Server</title>
+    <link rel="stylesheet" href="{{ url_for('frontend.static', filename='layui/css/layui.css') }}">
+    <link rel="stylesheet" href="{{ url_for('frontend.static', filename='styles.css') }}">
+</head>
+<body class="login-body">
+<div class="login-wrapper">
+    <h2 class="layui-timeline-title">Mic-Bot Server</h2>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="layui-alert layui-alert-error" style="display: block; margin-bottom: 15px;">{{ messages[0] }}</div>
+      {% endif %}
+    {% endwith %}
+    <form class="layui-form" method="post" action="{{ url_for('frontend.login') }}">
+        <div class="layui-form-item">
+            <input type="text" name="username" required lay-verify="required" placeholder="请输入用户名" autocomplete="off" class="layui-input">
+        </div>
+        <div class="layui-form-item">
+            <input type="password" name="password" required lay-verify="required" placeholder="请输入密码" autocomplete="off" class="layui-input">
+        </div>
+        <div class="layui-form-item">
+            <button class="layui-btn layui-btn-fluid" lay-submit>立即登录</button>
+        </div>
+    </form>
+</div>
+<script src="{{ url_for('frontend.static', filename='layui/layui.js') }}"></script>
+<script>
+layui.use(['form'], function(){
+  var form = layui.form;
+});
+</script>
+</body>
+</html>

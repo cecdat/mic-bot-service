@@ -1,0 +1,38 @@
+services:
+  points-api:
+    build: .
+    container_name: points-api-service # 使用唯一的容器名
+    restart: unless-stopped
+    ports:
+      - "2002:5000" # 使用 2002 端口
+    volumes:
+      # 挂载代码以实现热更新
+      - ./run.py:/app/run.py
+      - ./project:/app/project
+      # 将实例文件夹持久化
+      - ./instance:/app/instance
+    environment:
+      - FLASK_APP=run
+      - FLASK_ENV=production
+      - TZ=Asia/Shanghai
+      # --- 数据库连接信息 ---
+      - DATABASE_URL=mysql+mysqlconnector://user:password@db:3306/rewards_db
+      # --- 管理员账号密码，用于网页登录 ---
+      - ADMIN_USER=admin
+      - ADMIN_PASS=password
+    depends_on:
+      - db
+
+  db:
+    image: docker.1ms.run/mysql:8.0
+    container_name: mysql-db-service # 使用唯一的容器名
+    restart: unless-stopped
+    environment:
+      - MYSQL_DATABASE=rewards_db
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_ROOT_PASSWORD=verysecretrootpassword # 请修改为一个更安全的root密码
+      - TZ=Asia/Shanghai
+    volumes:
+      # 将 MySQL 数据持久化到宿主机的 ./data 目录
+      - ./data:/var/lib/mysql

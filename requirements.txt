@@ -1,0 +1,7 @@
+Flask
+click
+Flask-HTTPAuth
+Flask-SQLAlchemy
+mysql-connector-python
+Werkzeug
+requests

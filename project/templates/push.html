@@ -1,0 +1,177 @@
+{% extends "layout.html" %}
+
+{% block title %}推送配置{% endblock %}
+{% block page_title %}推送配置 (Bark){% endblock %}
+
+{% block content %}
+<div class="layui-card">
+    <div class="layui-card-header">新增推送URL</div>
+    <div class="layui-card-body">
+        <form class="layui-form" lay-filter="add-push-form" onsubmit="return false;">
+            <div class="layui-form-item">
+                <label class="layui-form-label">Bark URL</label>
+                <div class="layui-input-block">
+                    <input type="url" name="url" required lay-verify="required|url" placeholder="https://api.day.app/YOUR_BARK_KEY" autocomplete="off" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <div class="layui-input-block">
+                    <button class="layui-btn" lay-submit lay-filter="addPushConfig"><i class="layui-icon layui-icon-add-1"></i> 添加URL</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="layui-card">
+    <div class="layui-card-header">推送列表</div>
+    <div class="layui-card-body">
+        <table class="layui-hide" id="push-configs-table" lay-filter="pushConfigsTable"></table>
+    </div>
+</div>
+
+{% raw %}
+<script type="text/html" id="table-actions-push">
+    <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del">删除</a>
+</script>
+
+<script type="text/html" id="onlineSwitchTpl">
+    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_node_online" data-id="{{ d.id }}" {{ d.notify_on_node_online ? 'checked' : '' }}>
+</script>
+<script type="text/html" id="offlineSwitchTpl">
+    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_node_offline" data-id="{{ d.id }}" {{ d.notify_on_node_offline ? 'checked' : '' }}>
+</script>
+<script type="text/html" id="errorSwitchTpl">
+    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_account_error" data-id="{{ d.id }}" {{ d.notify_on_account_error ? 'checked' : '' }}>
+</script>
+{% endraw %}
+
+{% endblock %}
+
+{% block custom_js %}
+<script>
+layui.use(['table', 'form', 'layer'], function(){
+    var table = window.table;
+    var form = window.form;
+    var layer = window.layer;
+
+    // Table rendering
+    var tableIns = table.render({
+        elem: '#push-configs-table',
+        url: '/web_api/push_configs',
+        height: 'full-280',
+        cellMinWidth: 80,
+        cols: [[
+            {field: 'url', title: 'Bark URL', minWidth: 300},
+            {field: 'notify_on_node_online', title: '节点上线', width: 120, align: 'center', templet: '#onlineSwitchTpl'},
+            {field: 'notify_on_node_offline', title: '节点离线', width: 120, align: 'center', templet: '#offlineSwitchTpl'},
+            {field: 'notify_on_account_error', title: '账户异常', width: 120, align: 'center', templet: '#errorSwitchTpl'},
+            {fixed: 'right', title:'操作', toolbar: '#table-actions-push', width: 100, align: 'center'}
+        ]],
+        parseData: function(res){
+            if (res.status === 401) {
+                window.location.href = "{{ url_for('frontend.login') }}";
+                return;
+            }
+            return { "code": 0, "msg": "", "count": res.length, "data": res };
+        },
+        done: function(res, curr, count){
+            form.render('checkbox');
+        }
+    });
+    
+    // Listen for table row tool events
+    table.on('tool(pushConfigsTable)', function(obj){
+        var data = obj.data;
+        if(obj.event === 'del'){
+            deletePushConfig(data.id);
+        }
+    });
+
+    // Listen for the "Add Push URL" form submission
+    form.on('submit(addPushConfig)', function(data){
+        layer.load(1);
+        fetchWithAuth('/web_api/push_configs', {
+            method: 'POST',
+            body: JSON.stringify(data.field)
+        })
+        .then(response => response.json())
+        .then(result => {
+            layer.closeAll('loading');
+            if (result.status === 'success') {
+                layer.msg('添加成功', {icon: 1});
+                tableIns.reload();
+                document.querySelector('[name="url"]').value = '';
+            } else {
+                layer.alert('添加失败: ' + (result.message || '未知错误'), {icon: 2});
+            }
+        })
+        .catch(error => {
+            layer.closeAll('loading');
+            layer.alert('请求失败: ' + error.message, {icon: 2});
+        });
+        return false;
+    });
+
+    // Listen for switch changes for event subscriptions
+    form.on('switch(eventSwitch)', function(obj){
+        var configId = obj.elem.dataset.id;
+        var field = obj.elem.dataset.field;
+        var value = obj.elem.checked;
+        
+        var tr = $(obj.othis).parents('tr');
+        var data = table.cache['push-configs-table'][tr.data('index')];
+        
+        const payload = {
+            id: configId,
+            url: data.url,
+            notify_on_node_online: field === 'notify_on_node_online' ? value : data.notify_on_node_online,
+            notify_on_node_offline: field === 'notify_on_node_offline' ? value : data.notify_on_node_offline,
+            notify_on_account_error: field === 'notify_on_account_error' ? value : data.notify_on_account_error
+        };
+
+        fetchWithAuth('/web_api/push_configs', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.status !== 'success') {
+                layer.msg('更新失败', {icon: 2});
+                obj.elem.checked = !value;
+                form.render('checkbox');
+            } else {
+                layer.msg('配置已更新', {icon: 1, time: 1000});
+                data[field] = value;
+            }
+        })
+        .catch(error => {
+            layer.msg('请求失败', {icon: 2});
+            obj.elem.checked = !value;
+            form.render('checkbox');
+        });
+    });
+
+    function deletePushConfig(configId) {
+        layer.confirm('确定要删除这个推送配置吗？', {icon: 3, title:'提示'}, function(index){
+            layer.load(1);
+            fetchWithAuth(`/web_api/push_configs/${configId}`, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(result => {
+                layer.closeAll('loading');
+                if (result.status === 'success') {
+                    layer.msg('删除成功', {icon: 1});
+                    tableIns.reload();
+                } else {
+                    layer.alert('删除失败: ' + result.message, {icon: 2});
+                }
+            }).catch(e => {
+                layer.closeAll('loading');
+                layer.alert('请求失败: ' + e.message, {icon: 2});
+            });
+            layer.close(index);
+        });
+    }
+});
+</script>
+{% endblock %}

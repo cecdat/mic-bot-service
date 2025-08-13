@@ -1,0 +1,62 @@
+/* 全局和布局 */
+body {
+    background-color: #f2f2f2;
+}
+.main-content {
+    padding: 15px;
+}
+.layui-footer {
+    text-align: center;
+}
+.page-title {
+    font-size: 22px;
+    font-weight: 500;
+    margin-bottom: 0;
+}
+
+/* 登录页面 */
+.login-body {
+    background-image: url('https://img.237890.xyz/d/BQACAgUAAyEGAASMEoRGAAECCBlolhp4DGBGOd4Wsw2e3U1RA1gi1gACihkAAtbysVQPpqU1e5ebvTYE');
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+}
+.login-wrapper {
+    width: 375px;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 20px 30px 30px 30px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0,0,0,.08);
+}
+
+/* 卡片样式 (监控面板) */
+.info-card {
+    border: 1px solid #e6e6e6;
+    border-left-width: 4px;
+    transition: all .3s;
+    border-radius: 4px;
+}
+.info-card:hover {
+    box-shadow: 0 0 15px rgba(0,0,0,.1);
+    transform: translateY(-4px);
+}
+.info-card.status-normal { border-left-color: #5FB878; }
+.info-card.status-error { border-left-color: #FF5722; }
+.info-card.status-unknown { border-left-color: #a0a0a0; }
+.info-card .layui-card-header { font-weight: 500; font-size: 16px; }
+.info-card .layui-card-body { padding: 15px; }
+.info-card .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center; margin-bottom: 15px; }
+.info-card .stat-item p { color: #888; font-size: 12px; margin-bottom: 5px; }
+.info-card .stat-item h3 { font-size: 22px; font-weight: 500; margin: 0; }
+.info-card .stat-item h3.success { color: #16b777; }
+.info-card .card-footer { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #999; padding-top: 15px; border-top: 1px solid #f6f6f6; }
+
+/* 状态图标 */
+.status-icon { font-size: 18px !important; }
+.status-icon.text-success { color: #5FB878 !important; }
+.status-icon.text-warning { color: #FFB800 !important; }
+.status-icon.text-danger { color: #FF5722 !important; }
+.status-icon.text-secondary { color: #a0a0a0 !important; }

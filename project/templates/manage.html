@@ -1,0 +1,274 @@
+{% extends "layout.html" %}
+
+{% block title %}账户管理{% endblock %}
+{% block page_title %}账户管理{% endblock %}
+
+{% block content %}
+<div class="layui-card">
+    <div class="layui-card-body">
+        <div class="layui-btn-container">
+            <button class="layui-btn layui-btn-normal" id="add-account-btn"><i class="layui-icon layui-icon-add-1"></i> 新增账户</button>
+        </div>
+        <table class="layui-hide" id="accounts-table" lay-filter="accountsTable"></table>
+    </div>
+</div>
+
+{% raw %}
+<script type="text/html" id="table-actions-manage">
+    <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>
+    <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del">删除</a>
+</script>
+{% endraw %}
+
+<script type="text/html" id="account-config-form-template">
+    <div style="padding: 20px 30px 0 0;">
+        <form class="layui-form" lay-filter="accountForm">
+            <input type="hidden" name="id">
+            <div class="layui-form-item">
+                <label class="layui-form-label"><span class="layui-text-red">*</span> 邮箱</label>
+                <div class="layui-input-block">
+                    <input type="email" name="email" required lay-verify="required|email" autocomplete="off" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label"><span class="layui-text-red">*</span> 密码</label>
+                <div class="layui-input-block">
+                    <input type="password" name="password" required lay-verify="required" autocomplete="off" class="layui-input" placeholder="新增时必填，编辑时可不填表示不修改">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label"><span class="layui-text-red">*</span> 分配节点</label>
+                <div class="layui-input-block">
+                    <select name="assigned_node_id" id="assigned_node_id_select" lay-verify="required">
+                        <option value="">正在加载节点...</option>
+                    </select>
+                </div>
+            </div>
+            <hr>
+            <div class="layui-form-item">
+                <label class="layui-form-label">代理配置</label>
+                <div class="layui-input-block">
+                    <div class="layui-row layui-col-space10">
+                        <div class="layui-col-md8">
+                            <input type="text" name="proxyUrl" placeholder="代理地址 (e.g., http://proxy.server)" class="layui-input">
+                        </div>
+                        <div class="layui-col-md4">
+                            <input type="number" name="proxyPort" placeholder="端口" class="layui-input">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label"></label>
+                <div class="layui-input-block">
+                    <div class="layui-row layui-col-space10">
+                        <div class="layui-col-md6">
+                            <input type="text" name="proxyUsername" placeholder="用户名 (选填)" class="layui-input">
+                        </div>
+                        <div class="layui-col-md6">
+                            <input type="password" name="proxyPassword" placeholder="密码 (选填)" class="layui-input">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <hr>
+            <div class="layui-form-item layui-form-text">
+                <label class="layui-form-label">User Agents</label>
+                <div class="layui-input-block">
+                    <textarea name="userAgents" placeholder='{"desktop": "...", "mobile": "..."}' class="layui-textarea"></textarea>
+                </div>
+            </div>
+            <div class="layui-form-item layui-form-text">
+                <label class="layui-form-label">热搜词端点</label>
+                <div class="layui-input-block">
+                    <textarea name="hotSearchEndpoints" placeholder='["weibo", "toutiao"]' class="layui-textarea"></textarea>
+                    <div class="layui-form-mid layui-text-em">
+                        请到 <a href="https://hots.237890.xyz/all" target="_blank" style="color: #FF5722;">热搜源列表</a> 中获取端点名称。
+                    </div>
+                </div>
+            </div>
+            <button class="layui-btn" lay-submit lay-filter="saveAccount" id="saveAccountSubmit" style="display: none;">提交</button>
+        </form>
+    </div>
+</script>
+{% endblock %}
+
+
+{% block custom_js %}
+<script>
+layui.use(['table', 'form', 'layer'], function(){
+    var table = window.table;
+    var form = window.form;
+    var layer = window.layer;
+
+    function getStatusIcons(statusDetails) {
+        let html = '';
+        const platforms = [
+            { key: 'pc', icon: 'layui-icon-auz', name: '桌面端' },
+            { key: 'mobile', icon: 'layui-icon-cellphone', name: '移动端' }
+        ];
+        platforms.forEach(p => {
+            const details = statusDetails ? statusDetails[p.key] : null;
+            let iconClass = 'text-secondary';
+            let title = `${p.name}: 状态未知`;
+            if (details) {
+                if (details.status === true) {
+                    iconClass = 'text-success';
+                    title = `${p.name}: 正常 (Code: ${details.code})`;
+                } else {
+                    iconClass = [1, 2].includes(details.code) ? 'text-danger' : 'text-warning';
+                    title = `${p.name}: 异常 - ${details.message} (Code: ${details.code})`;
+                }
+            }
+            html += `<i class="layui-icon ${p.icon} status-icon ${iconClass}" title="${title}"></i>`;
+        });
+        return html;
+    }
+
+    var tableIns = table.render({
+        elem: '#accounts-table',
+        url: '/web_api/bot_accounts',
+        height: 'full-160',
+        cellMinWidth: 80,
+        cols: [[
+            {field: 'email', title: 'Email', width: 250, sort: true, fixed: 'left'},
+            {field: 'assigned_node_name', title: '分配节点', width: 150, templet: d => `<span class="layui-badge layui-bg-cyan">${d.assigned_node_name || '未分配'}</span>`},
+            {title: '终端状态', width: 120, align: 'center', templet: d => getStatusIcons(d.monitoring_data.status_details)},
+            {field: 'total_points', title: '总积分', width: 120, sort: true, templet: d => d.monitoring_data.total_points || 0},
+            {title: '今日总收益', width: 120, sort: true, templet: function(d) {
+                const desktopGain = d.monitoring_data.desktop_gain || 0;
+                const mobileGain = d.monitoring_data.mobile_gain || 0;
+                const totalGain = desktopGain + mobileGain;
+                return `<span class="layui-badge layui-bg-green">${totalGain}</span>`;
+            }},
+            {field: 'desktop_gain', title: '桌面收益', width: 110, sort: true, templet: d => d.monitoring_data.desktop_gain || 0},
+            {field: 'mobile_gain', title: '移动收益', width: 110, sort: true, templet: d => d.monitoring_data.mobile_gain || 0},
+            {field: 'last_updated', title: '最后更新时间', sort: true, minWidth: 180, templet: d => d.monitoring_data.last_updated ? new Date(d.monitoring_data.last_updated).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : 'N/A'},
+            {fixed: 'right', title:'操作', toolbar: '#table-actions-manage', width: 150, align: 'center'}
+        ]],
+        page: true,
+        parseData: function(res){
+            if (res.status === 401) { window.location.href = "{{ url_for('frontend.login') }}"; return; }
+            return { "code": 0, "msg": "", "count": res.length, "data": res };
+        }
+    });
+    
+    table.on('tool(accountsTable)', function(obj){
+        var data = obj.data;
+        if(obj.event === 'edit'){ openAccountModal(data); } 
+        else if(obj.event === 'del'){ deleteAccount(data.id, data.email); }
+    });
+
+    document.getElementById('add-account-btn').addEventListener('click', function(){
+        openAccountModal();
+    });
+
+    async function populateNodesDropdown(selectElement, selected_id) {
+        try {
+            const response = await fetchWithAuth('/web_api/nodes');
+            const nodes = await response.json();
+            selectElement.innerHTML = '<option value="">请选择一个节点</option>';
+            nodes.forEach(node => {
+                const selected = (node.id == selected_id) ? 'selected' : '';
+                selectElement.innerHTML += `<option value="${node.id}" ${selected}>${node.node_name}</option>`;
+            });
+            form.render('select');
+        } catch (e) { console.error("Could not populate nodes:", e); }
+    }
+
+    function openAccountModal(data = null) {
+        layer.open({
+            type: 1,
+            title: data ? `编辑账户: ${data.email}` : '新增账户',
+            area: ['750px', 'auto'],
+            content: document.getElementById('account-config-form-template').innerHTML,
+            btn: ['保存', '取消'],
+            yes: function(index, layero){
+                layero.find('form').find('#saveAccountSubmit').click();
+            },
+            success: function(layero, index){
+                const selectElement = layero.find('#assigned_node_id_select')[0];
+                populateNodesDropdown(selectElement, data ? data.assigned_node_id : null);
+                
+                if (data) {
+                    form.val('accountForm', {
+                        "id": data.id, "email": data.email, "password": data.password,
+                        "proxyUrl": data.proxy ? data.proxy.url : '',
+                        "proxyPort": data.proxy ? data.proxy.port : '',
+                        "proxyUsername": data.proxy ? data.proxy.username : '',
+                        "proxyPassword": data.proxy ? data.proxy.password : '',
+                        "userAgents": data.userAgents ? JSON.stringify(data.userAgents, null, 2) : '',
+                        "hotSearchEndpoints": data.hotSearchEndpoints ? JSON.stringify(data.hotSearchEndpoints, null, 2) : ''
+                    });
+                    layero.find('[name="email"]')[0].readOnly = true;
+                }
+                form.render(null, 'accountForm');
+            }
+        });
+    }
+
+    form.on('submit(saveAccount)', function(data){
+        const payload = data.field;
+        let userAgents, hotSearchEndpoints;
+        try {
+            userAgents = payload.userAgents.trim() ? JSON.parse(payload.userAgents) : {};
+            hotSearchEndpoints = payload.hotSearchEndpoints.trim() ? JSON.parse(payload.hotSearchEndpoints) : [];
+        } catch (e) { layer.alert('User Agents 或 热搜词端点 的 JSON 格式不正确！', {icon: 2}); return false; }
+
+        const finalPayload = {
+            id: payload.id, email: payload.email, password: payload.password,
+            assigned_node_id: payload.assigned_node_id ? parseInt(payload.assigned_node_id) : null,
+            proxy: {
+                url: payload.proxyUrl,
+                port: payload.proxyPort ? parseInt(payload.proxyPort, 10) : 0,
+                username: payload.proxyUsername,
+                password: payload.proxyPassword,
+            },
+            userAgents, hotSearchEndpoints
+        };
+        
+        layer.load(1);
+        fetchWithAuth('/web_api/bot_accounts', {
+            method: 'POST', body: JSON.stringify(finalPayload)
+        })
+        .then(response => response.json())
+        .then(result => {
+            layer.closeAll('loading');
+            if (result.status === 'success') {
+                layer.closeAll('page');
+                tableIns.reload();
+                layer.msg('保存成功', {icon: 1});
+            } else {
+                layer.alert('操作失败: ' + result.message, {icon: 2});
+            }
+        })
+        .catch(error => {
+            layer.closeAll('loading');
+            layer.alert('请求失败: ' + error.message, {icon: 2});
+        });
+        return false;
+    });
+
+    function deleteAccount(accountId, email) {
+        layer.confirm(`确定要删除账户 ${email} 吗？`, {icon: 3, title:'提示'}, function(index){
+            layer.load(1);
+            fetchWithAuth(`/web_api/bot_accounts/${accountId}`, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(result => {
+                layer.closeAll('loading');
+                if (result.status === 'success') {
+                    layer.msg('删除成功', {icon: 1});
+                    tableIns.reload();
+                } else {
+                    layer.alert('删除失败: ' + result.message, {icon: 2});
+                }
+            }).catch(e => {
+                layer.closeAll('loading');
+                layer.alert('请求失败: ' + e.message, {icon: 2});
+            });
+            layer.close(index);
+        });
+    }
+});
+</script>
+{% endblock %}
