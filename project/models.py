@@ -1,5 +1,7 @@
 from .db import db
 
+from datetime import datetime
+
 class WebUser(db.Model):
     __tablename__ = 'web_users'
     id = db.Column(db.Integer, primary_key=True)
@@ -16,7 +18,8 @@ class BotNode(db.Model):
     activity_status = db.Column(db.String(50), default='Idle')
     command = db.Column(db.String(50), nullable=True)
     command_status = db.Column(db.String(50), nullable=True, default=None)  # pending, received, executed
-    last_seen = db.Column(db.String(255))
+    command_data = db.Column(db.Text, nullable=True)  # 存储命令相关数据(JSON格式)
+    last_seen = db.Column(db.DateTime)
     heartbeat_timeout = db.Column(db.Integer, default=600)
     ip_address = db.Column(db.String(45))
     cron_schedule = db.Column(db.String(255), default='10 9,13,19 * * *')
@@ -48,7 +51,7 @@ class Account(db.Model):
     # [新增] 分别记录桌面和移动端收益
     desktop_gain = db.Column(db.Integer, default=0)
     mobile_gain = db.Column(db.Integer, default=0)
-    last_updated = db.Column(db.String(255))
+    last_updated = db.Column(db.DateTime)
     node_name = db.Column(db.String(255))
     status_details = db.Column(db.Text)
 
@@ -60,3 +63,22 @@ class PushConfig(db.Model):
     notify_on_node_offline = db.Column(db.Boolean, default=False)
     notify_on_account_error = db.Column(db.Boolean, default=False)
     status = db.Column(db.Integer, default=1)
+
+
+class Task(db.Model):
+    __tablename__ = 'tasks'
+    id = db.Column(db.Integer, primary_key=True)
+    task_type = db.Column(db.String(50), nullable=False)
+    node_id = db.Column(db.Integer, db.ForeignKey('bot_nodes.id'))
+    account_id = db.Column(db.Integer, db.ForeignKey('bot_accounts.id'))
+    status = db.Column(db.String(50), default='pending')  # pending(待下发), issued(已下发), running(运行中), completed(已完成), failed(失败)
+    priority = db.Column(db.Integer, default=1)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    execution_time = db.Column(db.DateTime)  # 执行时间 = 调度配置时间 + 随机延时
+    started_at = db.Column(db.DateTime)
+    completed_at = db.Column(db.DateTime)
+    result = db.Column(db.Text)
+    error_message = db.Column(db.Text)
+    # 外键关系
+    node = db.relationship('BotNode', backref=db.backref('tasks', lazy=True))
+    account = db.relationship('BotAccount', backref=db.backref('tasks', lazy=True))

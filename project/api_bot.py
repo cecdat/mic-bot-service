@@ -1,10 +1,11 @@
 from flask import Blueprint, request, jsonify, g
 from .db import db
 # [CORE FIX] Import the 'BotNode' model along with the others
-from .models import Account, BotAccount, BotNode
+from .models import Account, BotAccount, BotNode, Task
 from .auth import bot_api_required
 from .push import trigger_push_notification
-import datetime
+from .scheduler import reset_node_tasks
+from datetime import datetime, timezone
 import json
 import time
 
@@ -16,7 +17,19 @@ def node_checkin():
     data = request.get_json()
     node = g.node 
     
-    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    # 使用节点发送的UTC时间戳，如果没有则使用服务器本地时间
+    node_timestamp = data.get('timestamp')
+    if node_timestamp:
+        try:
+            timestamp = datetime.fromisoformat(node_timestamp)
+            # 确保timestamp带有时区信息
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=timezone.utc)
+        except ValueError:
+            timestamp = datetime.now(timezone.utc)
+    else:
+        timestamp = datetime.now(timezone.utc)
+    
     ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
 
     try:
@@ -30,11 +43,62 @@ def node_checkin():
         if 'bot_status' in data:
             bot_status = data.get('bot_status')
             if bot_status in ['Running', 'Idle']:
+                # 检查是否从非Running状态变为Running状态
+                is_running = node.activity_status != 'Running' and bot_status == 'Running'
                 node.activity_status = bot_status
+                
+                # 如果变为Running状态，重置任务
+                if is_running:
+                    logger.info(f'节点 {node.node_name} 状态变为Running，重置任务')
+                    reset_node_tasks(node.id)
                 
         if 'heartbeat_timeout' in data:
             node.heartbeat_timeout = data.get('heartbeat_timeout')
         db.session.commit()
+
+        if is_coming_online:
+            trigger_push_notification('node_online', f"节点上线: {node.node_name}", f"IP: {ip_address}")
+
+        return jsonify({"status": "success", "message": f"Node {node.node_name} checked in."})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@bp.route('/update_task_status', methods=['POST'])
+@bot_api_required
+def update_task_status():
+    data = request.get_json()
+    node = g.node
+    
+    # 验证请求数据
+    if not data or 'task_id' not in data or 'status' not in data:
+        return jsonify({'success': False, 'message': '缺少必要参数'}), 400
+    
+    task_id = data.get('task_id')
+    new_status = data.get('status')
+    result = data.get('result')
+    error_message = data.get('error_message')
+    
+    # 检查任务是否存在且属于该节点
+    task = Task.query.get(task_id)
+    if not task:
+        return jsonify({'success': False, 'message': f'任务 {task_id} 不存在'}), 404
+    
+    if task.node_id != node.id:
+        return jsonify({'success': False, 'message': f'任务 {task_id} 不属于当前节点'}), 403
+    
+    # 更新任务状态
+    try:
+        from .scheduler import update_task_status as update_task
+        success = update_task(task_id, new_status, result, error_message)
+        
+        if success:
+            return jsonify({'success': True, 'message': f'任务 {task_id} 状态已更新为 {new_status}'})
+        else:
+            return jsonify({'success': False, 'message': f'更新任务 {task_id} 状态失败'}), 500
+    except Exception as e:
+        logger.error(f'节点 {node.node_name} 更新任务 {task_id} 状态时发生错误: {str(e)}')
+        return jsonify({'success': False, 'message': f'服务器内部错误: {str(e)}'}), 500
 
         if is_coming_online:
             trigger_push_notification('node_online', f"节点上线: {node.node_name}", f"IP: {ip_address}")
@@ -53,12 +117,16 @@ def command_poll():
         # Re-fetch from DB each loop to get the latest command
         node_fresh = BotNode.query.get(node.id)
         if node_fresh and node_fresh.command and node_fresh.command_status == 'pending':
-            command_to_run = node_fresh.command
-            # Update command status to received
-            if node_fresh.command_status != 'received':
-                node_fresh.command_status = 'received'
-                db.session.commit()
-            return jsonify({"command": command_to_run})
+                command_to_run = node_fresh.command
+                command_data = node_fresh.command_data
+                # Update command status to received
+                if node_fresh.command_status != 'received':
+                    node_fresh.command_status = 'received'
+                    db.session.commit()
+                response = {"command": command_to_run}
+                if command_data:
+                    response["data"] = json.loads(command_data)
+                return jsonify(response)
         time.sleep(1)
     
     # Return no command after timeout
@@ -150,7 +218,7 @@ def update_login_status():
         }
         
         account.status_details = json.dumps(current_status)
-        account.last_updated = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        account.last_updated = datetime.now(datetime.timezone.utc).isoformat()
         account.node_name = g.node.node_name
 
         db.session.commit()

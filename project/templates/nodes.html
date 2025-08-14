@@ -119,7 +119,8 @@ layui.use(['table', 'form', 'layer'], function(){
             {field: 'activity_status', title: 'Bot状态', width: 110, align: 'center', templet: d => {
                 return d.activity_status === 'Running' ? '<span class="layui-badge layui-bg-blue"><i class="layui-icon layui-icon-loading layui-anim layui-anim-rotate layui-anim-loop"></i> 运行中</span>' : '<span class="layui-badge layui-bg-gray">待机</span>';
             }},
-            {field: 'last_seen', title: '上次心跳时间', sort: true, minWidth: 180, templet: d => d.last_seen ? new Date(d.last_seen).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : 'N/A'},
+            {field: 'last_seen', title: '上次心跳时间', sort: true, minWidth: 180, templet: d => d.last_seen ? new Date(d.last_seen).toISOString().replace('T', ' ').replace('Z', '') : 'N/A'},
+            {field: 'next_run_time', title: '下次执行时间', sort: true, minWidth: 180, templet: d => d.next_run_time ? new Date(d.next_run_time).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : 'N/A'},
             {fixed: 'right', title:'操作', toolbar: '#table-actions', width: 220, align: 'center'}
         ]],
         page: true,

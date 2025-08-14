@@ -8,7 +8,7 @@ def create_app(test_config=None):
     
     app.config.from_mapping(
         SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-secret-key-should-be-changed'),
-        SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'mysql+pymysql://root:password@db:3306/mic_bot_db'),
+        SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'postgresql://user:password@db:5432/rewards_db'),
         SQLALCHEMY_TRACK_MODIFICATIONS=False
     )
 

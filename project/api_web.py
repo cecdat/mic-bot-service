@@ -3,7 +3,7 @@ from .db import db
 from .models import Account, BotAccount, BotNode, PushConfig, WebUser
 from .auth import web_login_required
 from . import scheduler
-import datetime
+from datetime import datetime, timedelta, timezone
 import json
 import secrets
 import os
@@ -37,7 +37,7 @@ def get_points():
         .outerjoin(BotNode, BotAccount.assigned_node_id == BotNode.id)\
         .order_by(Account.last_updated.desc())
     
-    today_str = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+    today_str = datetime.now(timezone.utc).date().isoformat()
 
     if not show_all:
         # 仅查询当天的数据
@@ -66,8 +66,14 @@ def get_points():
             acc_dict['status_details'] = {}
             
         if acc_dict.get('last_updated'):
-            last_updated_date_str = datetime.datetime.fromisoformat(acc_dict['last_updated']).date().isoformat()
-            acc_dict['is_stale'] = last_updated_date_str != today_str
+            try:
+                # 确保last_updated是字符串类型
+                last_updated_str = str(acc_dict['last_updated'])
+                last_updated_date_str = datetime.fromisoformat(last_updated_str).date().isoformat()
+                acc_dict['is_stale'] = last_updated_date_str != today_str
+            except (TypeError, ValueError):
+                # 如果转换失败，标记为stale
+                acc_dict['is_stale'] = True
         else:
             acc_dict['is_stale'] = True
         points_data.append(acc_dict)
@@ -79,7 +85,7 @@ def manage_nodes():
     if request.method == 'GET':
         nodes = BotNode.query.order_by(BotNode.node_name).all()
         nodes_data = []
-        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        now_utc = datetime.now(timezone.utc)
         for node in nodes:
             node_dict = {
                 "id": node.id, "node_name": node.node_name, "last_seen": node.last_seen,
@@ -90,7 +96,10 @@ def manage_nodes():
                 "activity_status": node.activity_status
             }
             if node.last_seen:
-                last_seen_dt = datetime.datetime.fromisoformat(node.last_seen)
+                last_seen_dt = node.last_seen
+                # 确保last_seen_dt带有时区信息
+                if last_seen_dt.tzinfo is None:
+                    last_seen_dt = last_seen_dt.replace(tzinfo=timezone.utc)
                 timeout = node.heartbeat_timeout or 600
                 node_dict['status'] = 'Online' if (now_utc - last_seen_dt).total_seconds() <= timeout else 'Offline'
             else:
@@ -105,6 +114,51 @@ def manage_nodes():
             node_dict['account_count_total'] = total_count
             node_dict['account_count_normal'] = normal_count
             node_dict['account_count_abnormal'] = abnormal_count
+
+            # 获取下次执行时间（从任务表中查询）
+            try:
+                from .models import Task
+                
+                # 查询该节点的下一个即将执行的任务
+                next_task = Task.query.filter(
+                    Task.node_id == node.id,
+                    Task.status == 'pending',
+                    Task.execution_time > now_utc
+                ).order_by(Task.execution_time).first()
+                
+                if next_task:
+                    node_dict['next_run_time'] = next_task.execution_time.isoformat()
+                else:
+                    # 如果没有待执行任务，按原来的方式计算
+                    if node.cron_schedule:
+                        from apscheduler.triggers.cron import CronTrigger
+                        import random
+                        
+                        # 创建CronTrigger
+                        trigger = CronTrigger.from_crontab(node.cron_schedule)
+                        
+                        # 获取下次执行时间（UTC）
+                        next_run_time = trigger.get_next_fire_time(None, now_utc)
+                        
+                        # 计算随机延迟（秒）
+                        min_delay = node.min_sleep_minutes or 0
+                        max_delay = node.max_sleep_minutes or 0
+                        
+                        if min_delay > 0 or max_delay > 0:
+                            # 确保min_delay不大于max_delay
+                            if min_delay > max_delay:
+                                min_delay, max_delay = max_delay, min_delay
+                            
+                            delay_seconds = random.randint(min_delay * 60, max_delay * 60)
+                            # 添加随机延迟
+                            next_run_time = next_run_time + datetime.timedelta(seconds=delay_seconds)
+                        
+                        node_dict['next_run_time'] = next_run_time.isoformat()
+                    else:
+                        node_dict['next_run_time'] = None
+            except Exception as e:
+                node_dict['next_run_time'] = None
+                print(f"获取节点 {node.node_name} 下次执行时间失败: {str(e)}")
             
             nodes_data.append(node_dict)
         return jsonify(nodes_data)
@@ -138,7 +192,7 @@ def manage_nodes():
         db.session.commit()
         
         # 更新定时任务
-        scheduler.update_node_task(node.id, node.cron_schedule, node.node_name)
+        scheduler.update_node_task(node.id, node.cron_schedule, node.node_name, node.min_sleep_minutes, node.max_sleep_minutes)
         
         if request.method == 'POST':
             return jsonify({"status": "success", "node_name": node.node_name, "api_token": new_token})
