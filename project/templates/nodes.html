@@ -76,14 +76,86 @@
 /* 调整分页区域样式，解决文字显示不全问题 */
 .layui-table-page {
     margin-top: 15px !important;  /* 减少上边距 */
-    padding: 6px 15px !important; /* 调整内边距 */
+    padding: 8px 15px !important; /* 增加内边距 */
+    background-color: #fafafa !important; /* 添加背景色 */
+    border-top: 1px solid #e6e6e6 !important; /* 添加上边框 */
 }
 
 /* 确保分页按钮文字完整显示 */
 .layui-laypage a, .layui-laypage span {
-    height: 28px !important;
-    line-height: 28px !important;
-    padding: 0 10px !important;
+    height: 32px !important; /* 增加高度 */
+    line-height: 32px !important; /* 调整行高 */
+    padding: 0 12px !important; /* 增加左右内边距 */
+    margin: 0 2px !important; /* 添加按钮间距 */
+    border-radius: 4px !important; /* 圆角 */
+    font-size: 13px !important; /* 调整字体大小 */
+    min-width: 32px !important; /* 最小宽度 */
+    text-align: center !important; /* 文字居中 */
+    display: inline-block !important; /* 确保显示为块级元素 */
+    box-sizing: border-box !important; /* 盒模型 */
+}
+
+/* 分页信息区域样式 */
+.layui-laypage-count {
+    margin-right: 15px !important; /* 增加右边距 */
+    color: #666 !important; /* 调整颜色 */
+    font-size: 13px !important; /* 调整字体大小 */
+}
+
+/* 分页跳转区域样式 */
+.layui-laypage-skip {
+    margin-left: 15px !important; /* 增加左边距 */
+    color: #666 !important; /* 调整颜色 */
+    font-size: 13px !important; /* 调整字体大小 */
+}
+
+.layui-laypage-skip input {
+    width: 50px !important; /* 调整输入框宽度 */
+    height: 28px !important; /* 调整输入框高度 */
+    margin: 0 5px !important; /* 调整输入框间距 */
+    text-align: center !important; /* 输入框文字居中 */
+}
+
+/* 分页按钮悬停效果 */
+.layui-laypage a:hover {
+    background-color: #1E9FFF !important;
+    color: white !important;
+    border-color: #1E9FFF !important;
+}
+
+/* 当前页按钮样式 */
+.layui-laypage .layui-laypage-curr .layui-laypage-em {
+    background-color: #1E9FFF !important;
+    border-radius: 4px !important;
+}
+
+/* 禁用按钮样式 */
+.layui-laypage .layui-laypage-disabled {
+    color: #c2c2c2 !important;
+    cursor: not-allowed !important;
+}
+
+/* 确保分页容器有足够空间 */
+.layui-table-view {
+    overflow: visible !important; /* 允许内容溢出 */
+}
+
+/* 表格底部区域样式 */
+.layui-table-tool {
+    padding: 10px 15px !important; /* 调整工具栏内边距 */
+}
+
+/* 响应式调整 */
+@media screen and (max-width: 768px) {
+    .layui-laypage a, .layui-laypage span {
+        padding: 0 8px !important; /* 小屏幕减少内边距 */
+        font-size: 12px !important; /* 小屏幕减小字体 */
+    }
+    
+    .layui-laypage-count,
+    .layui-laypage-skip {
+        font-size: 12px !important; /* 小屏幕减小字体 */
+    }
 }
 </style>
 {% endblock %}
