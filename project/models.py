@@ -1,6 +1,6 @@
 from .db import db
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 class WebUser(db.Model):
     __tablename__ = 'web_users'
@@ -51,7 +51,8 @@ class Account(db.Model):
     # [新增] 分别记录桌面和移动端收益
     desktop_gain = db.Column(db.Integer, default=0)
     mobile_gain = db.Column(db.Integer, default=0)
-    last_updated = db.Column(db.DateTime)
+    # 修复：将last_updated改为Text类型以支持ISO格式时间戳
+    last_updated = db.Column(db.Text)
     node_name = db.Column(db.String(255))
     status_details = db.Column(db.Text)
 
@@ -73,7 +74,8 @@ class Task(db.Model):
     account_id = db.Column(db.Integer, db.ForeignKey('bot_accounts.id'))
     status = db.Column(db.String(50), default='pending')  # pending(待下发), issued(已下发), running(运行中), completed(已完成), failed(失败)
     priority = db.Column(db.Integer, default=1)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # 修复：使用正确的UTC时间默认值
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     execution_time = db.Column(db.DateTime)  # 执行时间 = 调度配置时间 + 随机延时
     started_at = db.Column(db.DateTime)
     completed_at = db.Column(db.DateTime)

@@ -7,6 +7,7 @@ import logging
 import random
 import json
 from datetime import datetime, timedelta
+from datetime import timezone
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -228,7 +229,8 @@ def scan_task_table():
 
                 # 更新任务状态为已下发
                 task.status = 'issued'
-                task.started_at = datetime.utcnow()
+                # 修复：使用正确的UTC时间
+                task.started_at = datetime.now(timezone.utc)
                 db.session.commit()
 
                 # 推送任务到节点

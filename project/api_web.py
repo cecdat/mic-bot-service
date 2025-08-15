@@ -254,7 +254,7 @@ def delete_node(node_id):
             db.session.commit()
         
         # 删除节点前先移除定时任务
-        scheduler.update_node_task(node.id, None, node.node_name)
+        scheduler.update_node_task(node.id, None, node.node_name, 0, 0)
         
         # 删除节点
         node_name = node.node_name

@@ -8,6 +8,9 @@ from .scheduler import reset_node_tasks
 from datetime import datetime, timezone
 import json
 import time
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('api_bot')
 
 bp = Blueprint('api_bot', __name__, url_prefix='/bot_api')
 
@@ -218,7 +221,8 @@ def update_login_status():
         }
         
         account.status_details = json.dumps(current_status)
-        account.last_updated = datetime.now(datetime.timezone.utc).isoformat()
+        # 修复时间戳处理：使用正确的timezone.utc语法
+        account.last_updated = datetime.now(timezone.utc).isoformat()
         account.node_name = g.node.node_name
 
         db.session.commit()
@@ -255,7 +259,8 @@ def update_points():
         account.daily_gain = data.get('daily_gain')
         account.desktop_gain = data.get('desktop_gain', 0)
         account.mobile_gain = data.get('mobile_gain', 0)
-        account.last_updated = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        # 修复时间戳处理：使用正确的datetime.now()和timezone.utc语法
+        account.last_updated = datetime.now(timezone.utc).isoformat()
         account.node_name = g.node.node_name
 
         db.session.commit()

@@ -1,7 +1,6 @@
--- 数据库初始化脚本: base.sql
--- 合并了 schema.sql, create_version_table.sql 和 upgrade_db.sql
+-- 数据库基础结构脚本
 -- 版本: v1.1
--- 日期: 2025-08-14
+-- 日期: 2025-08-15
 
 -- 1. 创建版本表
 CREATE TABLE IF NOT EXISTS db_version (
@@ -13,7 +12,7 @@ CREATE TABLE IF NOT EXISTS db_version (
 
 -- 插入初始版本记录（如果不存在）
 INSERT INTO db_version (version, description)
-SELECT '1.0', '初始数据库结构'
+SELECT '1.1', '添加tasks表缺失字段、调整默认值并修改account_id为可空'
 WHERE NOT EXISTS (SELECT 1 FROM db_version);
 
 -- 2. 核心表结构 (来自 schema.sql)
@@ -42,6 +41,7 @@ CREATE TABLE bot_nodes (
   activity_status VARCHAR(50) DEFAULT 'Idle',
   command VARCHAR(50) NULL,
   command_status VARCHAR(50) NULL DEFAULT NULL,
+  command_data TEXT NULL DEFAULT NULL,
   last_seen TIMESTAMP DEFAULT NULL,
   heartbeat_timeout INT DEFAULT 600,
   ip_address VARCHAR(45) DEFAULT NULL,
@@ -97,10 +97,22 @@ CREATE TABLE push_configs (
 );
 COMMENT ON COLUMN push_configs.url IS 'Bark URL';
 
--- 3. 更新版本记录
-UPDATE db_version SET version = '1.1', description = '包含桌面和移动端收益字段，节点活动状态相关字段' WHERE id = 1;
+-- 3. 创建tasks表
+CREATE TABLE tasks (
+  id SERIAL PRIMARY KEY,
+  node_id INT NOT NULL,
+  account_id INT,
+  task_type VARCHAR(50) NOT NULL,
+  status VARCHAR(50) DEFAULT 'pending',
+  priority INT DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  execution_time TIMESTAMP,
+  started_at TIMESTAMP,
+  completed_at TIMESTAMP,
+  result TEXT,
+  error_message TEXT,
+  FOREIGN KEY (node_id) REFERENCES bot_nodes (id) ON DELETE CASCADE,
+  FOREIGN KEY (account_id) REFERENCES bot_accounts (id) ON DELETE CASCADE
+);
 
--- 插入新版本记录（如果需要）
-INSERT INTO db_version (version, description)
-SELECT '1.1', '包含桌面和移动端收益字段，节点活动状态相关字段'
-WHERE NOT EXISTS (SELECT 1 FROM db_version WHERE version = '1.1');
+-- 后续版本更新通过upgrade_db.sql脚本执行
