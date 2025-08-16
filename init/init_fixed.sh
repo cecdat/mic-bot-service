@@ -7,7 +7,8 @@
 echo "等待数据库服务就绪..."
 # 使用Python检查数据库连接并输出错误信息
 while true; do
-    if python -c "import psycopg2
+    if python -c "
+import psycopg2
 try:
     conn = psycopg2.connect(host='db', user='user', password='password', dbname='rewards_db')
     print('成功连接到数据库')
@@ -15,7 +16,8 @@ try:
     exit(0)
 except Exception as e:
     print(f'连接数据库失败: {e}')
-    exit(1)"; then
+    exit(1)
+"; then
         break
     fi
     sleep 1
@@ -71,7 +73,6 @@ if [[ "$CURRENT_VERSION" == *"1.0"* ]] || [[ -z "$CURRENT_VERSION" ]]; then
 fi
 
 # 启动应用
-
 echo "初始化完成，启动应用..."
 # 启动应用
 flask run --host=0.0.0.0

@@ -11,8 +11,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 复制整个项目代码到工作目录
 COPY ./project ./project
 COPY run.py .
-# 该文件已合并到base.sql中并删除
-# COPY sql/create_version_table.sql .
+# 复制init文件夹
+COPY ./init ./init
 
 # 暴露端口
 EXPOSE 5000
@@ -24,7 +24,5 @@ ENV FLASK_ENV=production
 # 安装PostgreSQL客户端工具
 RUN apt-get update && apt-get install -y postgresql-client
 
-# 添加执行权限并使用初始化脚本启动
-COPY init.sh .
-RUN chmod +x init.sh
-CMD ["./init.sh"]
+# 使用bash直接执行脚本，避免文件权限问题
+CMD ["bash", "./init/init_fixed.sh"]
