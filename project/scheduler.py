@@ -227,6 +227,16 @@ def scan_task_table():
                     logger.warning(f'任务 {task.id} 对应的节点 {node.node_name} 不在线，跳过')
                     continue
 
+                # 检查是否有启用状态的账户
+                from .models import BotAccount
+                enabled_accounts = BotAccount.query.filter_by(assigned_node_id=node.id, is_enabled=True).all()
+                if not enabled_accounts:
+                    logger.warning(f'节点 {node.node_name} 没有启用的账户，跳过任务 {task.id}')
+                    task.status = 'failed'
+                    task.error_message = '节点没有启用的账户'
+                    db.session.commit()
+                    continue
+
                 # 更新任务状态为已下发
                 task.status = 'issued'
                 # 修复：使用正确的UTC时间

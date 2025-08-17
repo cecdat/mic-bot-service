@@ -286,6 +286,7 @@ def manage_bot_accounts():
                 "hotSearchEndpoints": json.loads(acc.hot_search_endpoints or '[]'),
                 "assigned_node_id": acc.assigned_node_id,
                 "assigned_node_name": acc.node.node_name if acc.node else None,
+                "is_enabled": acc.is_enabled,
                 "monitoring_data": {
                     "status_details": json.loads(monitoring_data.status_details) if monitoring_data and monitoring_data.status_details else {},
                     "last_updated": monitoring_data.last_updated if monitoring_data else None,
@@ -304,12 +305,14 @@ def manage_bot_accounts():
             try:
                 account = BotAccount.query.filter_by(email=email).first()
                 if not account:
-                    account = BotAccount(email=email)
+                    account = BotAccount(email=email, is_enabled=True)
                     db.session.add(account)
                     db.session.flush()  # 刷新以获取id
                     # 创建对应的Account记录
                     new_account = Account(bot_account_id=account.id, total_points=0, daily_gain=0)
                     db.session.add(new_account)
+                else:
+                    db.session.add(account)
 
                 account.password = data.get('password')
                 account.proxy = json.dumps(data.get('proxy', {}))
@@ -322,6 +325,40 @@ def manage_bot_accounts():
             except Exception as e:
                 db.session.rollback()
                 return jsonify({"status": "error", "message": str(e)}), 500
+
+@bp.route('/bot_accounts/<int:account_id>/toggle', methods=['POST'])
+@web_login_required
+def toggle_bot_account(account_id):
+    try:
+        # 查找账户
+        print(f"尝试切换账户状态，账户ID: {account_id}")
+        account = BotAccount.query.get(account_id)
+        if not account:
+            print(f"未找到账户: {account_id}")
+            return jsonify({"status": "error", "message": "未找到该账户"}), 404
+        
+        # 记录原始状态
+        original_status = account.is_enabled
+        print(f"账户 {account.email} (ID: {account_id}) 原始状态: {original_status}")
+        
+        # 切换状态
+        account.is_enabled = not account.is_enabled
+        status_text = "启用" if account.is_enabled else "禁用"
+        print(f"账户状态切换为: {account.is_enabled}")
+        
+        # 提交更改
+        db.session.commit()
+        print(f"数据库更改已提交")
+        
+        # 验证更改是否生效
+        updated_account = BotAccount.query.get(account_id)
+        print(f"验证更改: 切换后状态为 {updated_account.is_enabled}")
+        
+        return jsonify({"status": "success", "message": f"账户已{status_text}", "is_enabled": updated_account.is_enabled})
+    except Exception as e:
+        db.session.rollback()
+        print(f"切换账户状态时出错: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @bp.route('/bot_accounts/<int:account_id>', methods=['DELETE'])
 @web_login_required
