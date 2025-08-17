@@ -1,21 +1,24 @@
-version: '3'
-
 services:
   api:
     build: .
     container_name: api # 使用唯一的容器名
     restart: unless-stopped
     ports:
-      - "5001:5000" # 使用 2002 端口
+      - "2002:5000" # 外部端口2002映射到容器内部5000端口
     volumes:
-      # 挂载代码以实现热更新
+      # 挂载等待脚本
+      - ./wait-for-db.sh:/app/wait-for-db.sh
+      # 确保脚本可执行
       - ./run.py:/app/run.py
       - ./project:/app/project
+      # 挂载init文件夹
+      - ./init:/app/init
 
       # 将实例文件夹持久化
       - ./instance:/app/instance
       # SQL文件目录挂载
       - ./sql:/app/sql
+    entrypoint: ["/bin/bash", "/app/wait-for-db.sh", "db", "5432", "flask", "run", "--host=0.0.0.0", "--port=5000"]
     environment:
       - FLASK_APP=run
       - FLASK_ENV=production
@@ -39,6 +42,8 @@ services:
       - POSTGRES_USER=user
       - POSTGRES_PASSWORD=password
       - TZ=Asia/Shanghai
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8
+      - POSTGRES_ENCODING=UTF-8
     volumes:
       # 将 PostgreSQL 数据持久化到宿主机的 ./data 目录
       - ./data:/var/lib/postgresql/data

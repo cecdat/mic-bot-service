@@ -186,7 +186,7 @@ def get_node_config():
 @bot_api_required
 def get_assigned_accounts():
     node = g.node
-    accounts = BotAccount.query.filter_by(assigned_node_id=node.id, status=1).all()
+    accounts = BotAccount.query.filter_by(assigned_node_id=node.id, is_enabled=True).all()
     
     accounts_data = []
     for acc in accounts:

@@ -7,7 +7,8 @@
 echo "等待数据库服务就绪..."
 # 使用Python检查数据库连接并输出错误信息
 while true; do
-    if python -c "import psycopg2
+    if python -c "
+import psycopg2
 try:
     conn = psycopg2.connect(host='db', user='user', password='password', dbname='rewards_db')
     print('成功连接到数据库')
@@ -15,7 +16,8 @@ try:
     exit(0)
 except Exception as e:
     print(f'连接数据库失败: {e}')
-    exit(1)"; then
+    exit(1)
+"; then
         break
     fi
     sleep 1
@@ -59,19 +61,48 @@ echo "查询当前数据库版本..."
 CURRENT_VERSION=$(PGPASSWORD=${POSTGRES_PASSWORD} /usr/bin/psql -h db -U ${POSTGRES_USER} -d ${POSTGRES_DB} -t -c "SELECT version FROM db_version ORDER BY applied_at DESC LIMIT 1;")
 echo "当前数据库版本: ${CURRENT_VERSION}"
 
-# 检查是否需要应用升级脚本
-# 简化版本检查，避免使用bc命令
-if [[ "$CURRENT_VERSION" == *"1.0"* ]] || [[ -z "$CURRENT_VERSION" ]]; then
-    echo "发现数据库版本需要升级，应用升级脚本upgrade_db.sql..."
-    PGPASSWORD=${POSTGRES_PASSWORD} /usr/bin/psql -h db -U ${POSTGRES_USER} -d ${POSTGRES_DB} -f sql/upgrade_db.sql
-    
-    # 记录升级版本
-    echo "记录升级后的数据库版本..."
-    PGPASSWORD=${POSTGRES_PASSWORD} /usr/bin/psql -h db -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c "INSERT INTO db_version (version, description) VALUES ('1.1', '增加桌面和移动端收益字段，以及节点活动状态相关字段');"
+# 检查数据库版本
+# 自动查找并应用所有未应用的升级脚本
+
+# 格式化当前版本号，移除空格和换行符
+CURRENT_VERSION=$(echo "$CURRENT_VERSION" | tr -d ' 
+')
+# 如果当前版本为空，默认为0.0
+if [[ -z "$CURRENT_VERSION" ]]; then
+    CURRENT_VERSION="0.0"
 fi
 
-# 启动应用
+echo "当前数据库版本: $CURRENT_VERSION"
 
-echo "初始化完成，启动应用..."
-# 启动应用
-flask run --host=0.0.0.0
+# 查找所有升级脚本并按版本号排序
+UPGRADE_SCRIPTS=($(ls -1 sql/upgrade_db_v*.sql | sort -V))
+
+# 遍历所有升级脚本
+for SCRIPT in "${UPGRADE_SCRIPTS[@]}"; do
+    # 提取脚本版本号
+    SCRIPT_VERSION=$(echo "$SCRIPT" | sed -n 's/.*_v\([0-9]\.[0-9]\).*/\1/p')
+    
+    # 比较版本号
+    if [[ "$SCRIPT_VERSION" > "$CURRENT_VERSION" ]]; then
+        echo "发现需要应用的升级脚本: $SCRIPT (版本: $SCRIPT_VERSION)"
+        
+        # 执行升级脚本
+        echo "应用升级脚本: $SCRIPT..."
+        if PGPASSWORD=${POSTGRES_PASSWORD} /usr/bin/psql -h db -U ${POSTGRES_USER} -d ${POSTGRES_DB} -v ON_ERROR_STOP=1 -f "$SCRIPT"; then
+            echo "升级脚本 $SCRIPT 应用成功"
+            # 更新当前版本
+            CURRENT_VERSION="$SCRIPT_VERSION"
+        else
+            echo "升级脚本 $SCRIPT 应用失败，终止升级过程"
+            exit 1
+        fi
+    fi
+done
+
+if [[ "$CURRENT_VERSION" != "$(echo "${UPGRADE_SCRIPTS[-1]}" | sed -n 's/.*_v\([0-9]\.[0-9]\).*/\1/p')" ]] && [[ "${#UPGRADE_SCRIPTS[@]}" -gt 0 ]]; then
+    echo "数据库已升级到最新版本: $CURRENT_VERSION"
+fi
+
+# 启动Flask应用
+echo "初始化完成，启动Flask应用..."
+flask run --host=0.0.0.0 --port=5000

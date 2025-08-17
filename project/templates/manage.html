@@ -8,19 +8,19 @@
     <div class="layui-card-body">
         <div class="layui-btn-container">
             <button class="layui-btn layui-btn-normal" id="add-account-btn"><i class="layui-icon layui-icon-add-1"></i> 新增账户</button>
+
         </div>
+
+
         <table class="layui-hide" id="accounts-table" lay-filter="accountsTable"></table>
     </div>
 </div>
 
-{% raw %}
-<script type="text/html" id="table-actions-manage">
-    <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>
-    <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del">删除</a>
-</script>
-{% endraw %}
 
-<script type="text/html" id="account-config-form-template">
+
+<!-- 移除Laytpl模板，将在JavaScript中动态生成操作按钮 -->
+
+  <script type="text/html" id="account-config-form-template">
     <div style="padding: 20px 30px 0 0;">
         <form class="layui-form" lay-filter="accountForm">
             <input type="hidden" name="id">
@@ -95,6 +95,10 @@
 
 
 {% block custom_js %}
+<!-- 引入jQuery库 -->
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+<!-- 引入测试脚本 -->
+<script src="{{ url_for('frontend.static', filename='test-status-toggle.js') }}"></script>
 <script>
 layui.use(['table', 'form', 'layer'], function(){
     var table = window.table;
@@ -132,6 +136,7 @@ layui.use(['table', 'form', 'layer'], function(){
         cellMinWidth: 80,
         cols: [[
             {field: 'email', title: 'Email', width: 250, sort: true, fixed: 'left'},
+            {field: 'is_enabled', title: '账户状态', width: 120, templet: function(d) { return d.is_enabled ? '<span class="layui-badge layui-bg-green">启用</span>' : '<span class="layui-badge layui-bg-red">禁用</span>'; }},
             {field: 'assigned_node_name', title: '分配节点', width: 150, templet: d => `<span class="layui-badge layui-bg-cyan">${d.assigned_node_name || '未分配'}</span>`},
             {title: '终端状态', width: 120, align: 'center', templet: d => getStatusIcons(d.monitoring_data.status_details)},
             {field: 'total_points', title: '总积分', width: 120, sort: true, templet: d => d.monitoring_data.total_points || 0},
@@ -144,20 +149,127 @@ layui.use(['table', 'form', 'layer'], function(){
             {field: 'desktop_gain', title: '桌面收益', width: 110, sort: true, templet: d => d.monitoring_data.desktop_gain || 0},
             {field: 'mobile_gain', title: '移动收益', width: 110, sort: true, templet: d => d.monitoring_data.mobile_gain || 0},
             {field: 'last_updated', title: '最后更新时间', sort: true, minWidth: 180, templet: d => d.monitoring_data.last_updated ? new Date(d.monitoring_data.last_updated).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : 'N/A'},
-            {fixed: 'right', title:'操作', toolbar: '#table-actions-manage', width: 150, align: 'center'}
+            {fixed: 'right', title:'操作', templet: function(d) {
+                var html = '';
+                html += '<a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>';
+                html += '<a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del">删除</a>';
+                if (d.is_enabled) {
+                    html += '<a class="layui-btn layui-btn-xs layui-btn-warm" lay-event="disable">禁用</a>';
+                } else {
+                    html += '<a class="layui-btn layui-btn-xs layui-btn-normal" lay-event="enable">启用</a>';
+                }
+                return html;
+            }, width: 200, align: 'center'}
         ]],
         page: true,
         parseData: function(res){
-            if (res.status === 401) { window.location.href = "{{ url_for('frontend.login') }}"; return; }
-            return { "code": 0, "msg": "", "count": res.length, "data": res };
+            // 确保 res 是一个对象
+            if (!res || typeof res !== 'object') {
+                return { "code": 0, "msg": "无效的响应格式", "count": 0, "data": [] };
+            }
+            
+            // 处理未授权情况
+            if (res.code === 401 || (res.status && res.status === 401)) {
+                window.location.href = "{{ url_for('frontend.login') }}";
+                return { "code": 1, "msg": "未授权访问", "count": 0, "data": [] };
+            }
+            
+            // 处理不同的响应格式
+            if (Array.isArray(res)) {
+                return { "code": 0, "msg": "", "count": res.length, "data": res };
+            } else if (res.data && Array.isArray(res.data)) {
+                return { "code": 0, "msg": res.msg || "", "count": res.count || res.data.length, "data": res.data };
+            }
+            
+            // 默认返回空数据
+            return { "code": 0, "msg": "", "count": 0, "data": [] };
         }
     });
     
+    // 监听表格工具事件
     table.on('tool(accountsTable)', function(obj){
         var data = obj.data;
         if(obj.event === 'edit'){ openAccountModal(data); } 
         else if(obj.event === 'del'){ deleteAccount(data.id, data.email); }
+        else if(obj.event === 'enable'){ toggleAccountStatus(data.id, data.email, true); }
+        else if(obj.event === 'disable'){ toggleAccountStatus(data.id, data.email, false); }
     });
+
+    function toggleAccountStatus(accountId, email, enable) {
+        const actionText = enable ? '启用' : '禁用';
+        console.log(`[toggleAccountStatus] 函数被调用，准备${actionText}账户: ${email} (ID: ${accountId})`);
+        console.log(`[toggleAccountStatus] fetchWithAuth函数是否存在:`, typeof fetchWithAuth === 'function');
+        console.log(`[toggleAccountStatus] 当前页面URL:`, window.location.href);
+        console.log(`[toggleAccountStatus] 账户ID类型:`, typeof accountId);
+        console.log(`[toggleAccountStatus] 账户ID值:`, accountId);
+
+        layer.confirm(`确定要${actionText}账户 ${email} 吗？`, {icon: 3, title:'提示'}, function(index){
+            console.log(`[toggleAccountStatus] 用户确认${actionText}账户`);
+            layer.load(1);
+
+            try {
+                // 确保accountId是数字类型
+                const numericAccountId = parseInt(accountId, 10);
+                if (isNaN(numericAccountId)) {
+                    throw new Error(`无效的账户ID: ${accountId}`);
+                }
+
+                const url = `/web_api/bot_accounts/${numericAccountId}/toggle`;
+                console.log(`[toggleAccountStatus] 准备发送请求到:`, url);
+
+                // 手动构建请求而不依赖fetchWithAuth
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', url, true);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.withCredentials = true; // 包含cookie
+
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState === 4) {
+                        layer.closeAll('loading');
+                        console.log(`[toggleAccountStatus] 响应状态:`, xhr.status);
+                        console.log(`[toggleAccountStatus] 响应文本:`, xhr.responseText);
+
+                        if (xhr.status === 200) {
+                            try {
+                                const result = JSON.parse(xhr.responseText);
+                                console.log(`[toggleAccountStatus] Toggle result:`, result);
+                                if (result.status === 'success') {
+                                    layer.msg(`账户已${actionText}`, {icon: 1});
+                                    tableIns.reload({page: {curr: 1}});
+                                } else {
+                                    layer.alert(`${actionText}失败: ` + result.message, {icon: 2});
+                                }
+                            } catch (error) {
+                                console.error(`[toggleAccountStatus] 解析JSON响应失败:`, error);
+                                layer.alert('响应格式错误: ' + error.message, {icon: 2});
+                            }
+                        } else if (xhr.status === 401) {
+                            console.error(`[toggleAccountStatus] 认证失败`);
+                            layer.alert('认证失败，请重新登录', {icon: 2});
+                            window.location.href = '{{ url_for('frontend.login') }}';
+                        } else {
+                            console.error(`[toggleAccountStatus] 请求失败，状态码:`, xhr.status);
+                            layer.alert(`请求失败，状态码: ${xhr.status}`, {icon: 2});
+                        }
+                    }
+                };
+
+                xhr.onerror = function() {
+                    layer.closeAll('loading');
+                    console.error(`[toggleAccountStatus] 请求发生错误`);
+                    layer.alert('请求发生错误，请检查网络连接', {icon: 2});
+                };
+
+                // 发送空请求体
+                xhr.send(JSON.stringify({}));
+            } catch (e) {
+                layer.closeAll('loading');
+                layer.alert('函数执行异常: ' + e.message, {icon: 2});
+                console.error('[toggleAccountStatus] 函数执行异常:', e);
+            }
+            layer.close(index);
+        });
+    }
 
     document.getElementById('add-account-btn').addEventListener('click', function(){
         openAccountModal();
@@ -165,7 +277,14 @@ layui.use(['table', 'form', 'layer'], function(){
 
     async function populateNodesDropdown(selectElement, selected_id) {
         try {
-            const response = await fetchWithAuth('/web_api/nodes');
+            // 使用标准 fetch API
+            const response = await fetch('/web_api/nodes', {
+                method: 'GET',
+                credentials: 'same-origin', // 包含 cookie
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
             const nodes = await response.json();
             selectElement.innerHTML = '<option value="">请选择一个节点</option>';
             nodes.forEach(node => {
@@ -228,8 +347,14 @@ layui.use(['table', 'form', 'layer'], function(){
         };
         
         layer.load(1);
-        fetchWithAuth('/web_api/bot_accounts', {
-            method: 'POST', body: JSON.stringify(finalPayload)
+        // 使用标准 fetch API
+        fetch('/web_api/bot_accounts', {
+            method: 'POST', 
+            body: JSON.stringify(finalPayload),
+            credentials: 'same-origin', // 包含 cookie
+            headers: {
+                'Content-Type': 'application/json'
+            }
         })
         .then(response => response.json())
         .then(result => {
@@ -259,7 +384,14 @@ layui.use(['table', 'form', 'layer'], function(){
     function deleteAccount(accountId, email) {
         layer.confirm(`确定要删除账户 ${email} 吗？`, {icon: 3, title:'提示'}, function(index){
             layer.load(1);
-            fetchWithAuth(`/web_api/bot_accounts/${accountId}`, { method: 'DELETE' })
+            // 使用标准 fetch API
+            fetch(`/web_api/bot_accounts/${accountId}`, {
+                method: 'DELETE',
+                credentials: 'same-origin', // 包含 cookie
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
             .then(res => res.json())
             .then(result => {
                 layer.closeAll('loading');
@@ -277,5 +409,9 @@ layui.use(['table', 'form', 'layer'], function(){
         });
     }
 });
+
+// 简单的测试脚本，验证JavaScript是否正常运行
+console.log('账户管理页面加载成功，JavaScript运行正常');
+
 </script>
 {% endblock %}

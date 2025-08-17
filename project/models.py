@@ -40,6 +40,7 @@ class BotAccount(db.Model):
     hot_search_endpoints = db.Column(db.Text)
     assigned_node_id = db.Column(db.Integer, db.ForeignKey('bot_nodes.id'))
     status = db.Column(db.Integer, default=1)
+    is_enabled = db.Column(db.Boolean, default=True)  # 账户启用状态，默认为True
     monitoring_data = db.relationship('Account', backref='bot_account', uselist=False, cascade="all, delete-orphan")
 
 class Account(db.Model):

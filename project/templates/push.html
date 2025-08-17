@@ -36,13 +36,13 @@
 </script>
 
 <script type="text/html" id="onlineSwitchTpl">
-    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_node_online" data-id="{{ d.id }}" {{ d.notify_on_node_online ? 'checked' : '' }}>
+    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_node_online" data-id="{{ d.id }}" data-url="{{ d.url }}" {{ d.notify_on_node_online ? 'checked' : '' }}>
 </script>
 <script type="text/html" id="offlineSwitchTpl">
-    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_node_offline" data-id="{{ d.id }}" {{ d.notify_on_node_offline ? 'checked' : '' }}>
+    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_node_offline" data-id="{{ d.id }}" data-url="{{ d.url }}" {{ d.notify_on_node_offline ? 'checked' : '' }}>
 </script>
 <script type="text/html" id="errorSwitchTpl">
-    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_account_error" data-id="{{ d.id }}" {{ d.notify_on_account_error ? 'checked' : '' }}>
+    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_account_error" data-id="{{ d.id }}" data-url="{{ d.url }}" {{ d.notify_on_account_error ? 'checked' : '' }}>
 </script>
 {% endraw %}
 
@@ -119,15 +119,32 @@ layui.use(['table', 'form', 'layer'], function(){
         var field = obj.elem.dataset.field;
         var value = obj.elem.checked;
         
-        var tr = $(obj.othis).parents('tr');
-        var data = table.cache['push-configs-table'][tr.data('index')];
+        // 从表格缓存中获取当前配置的完整状态
+        var tableData = table.cache['push-configs-table'];
+        var currentConfig = null;
         
+        // 查找当前配置
+        for (var i = 0; i < tableData.length; i++) {
+            if (tableData[i].id == configId) {
+                currentConfig = tableData[i];
+                break;
+            }
+        }
+        
+        if (!currentConfig) {
+            layer.msg('无法找到配置信息', {icon: 2});
+            obj.elem.checked = !value;
+            form.render('checkbox');
+            return;
+        }
+        
+        // 构造payload，保持其他开关的当前状态不变
         const payload = {
             id: configId,
-            url: data.url,
-            notify_on_node_online: field === 'notify_on_node_online' ? value : data.notify_on_node_online,
-            notify_on_node_offline: field === 'notify_on_node_offline' ? value : data.notify_on_node_offline,
-            notify_on_account_error: field === 'notify_on_account_error' ? value : data.notify_on_account_error
+            url: currentConfig.url,
+            notify_on_node_online: field === 'notify_on_node_online' ? value : currentConfig.notify_on_node_online,
+            notify_on_node_offline: field === 'notify_on_node_offline' ? value : currentConfig.notify_on_node_offline,
+            notify_on_account_error: field === 'notify_on_account_error' ? value : currentConfig.notify_on_account_error
         };
 
         fetchWithAuth('/web_api/push_configs', {
@@ -138,15 +155,18 @@ layui.use(['table', 'form', 'layer'], function(){
         .then(result => {
             if (result.status !== 'success') {
                 layer.msg('更新失败', {icon: 2});
+                // 恢复开关状态
                 obj.elem.checked = !value;
                 form.render('checkbox');
             } else {
                 layer.msg('配置已更新', {icon: 1, time: 1000});
-                data[field] = value;
+                // 更新成功后重新加载表格
+                tableIns.reload();
             }
         })
         .catch(error => {
             layer.msg('请求失败', {icon: 2});
+            // 恢复开关状态
             obj.elem.checked = !value;
             form.render('checkbox');
         });

@@ -15,8 +15,8 @@
 
 {% raw %}
 <script type="text/html" id="table-actions">
-    <span class="layui-badge layui-bg-warm" title="运行" {{# if(d.activity_status !== 'Idle' || d.status !== 'Online'){ }} style='opacity: 0.5; cursor: not-allowed;' {{# } }} lay-event="trigger"><i class="layui-icon layui-icon-play"></i></span>
-    <span class="layui-badge layui-bg-danger" title="停止" {{# if(d.activity_status !== 'Running'){ }} style='opacity: 0.5; cursor: not-allowed;' {{# } }} lay-event="stop"><i class="layui-icon layui-icon-pause"></i></span>
+    <span class="layui-badge layui-bg-warm" title="运行" {{# if(d.activity_status !== 'Idle' || d.status !== 'Online'){ }} style='opacity: 0.5; cursor: not-allowed;' {{# }}} lay-event="trigger"><i class="layui-icon layui-icon-play"></i></span>
+    <span class="layui-badge layui-bg-danger" title="停止" {{# if(d.activity_status !== 'Running'){ }} style='opacity: 0.5; cursor: not-allowed;' {{# }}} lay-event="stop"><i class="layui-icon layui-icon-pause"></i></span>
     <span class="layui-badge layui-bg-primary" title="重置bot状态" lay-event="reset"><i class="layui-icon layui-icon-refresh"></i></span>
     <span class="layui-badge layui-bg-blue" title="编辑" lay-event="edit"><i class="layui-icon layui-icon-edit"></i></span>
     <span class="layui-badge layui-bg-gray" title="删除" lay-event="del"><i class="layui-icon layui-icon-delete"></i></span>

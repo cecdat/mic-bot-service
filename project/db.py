@@ -4,6 +4,9 @@ import click
 
 db = SQLAlchemy()
 
+# 导入升级数据库命令
+from init.upgrade_db import upgrade_db_command
+
 @click.command('init-db')
 @with_appcontext
 def init_db_command():
@@ -16,3 +19,4 @@ def init_db_command():
 def init_app(app):
     db.init_app(app)
     app.cli.add_command(init_db_command)
+    app.cli.add_command(upgrade_db_command)
