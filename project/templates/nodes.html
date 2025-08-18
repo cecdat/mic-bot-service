@@ -223,6 +223,53 @@ function loadNodeLogs() {
 }
 
 
+// 显示日志
+function displayLogs(logs) {
+    const container = document.getElementById('logContainer');
+    if (!container) return;
+    
+    if (!logs || logs.length === 0) {
+        container.innerHTML = '<div style="color: #d4d4d4;">暂无日志</div>';
+        return;
+    }
+    
+    container.innerHTML = '';
+    
+    logs.forEach(log => {
+        const logEntry = document.createElement('div');
+        logEntry.className = 'log-entry ' + log.level;
+        logEntry.style.cssText = 'margin-bottom: 8px; padding: 5px; border-radius: 3px; border-left: 3px solid #555;';
+        
+        // 根据日志级别设置左边框颜色
+        if (log.level === 'log') logEntry.style.borderLeftColor = '#4CAF50';
+        else if (log.level === 'warn') logEntry.style.borderLeftColor = '#FF9800';
+        else if (log.level === 'error') logEntry.style.borderLeftColor = '#F44336';
+        
+        // 格式化时间戳
+        const timestamp = new Date(log.timestamp).toLocaleString('zh-CN', { 
+            timeZone: 'Asia/Shanghai',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+        
+        logEntry.innerHTML = `
+            <span style="color: #888; font-size: 12px;">[${timestamp}]</span>
+            <span style="font-weight: bold; margin: 0 5px; color: ${log.level === 'log' ? '#4CAF50' : log.level === 'warn' ? '#FF9800' : '#F44336'};">[${log.level.toUpperCase()}]</span>
+            <span style="color: #9CDCFE; margin: 0 5px;">[${log.platform || ''}]</span>
+            <span style="color: #DCDCAA; margin: 0 5px;">[${log.title || ''}]</span>
+            <div style="color: #d4d4d4; margin-left: 10px;">${log.message || ''}</div>
+        `;
+        
+        container.appendChild(logEntry);
+    });
+    
+    container.scrollTop = container.scrollHeight;
+}
+
 // 清空节点日志
 function clearNodeLogs() {
     if (!window.currentLogModal) return;
@@ -609,52 +656,7 @@ layui.use(['table', 'form', 'layer'], function(){
     
 
     
-    // 显示日志
-    function displayLogs(logs) {
-        const container = document.getElementById('logContainer');
-        if (!container) return;
-        
-        if (!logs || logs.length === 0) {
-            container.innerHTML = '<div style="color: #d4d4d4;">暂无日志</div>';
-            return;
-        }
-        
-        container.innerHTML = '';
-        
-        logs.forEach(log => {
-            const logEntry = document.createElement('div');
-            logEntry.className = 'log-entry ' + log.level;
-            logEntry.style.cssText = 'margin-bottom: 8px; padding: 5px; border-radius: 3px; border-left: 3px solid #555;';
-            
-            // 根据日志级别设置左边框颜色
-            if (log.level === 'log') logEntry.style.borderLeftColor = '#4CAF50';
-            else if (log.level === 'warn') logEntry.style.borderLeftColor = '#FF9800';
-            else if (log.level === 'error') logEntry.style.borderLeftColor = '#F44336';
-            
-            // 格式化时间戳
-            const timestamp = new Date(log.timestamp).toLocaleString('zh-CN', { 
-                timeZone: 'Asia/Shanghai',
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
-            
-            logEntry.innerHTML = `
-                <span style="color: #888; font-size: 12px;">[${timestamp}]</span>
-                <span style="font-weight: bold; margin: 0 5px; color: ${log.level === 'log' ? '#4CAF50' : log.level === 'warn' ? '#FF9800' : '#F44336'};">[${log.level.toUpperCase()}]</span>
-                <span style="color: #9CDCFE; margin: 0 5px;">[${log.platform || ''}]</span>
-                <span style="color: #DCDCAA; margin: 0 5px;">[${log.title || ''}]</span>
-                <div style="color: #d4d4d4; margin-left: 10px;">${log.message || ''}</div>
-            `;
-            
-            container.appendChild(logEntry);
-        });
-        
-        container.scrollTop = container.scrollHeight;
-    }
+    
     
 
     

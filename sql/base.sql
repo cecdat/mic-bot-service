@@ -15,16 +15,9 @@ INSERT INTO db_version (version, description)
 SELECT '1.2', '为bot_nodes表添加日志推送相关字段'
 WHERE NOT EXISTS (SELECT 1 FROM db_version);
 
--- 2. 核心表结构 (来自 schema.sql)
--- Dropping tables in reverse order of dependency to avoid foreign key constraints issues
-DROP TABLE IF EXISTS accounts;
-DROP TABLE IF EXISTS bot_accounts;
-DROP TABLE IF EXISTS bot_nodes;
-DROP TABLE IF EXISTS web_users;
-DROP TABLE IF EXISTS push_configs;
-
+-- 2. 核心表结构 (使用IF NOT EXISTS避免删除现有数据)
 -- Table for web administrators
-CREATE TABLE web_users (
+CREATE TABLE IF NOT EXISTS web_users (
   id SERIAL PRIMARY KEY,
   username VARCHAR(255) NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
@@ -33,7 +26,7 @@ CREATE TABLE web_users (
 COMMENT ON COLUMN web_users.status IS '1=Active, 0=Inactive';
 
 -- Table for registered mic-bot nodes
-CREATE TABLE bot_nodes (
+CREATE TABLE IF NOT EXISTS bot_nodes (
   id SERIAL PRIMARY KEY,
   node_name VARCHAR(255) NOT NULL UNIQUE,
   api_token_hash TEXT NOT NULL,
@@ -63,7 +56,7 @@ COMMENT ON COLUMN bot_nodes.log_push_enabled IS '是否启用日志推送';
 COMMENT ON COLUMN bot_nodes.log_push_interval IS '日志推送间隔(秒)';
 
 -- Table for mic-bot account configurations
-CREATE TABLE bot_accounts (
+CREATE TABLE IF NOT EXISTS bot_accounts (
   id SERIAL PRIMARY KEY,
   email VARCHAR(255) NOT NULL UNIQUE,
   password VARCHAR(255) DEFAULT NULL,
@@ -72,15 +65,16 @@ CREATE TABLE bot_accounts (
   hot_search_endpoints TEXT,
   assigned_node_id INT DEFAULT NULL,
   status INT DEFAULT 1,
+  is_enabled BOOLEAN DEFAULT TRUE,
   FOREIGN KEY (assigned_node_id) REFERENCES bot_nodes (id) ON DELETE SET NULL
 );
 COMMENT ON COLUMN bot_accounts.status IS '1=Active, 0=Inactive';
 
--- Create index for bot_accounts.assigned_node_id
-CREATE INDEX idx_bot_accounts_assigned_node_id ON bot_accounts (assigned_node_id);
+-- Create index for bot_accounts.assigned_node_id (if not exists)
+CREATE INDEX IF NOT EXISTS idx_bot_accounts_assigned_node_id ON bot_accounts (assigned_node_id);
 
 -- Table for storing account monitoring data
-CREATE TABLE accounts (
+CREATE TABLE IF NOT EXISTS accounts (
   id SERIAL PRIMARY KEY,
   bot_account_id INT NOT NULL,
   total_points INT DEFAULT NULL,
@@ -95,7 +89,7 @@ CREATE TABLE accounts (
 );
 
 -- Table for global push notification configurations
-CREATE TABLE push_configs (
+CREATE TABLE IF NOT EXISTS push_configs (
     id SERIAL PRIMARY KEY,
     url TEXT NOT NULL,
     notify_on_node_online BOOLEAN DEFAULT FALSE,
@@ -106,7 +100,7 @@ CREATE TABLE push_configs (
 COMMENT ON COLUMN push_configs.url IS 'Bark URL';
 
 -- 3. 创建tasks表
-CREATE TABLE tasks (
+CREATE TABLE IF NOT EXISTS tasks (
   id SERIAL PRIMARY KEY,
   node_id INT NOT NULL,
   account_id INT,

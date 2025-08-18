@@ -220,8 +220,15 @@ def receive_logs():
         if not token:
             return jsonify({"status": "error", "message": "缺少认证token"}), 401
         
-        # 查找对应的节点（使用api_token_hash进行认证）
-        node = BotNode.query.filter_by(api_token_hash=token).first()
+        # 查找对应的节点（使用check_password_hash进行认证）
+        from werkzeug.security import check_password_hash
+        nodes = BotNode.query.all()
+        node = None
+        for n in nodes:
+            if check_password_hash(n.api_token_hash, token):
+                node = n
+                break
+        
         if not node:
             return jsonify({"status": "error", "message": "无效的token"}), 401
         
