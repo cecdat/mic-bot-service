@@ -18,7 +18,7 @@ services:
       - ./instance:/app/instance
       # SQL文件目录挂载
       - ./sql:/app/sql
-    entrypoint: ["/bin/bash", "/app/wait-for-db.sh", "db", "5432", "flask", "run", "--host=0.0.0.0", "--port=5000"]
+    entrypoint: ["/bin/bash", "/app/init/init_fixed.sh"]
     environment:
       - FLASK_APP=run
       - FLASK_ENV=production
