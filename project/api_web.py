@@ -92,8 +92,11 @@ def manage_nodes():
                 "heartbeat_timeout": node.heartbeat_timeout, "ip_address": node.ip_address,
                 "cron_schedule": node.cron_schedule, "min_sleep_minutes": node.min_sleep_minutes,
                 "max_sleep_minutes": node.max_sleep_minutes, "clusters": node.clusters,
-                "search_delay_min": node.search_delay_min, "search_delay_max": node.search_delay_max,
-                "activity_status": node.activity_status
+                            "search_delay_min": node.search_delay_min, "search_delay_max": node.search_delay_max,
+            "activity_status": node.activity_status,
+            # 日志推送配置
+            "log_push_enabled": node.log_push_enabled,
+            "log_push_interval": node.log_push_interval
             }
             if node.last_seen:
                 last_seen_dt = node.last_seen
@@ -188,6 +191,11 @@ def manage_nodes():
         node.clusters = data.get('clusters', node.clusters)
         node.search_delay_min = data.get('search_delay_min', node.search_delay_min)
         node.search_delay_max = data.get('search_delay_max', node.search_delay_max)
+        # 日志推送配置
+        log_push_enabled_value = data.get('log_push_enabled', node.log_push_enabled)
+        # 处理checkbox的值转换：'on' -> True, 其他 -> False
+        node.log_push_enabled = log_push_enabled_value == 'on' if isinstance(log_push_enabled_value, str) else bool(log_push_enabled_value)
+        node.log_push_interval = data.get('log_push_interval', node.log_push_interval)
         
         db.session.commit()
         
@@ -198,6 +206,91 @@ def manage_nodes():
             return jsonify({"status": "success", "node_name": node.node_name, "api_token": new_token})
         else:
             return jsonify({"status": "success", "message": "节点配置已更新。"})
+
+@bp.route('/logs/receive', methods=['POST'])
+def receive_logs():
+    """接收来自Node端的日志推送"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"status": "error", "message": "无效的请求数据"}), 400
+        
+        # 验证token
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token:
+            return jsonify({"status": "error", "message": "缺少认证token"}), 401
+        
+        # 查找对应的节点（使用api_token_hash进行认证）
+        node = BotNode.query.filter_by(api_token_hash=token).first()
+        if not node:
+            return jsonify({"status": "error", "message": "无效的token"}), 401
+        
+        # 处理日志数据
+        logs = data.get('logs', [])
+        if not isinstance(logs, list):
+            return jsonify({"status": "error", "message": "日志数据格式错误"}), 400
+        
+        # 存储日志到数据库
+        from .models import NodeLog
+        from datetime import datetime
+        
+        stored_count = 0
+        for log_entry in logs:
+            try:
+                # 解析时间戳
+                timestamp_str = log_entry.get('timestamp', '')
+                if timestamp_str:
+                    # 尝试解析ISO格式时间戳
+                    try:
+                        timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                    except:
+                        timestamp = datetime.utcnow()
+                else:
+                    timestamp = datetime.utcnow()
+                
+                # 创建日志记录
+                node_log = NodeLog(
+                    node_id=node.id,
+                    node_name=node.node_name,
+                    timestamp=timestamp,
+                    level=log_entry.get('level', 'LOG'),
+                    platform=log_entry.get('platform', ''),
+                    title=log_entry.get('title', ''),
+                    message=log_entry.get('message', ''),
+                    pid=log_entry.get('pid', '')
+                )
+                db.session.add(node_log)
+                stored_count += 1
+                
+            except Exception as e:
+                print(f"存储日志条目失败: {e}")
+                continue
+        
+        # 提交数据库事务
+        db.session.commit()
+        
+        # 清理旧日志（保留最近1000条）
+        try:
+            from sqlalchemy import text
+            db.session.execute(text("""
+                DELETE FROM node_logs 
+                WHERE node_id = :node_id 
+                AND id NOT IN (
+                    SELECT id FROM node_logs 
+                    WHERE node_id = :node_id 
+                    ORDER BY timestamp DESC 
+                    LIMIT 1000
+                )
+            """), {'node_id': node.id})
+            db.session.commit()
+        except Exception as e:
+            print(f"清理旧日志失败: {e}")
+        
+        return jsonify({"status": "success", "message": f"成功接收并存储 {stored_count} 条日志"})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @bp.route('/nodes/<int:node_id>/trigger', methods=['POST'])
 @web_login_required
@@ -408,3 +501,78 @@ def delete_push_config(config_id):
         db.session.delete(config)
         db.session.commit()
     return jsonify({"status": "success"})
+
+@bp.route('/nodes/<int:node_id>/logs', methods=['GET'])
+@web_login_required
+def get_node_logs(node_id):
+    """获取指定节点的日志"""
+    try:
+        # 验证节点是否存在
+        node = BotNode.query.get(node_id)
+        if not node:
+            return jsonify({"status": "error", "message": "未找到该节点"}), 404
+        
+        # 获取查询参数
+        level = request.args.get('level', '')
+        title = request.args.get('title', '')
+        limit = int(request.args.get('limit', 100))
+        
+        # 构建查询
+        from .models import NodeLog
+        query = NodeLog.query.filter_by(node_id=node_id)
+        
+        if level:
+            query = query.filter(NodeLog.level == level)
+        
+        if title:
+            query = query.filter(NodeLog.title.contains(title))
+        
+        # 按时间倒序排列并限制数量
+        logs = query.order_by(NodeLog.timestamp.desc()).limit(limit).all()
+        
+        # 转换为JSON格式
+        logs_data = []
+        for log_entry in logs:
+            logs_data.append({
+                'id': log_entry.id,
+                'timestamp': log_entry.timestamp.isoformat(),
+                'level': log_entry.level,
+                'platform': log_entry.platform,
+                'title': log_entry.title,
+                'message': log_entry.message,
+                'pid': log_entry.pid
+            })
+        
+        return jsonify({
+            "status": "success",
+            "node_name": node.node_name,
+            "logs": logs_data,
+            "total": len(logs_data)
+        })
+        
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@bp.route('/nodes/<int:node_id>/logs/clear', methods=['POST'])
+@web_login_required
+def clear_node_logs(node_id):
+    """清空指定节点的日志"""
+    try:
+        # 验证节点是否存在
+        node = BotNode.query.get(node_id)
+        if not node:
+            return jsonify({"status": "error", "message": "未找到该节点"}), 404
+        
+        # 删除该节点的所有日志
+        from .models import NodeLog
+        deleted_count = NodeLog.query.filter_by(node_id=node_id).delete()
+        db.session.commit()
+        
+        return jsonify({
+            "status": "success",
+            "message": f"已清空节点 {node.node_name} 的 {deleted_count} 条日志"
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500

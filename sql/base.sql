@@ -1,6 +1,6 @@
 -- 数据库基础结构脚本
--- 版本: v1.1
--- 日期: 2025-08-15
+-- 版本: v1.2
+-- 日期: 2025-08-18
 
 -- 1. 创建版本表
 CREATE TABLE IF NOT EXISTS db_version (
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS db_version (
 
 -- 插入初始版本记录（如果不存在）
 INSERT INTO db_version (version, description)
-SELECT '1.1', '添加tasks表缺失字段、调整默认值并修改account_id为可空'
+SELECT '1.2', '为bot_nodes表添加日志推送相关字段'
 WHERE NOT EXISTS (SELECT 1 FROM db_version);
 
 -- 2. 核心表结构 (来自 schema.sql)
@@ -50,9 +50,17 @@ CREATE TABLE bot_nodes (
   max_sleep_minutes INT DEFAULT 20,
   clusters INT DEFAULT 1,
   search_delay_min VARCHAR(10) DEFAULT '30s',
-  search_delay_max VARCHAR(10) DEFAULT '2min'
+  search_delay_max VARCHAR(10) DEFAULT '2min',
+  log_server_url VARCHAR(255) DEFAULT NULL,
+  log_server_token VARCHAR(255) DEFAULT NULL,
+  log_push_enabled BOOLEAN DEFAULT FALSE,
+  log_push_interval INT DEFAULT 30
 );
 COMMENT ON COLUMN bot_nodes.status IS '1=Active, 0=Inactive';
+COMMENT ON COLUMN bot_nodes.log_server_url IS 'Service端日志接收接口URL';
+COMMENT ON COLUMN bot_nodes.log_server_token IS '日志推送认证token';
+COMMENT ON COLUMN bot_nodes.log_push_enabled IS '是否启用日志推送';
+COMMENT ON COLUMN bot_nodes.log_push_interval IS '日志推送间隔(秒)';
 
 -- Table for mic-bot account configurations
 CREATE TABLE bot_accounts (

@@ -65,6 +65,20 @@
                     <input type="text" name="search_delay_max" placeholder="最大, e.g., 2min" class="layui-input">
                 </div>
             </div>
+                    <hr>
+        <div class="layui-form-item">
+            <label class="layui-form-label">日志推送</label>
+            <div class="layui-input-block">
+                <input type="checkbox" name="log_push_enabled" lay-skin="primary" title="启用日志推送">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">推送间隔</label>
+            <div class="layui-input-inline" style="width: 120px;">
+                <input type="number" name="log_push_interval" placeholder="30" value="30" class="layui-input">
+            </div>
+            <div class="layui-form-mid">秒</div>
+        </div>
             <button class="layui-btn" lay-submit lay-filter="saveNode" id="saveNodeSubmit" style="display: none;">提交</button>
         </form>
     </div>
@@ -163,6 +177,81 @@
 
 {% block custom_js %}
 <script>
+// 全局函数定义
+// 加载节点日志
+function loadNodeLogs() {
+    if (!window.currentLogModal) return;
+    
+    const { nodeId } = window.currentLogModal;
+    
+    const level = document.getElementById('levelFilter')?.value || '';
+    const title = document.getElementById('titleFilter')?.value || '';
+    const limit = document.getElementById('limitFilter')?.value || '100';
+    
+    // 构建查询参数
+    const params = new URLSearchParams();
+    if (level) params.append('level', level);
+    if (title) params.append('title', title);
+    if (limit) params.append('limit', limit);
+    
+    const url = `/web_api/nodes/${nodeId}/logs?${params.toString()}`;
+    
+    // 更新状态
+    const statusEl = document.getElementById('logStatus');
+    if (statusEl) statusEl.textContent = '正在加载日志...';
+    
+    fetchWithAuth(url)
+        .then(response => response.json())
+        .then(result => {
+            if (result.status === 'success') {
+                displayLogs(result.logs);
+                const statusEl = document.getElementById('logStatus');
+                if (statusEl) statusEl.textContent = `已加载 ${result.total} 条日志`;
+            } else {
+                throw new Error(result.message || '加载日志失败');
+            }
+        })
+        .catch(error => {
+            const statusEl = document.getElementById('logStatus');
+            if (statusEl) statusEl.textContent = '加载失败: ' + error.message;
+            
+            const container = document.getElementById('logContainer');
+            if (container) {
+                container.innerHTML = `<div style="color: #ff6b6b;">加载日志失败: ${error.message}</div>`;
+            }
+        });
+}
+
+
+// 清空节点日志
+function clearNodeLogs() {
+    if (!window.currentLogModal) return;
+    
+    if (!confirm('确定要清空该节点的所有日志吗？')) return;
+    
+    const { nodeId, nodeName } = window.currentLogModal;
+    
+    fetchWithAuth(`/web_api/nodes/${nodeId}/logs/clear`, { 
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.status === 'success') {
+            const container = document.getElementById('logContainer');
+            if (container) {
+                container.innerHTML = '<div style="color: #d4d4d4;">日志已清空</div>';
+            }
+            layer.msg(result.message, {icon: 1});
+        } else {
+            throw new Error(result.message || '清空日志失败');
+        }
+    })
+    .catch(error => {
+        console.error('清空日志失败:', error);
+        layer.msg('清空日志失败: ' + error.message, {icon: 2});
+    });
+}
+
 layui.use(['table', 'form', 'layer'], function(){
     // 移除自动刷新功能
     let tableIns; // 表格实例变量
@@ -251,7 +340,9 @@ layui.use(['table', 'form', 'layer'], function(){
                     "max_sleep_minutes": data ? data.max_sleep_minutes : 20,
                     "clusters": data ? data.clusters : 1,
                     "search_delay_min": data ? data.search_delay_min : '30s',
-                    "search_delay_max": data ? data.search_delay_max : '2min'
+                    "search_delay_max": data ? data.search_delay_max : '2min',
+                    "log_push_enabled": data ? data.log_push_enabled : false,
+                    "log_push_interval": data ? data.log_push_interval : 30
                 });
                 layero.find('[name="node_name"]')[0].readOnly = !!data;
                 form.render(null, 'nodeForm');
@@ -446,196 +537,140 @@ layui.use(['table', 'form', 'layer'], function(){
         });
     }
 
-    function openLogsModal(nodeData) {
-        // 构建日志弹窗内容
-        const logsHtml = `
-            <div style="padding: 20px;">
-                <div class="layui-card" style="border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);">
-                    <div class="layui-card-header" style="background-color: #f7f7f7; border-bottom: 1px solid #eee;">
-                        <h3 style="margin: 0; padding: 10px 0; color: #333;">
-                            <i class="layui-icon layui-icon-console"></i> 
-                            节点日志: ${nodeData.node_name}
-                        </h3>
+    // 打开日志查看弹窗
+    function openLogsModal(data) {
+        const nodeName = data.node_name;
+        const nodeId = data.id;
+        
+        // 创建弹窗内容
+        const modalContent = `
+            <div style="padding: 20px; background-color: #1e1e1e; color: #d4d4d4; font-family: 'Courier New', monospace; min-height: 600px;">
+                <div style="background-color: #2d2d2d; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                    <h2 style="margin: 0 0 15px 0; color: #d4d4d4;">${nodeName} - 日志查看器</h2>
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <label style="color: #d4d4d4;">日志级别:</label>
+                            <select id="levelFilter" style="padding: 8px 12px; border: 1px solid #555; border-radius: 3px; background-color: #3c3c3c; color: #d4d4d4; font-family: inherit;">
+                                <option value="">全部</option>
+                                <option value="log">信息</option>
+                                <option value="warn">警告</option>
+                                <option value="error">错误</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <label style="color: #d4d4d4;">标题过滤:</label>
+                            <input type="text" id="titleFilter" placeholder="输入标题关键词" style="padding: 8px 12px; border: 1px solid #555; border-radius: 3px; background-color: #3c3c3c; color: #d4d4d4; font-family: inherit;">
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <label style="color: #d4d4d4;">显示条数:</label>
+                            <select id="limitFilter" style="padding: 8px 12px; border: 1px solid #555; border-radius: 3px; background-color: #3c3c3c; color: #d4d4d4; font-family: inherit;">
+                                <option value="50">50条</option>
+                                <option value="100" selected>100条</option>
+                                <option value="200">200条</option>
+                                <option value="500">500条</option>
+                            </select>
+                        </div>
+                        <button onclick="loadNodeLogs()" style="padding: 8px 12px; border: 1px solid #0078d4; border-radius: 3px; background-color: #0078d4; color: #d4d4d4; font-family: inherit; cursor: pointer;">刷新日志</button>
+                        <button onclick="clearNodeLogs()" style="padding: 8px 12px; border: 1px solid #d32f2f; border-radius: 3px; background-color: #d32f2f; color: #d4d4d4; font-family: inherit; cursor: pointer;">清空日志</button>
                     </div>
-                    <div class="layui-card-body" style="padding: 20px;">
-                        <div class="layui-form">
-                            <div class="layui-form-item">
-                                <label class="layui-form-label">日志级别</label>
-                                <div class="layui-input-inline" style="width: 120px;">
-                                    <select id="logLevel" lay-filter="logLevel">
-                                        <option value="">全部</option>
-                                        <option value="log">信息</option>
-                                        <option value="warn">警告</option>
-                                        <option value="error">错误</option>
-                                    </select>
-                                </div>
-                                <label class="layui-form-label">标题过滤</label>
-                                <div class="layui-input-inline" style="width: 150px;">
-                                    <input type="text" id="logTitle" placeholder="输入标题关键词" class="layui-input">
-                                </div>
-                                <button class="layui-btn layui-btn-sm" id="refreshLogs">
-                                    <i class="layui-icon layui-icon-refresh"></i> 刷新
-                                </button>
-                                <button class="layui-btn layui-btn-sm layui-btn-normal" id="clearLogs">
-                                    <i class="layui-icon layui-icon-delete"></i> 清空
-                                </button>
-                            </div>
-                        </div>
-                        <div id="logsContainer" style="height: 400px; overflow-y: auto; border: 1px solid #e6e6e6; border-radius: 4px; padding: 10px; background-color: #f9f9f9; font-family: 'Courier New', monospace; font-size: 12px;">
-                            <div style="text-align: center; color: #999; padding: 20px;">
-                                <i class="layui-icon layui-icon-loading layui-anim layui-anim-rotate layui-anim-loop"></i>
-                                正在加载日志...
-                            </div>
-                        </div>
-                        <div style="margin-top: 10px; text-align: center;">
-                            <span class="layui-badge layui-bg-blue" id="logCount">0</span> 条日志
-                        </div>
-                    </div>
+                    <div id="logStatus" style="color: #888; font-size: 12px; margin-top: 10px;">准备加载日志...</div>
+                </div>
+                <div id="logContainer" style="background-color: #2d2d2d; border-radius: 5px; padding: 15px; height: 500px; overflow-y: auto; font-size: 14px; line-height: 1.4;">
+                    <div>正在加载日志...</div>
                 </div>
             </div>
         `;
-
-        // 打开日志弹窗
-        const logLayer = layer.open({
+        
+        // 打开弹窗
+        const logModal = layer.open({
             type: 1,
             title: false,
-            closeBtn: true,
-            area: ['900px', '600px'],
-            content: logsHtml,
-            btn: ['关闭'],
-            btnAlign: 'c',
-            shade: 0.6,
+            closeBtn: 1,
+            shadeClose: true,
+            area: ['90%', '80%'],
+            content: modalContent,
             success: function(layero, index) {
-                // 渲染表单
-                form.render(null, 'logLevel');
-                
-                // 获取节点IP地址
-                const nodeIp = nodeData.ip_address || 'localhost';
-                const logPort = 3001; // 日志服务器端口
-                
-                // 初始化日志加载
-                loadLogs(nodeIp, logPort);
-                
-                // 绑定事件
-                layero.find('#refreshLogs').on('click', function() {
-                    loadLogs(nodeIp, logPort);
-                });
-                
-                layero.find('#clearLogs').on('click', function() {
-                    layer.confirm('确定要清空所有日志吗？', {icon: 3, title: '确认清空'}, function(confirmIndex) {
-                        clearLogs(nodeIp, logPort);
-                        layer.close(confirmIndex);
-                    });
-                });
-                
-                layero.find('#logLevel').on('change', function() {
-                    loadLogs(nodeIp, logPort);
-                });
-                
-                layero.find('#logTitle').on('input', function() {
-                    // 延迟搜索，避免频繁请求
-                    clearTimeout(window.logSearchTimer);
-                    window.logSearchTimer = setTimeout(function() {
-                        loadLogs(nodeIp, logPort);
-                    }, 500);
-                });
+                // 弹窗打开后自动加载日志
+                setTimeout(() => {
+                    loadNodeLogs();
+                }, 100);
             }
         });
-
-        // 加载日志函数
-        function loadLogs(nodeIp, logPort) {
-            const logsContainer = document.getElementById('logsContainer');
-            const level = document.getElementById('logLevel').value;
-            const title = document.getElementById('logTitle').value;
-            
-            logsContainer.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;"><i class="layui-icon layui-icon-loading layui-anim layui-anim-rotate layui-anim-loop"></i> 正在加载日志...</div>';
-            
-            // 构建查询参数
-            const params = new URLSearchParams();
-            if (level) params.append('level', level);
-            if (title) params.append('title', title);
-            params.append('limit', '100');
-            
-            const url = `http://${nodeIp}:${logPort}/logs/recent?${params.toString()}`;
-            
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    if (data && Array.isArray(data)) {
-                        displayLogs(data);
-                    } else {
-                        logsContainer.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">暂无日志数据</div>';
-                    }
-                })
-                .catch(error => {
-                    console.error('加载日志失败:', error);
-                    logsContainer.innerHTML = `
-                        <div style="text-align: center; color: #ff5722; padding: 20px;">
-                            <i class="layui-icon layui-icon-close-fill"></i>
-                            加载日志失败: ${error.message}<br>
-                            <small>请检查节点是否在线且日志服务是否启动</small>
-                        </div>
-                    `;
-                });
-        }
         
-        // 显示日志函数
-        function displayLogs(logs) {
-            const logsContainer = document.getElementById('logsContainer');
-            const logCount = document.getElementById('logCount');
-            
-            if (!logs || logs.length === 0) {
-                logsContainer.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">暂无日志数据</div>';
-                logCount.textContent = '0';
-                return;
-            }
-            
-            logCount.textContent = logs.length;
-            
-            const logsHtml = logs.map(log => {
-                const levelClass = log.level === 'error' ? 'layui-bg-red' : 
-                                 log.level === 'warn' ? 'layui-bg-orange' : 'layui-bg-blue';
-                const levelText = log.level === 'error' ? '错误' : 
-                                log.level === 'warn' ? '警告' : '信息';
-                
-                return `
-                    <div style="margin-bottom: 8px; padding: 8px; background-color: white; border-radius: 4px; border-left: 4px solid ${log.level === 'error' ? '#ff5722' : log.level === 'warn' ? '#ff9800' : '#1e9fff'};">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                            <span class="layui-badge ${levelClass}" style="font-size: 10px;">${levelText}</span>
-                            <span style="color: #999; font-size: 11px;">${log.timestamp}</span>
-                        </div>
-                        <div style="font-weight: bold; color: #333; margin-bottom: 2px;">${log.title}</div>
-                        <div style="color: #666; font-size: 11px;">${log.message}</div>
-                        <div style="color: #999; font-size: 10px; margin-top: 4px;">
-                            <span>平台: ${log.platform}</span>
-                            <span style="margin-left: 10px;">PID: ${log.pid}</span>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-            
-            logsContainer.innerHTML = logsHtml;
-        }
-        
-        // 清空日志函数
-        function clearLogs(nodeIp, logPort) {
-            const url = `http://${nodeIp}:${logPort}/logs/clear`;
-            
-            fetch(url, { method: 'POST' })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        layer.msg('日志已清空', {icon: 1});
-                        loadLogs(nodeIp, logPort);
-                    } else {
-                        layer.msg('清空日志失败: ' + (data.message || '未知错误'), {icon: 2});
-                    }
-                })
-                .catch(error => {
-                    layer.msg('清空日志失败: ' + error.message, {icon: 2});
-                });
-        }
+        // 存储弹窗索引和节点信息
+        window.currentLogModal = {
+            index: logModal,
+            nodeId: nodeId,
+            nodeName: nodeName
+        };
     }
+    
+
+    
+
+    
+    // 显示日志
+    function displayLogs(logs) {
+        const container = document.getElementById('logContainer');
+        if (!container) return;
+        
+        if (!logs || logs.length === 0) {
+            container.innerHTML = '<div style="color: #d4d4d4;">暂无日志</div>';
+            return;
+        }
+        
+        container.innerHTML = '';
+        
+        logs.forEach(log => {
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry ' + log.level;
+            logEntry.style.cssText = 'margin-bottom: 8px; padding: 5px; border-radius: 3px; border-left: 3px solid #555;';
+            
+            // 根据日志级别设置左边框颜色
+            if (log.level === 'log') logEntry.style.borderLeftColor = '#4CAF50';
+            else if (log.level === 'warn') logEntry.style.borderLeftColor = '#FF9800';
+            else if (log.level === 'error') logEntry.style.borderLeftColor = '#F44336';
+            
+            // 格式化时间戳
+            const timestamp = new Date(log.timestamp).toLocaleString('zh-CN', { 
+                timeZone: 'Asia/Shanghai',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            
+            logEntry.innerHTML = `
+                <span style="color: #888; font-size: 12px;">[${timestamp}]</span>
+                <span style="font-weight: bold; margin: 0 5px; color: ${log.level === 'log' ? '#4CAF50' : log.level === 'warn' ? '#FF9800' : '#F44336'};">[${log.level.toUpperCase()}]</span>
+                <span style="color: #9CDCFE; margin: 0 5px;">[${log.platform || ''}]</span>
+                <span style="color: #DCDCAA; margin: 0 5px;">[${log.title || ''}]</span>
+                <div style="color: #d4d4d4; margin-left: 10px;">${log.message || ''}</div>
+            `;
+            
+            container.appendChild(logEntry);
+        });
+        
+        container.scrollTop = container.scrollHeight;
+    }
+    
+
+    
+    // 监听过滤条件变化
+    document.addEventListener('change', function(e) {
+        if (e.target.id === 'levelFilter' || e.target.id === 'titleFilter' || e.target.id === 'limitFilter') {
+            loadNodeLogs(); // 重新加载日志以应用新的过滤条件
+        }
+    });
+    
+    // 页面卸载时清理资源
+    window.addEventListener('beforeunload', function() {
+        if (window.currentEventSource) {
+            window.currentEventSource.close();
+        }
+    });
 });
 </script>
 {% endblock %}

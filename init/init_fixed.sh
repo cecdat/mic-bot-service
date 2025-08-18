@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 
 # 数据库初始化脚本
 # 此脚本会在容器启动时自动执行
@@ -75,8 +75,10 @@ for SCRIPT in "${UPGRADE_SCRIPTS[@]}"; do
     # 提取脚本版本号
     SCRIPT_VERSION=$(echo "$SCRIPT" | sed -n 's/.*_v\([0-9]\.[0-9]\).*/\1/p')
     
-    # 比较版本号
-    if [[ "$SCRIPT_VERSION" > "$CURRENT_VERSION" ]]; then
+    echo "检查升级脚本: $SCRIPT (版本: $SCRIPT_VERSION), 当前数据库版本: $CURRENT_VERSION"
+    
+    # 比较版本号 - 使用更安全的比较方法
+    if [[ "$SCRIPT_VERSION" != "$CURRENT_VERSION" ]] && [[ "$SCRIPT_VERSION" > "$CURRENT_VERSION" ]]; then
         echo "发现需要应用的升级脚本: $SCRIPT (版本: $SCRIPT_VERSION)"
         
         # 执行升级脚本
@@ -89,12 +91,18 @@ for SCRIPT in "${UPGRADE_SCRIPTS[@]}"; do
             echo "升级脚本 $SCRIPT 应用失败，终止升级过程"
             exit 1
         fi
+    else
+        echo "跳过升级脚本 $SCRIPT (版本: $SCRIPT_VERSION) - 已是最新版本或版本不匹配"
     fi
 done
 
 if [[ "$CURRENT_VERSION" != "$(echo "${UPGRADE_SCRIPTS[-1]}" | sed -n 's/.*_v\([0-9]\.[0-9]\).*/\1/p')" ]] && [[ "${#UPGRADE_SCRIPTS[@]}" -gt 0 ]]; then
     echo "数据库已升级到最新版本: $CURRENT_VERSION"
+else
+    echo "数据库版本检查完成，当前版本: $CURRENT_VERSION"
 fi
+
+echo "数据库初始化脚本执行完成"
 
 # 启动Flask应用
 echo "初始化完成，启动Flask应用..."

@@ -28,6 +28,9 @@ class BotNode(db.Model):
     clusters = db.Column(db.Integer, default=1)
     search_delay_min = db.Column(db.String(10), default='30s')
     search_delay_max = db.Column(db.String(10), default='2min')
+    # 日志推送相关字段
+    log_push_enabled = db.Column(db.Boolean, default=False)
+    log_push_interval = db.Column(db.Integer, default=30)
     accounts = db.relationship('BotAccount', backref='node', lazy='dynamic')
 
 class BotAccount(db.Model):
@@ -85,3 +88,20 @@ class Task(db.Model):
     # 外键关系
     node = db.relationship('BotNode', backref=db.backref('tasks', lazy=True))
     account = db.relationship('BotAccount', backref=db.backref('tasks', lazy=True))
+
+class NodeLog(db.Model):
+    __tablename__ = 'node_logs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    node_id = db.Column(db.Integer, db.ForeignKey('bot_nodes.id'), nullable=False)
+    node_name = db.Column(db.String(255), nullable=False)
+    timestamp = db.Column(db.DateTime, nullable=False)
+    level = db.Column(db.String(20), nullable=False)
+    platform = db.Column(db.String(50))
+    title = db.Column(db.String(255))
+    message = db.Column(db.Text)
+    pid = db.Column(db.String(50))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # 关联关系
+    node = db.relationship('BotNode', backref='logs')
