@@ -480,7 +480,7 @@ def delete_bot_account(account_id):
 def manage_push_configs():
     if request.method == 'GET':
         configs = PushConfig.query.all()
-        return jsonify([{ "id": c.id, "url": c.url, "notify_on_node_online": c.notify_on_node_online, "notify_on_node_offline": c.notify_on_node_offline, "notify_on_account_error": c.notify_on_account_error } for c in configs])
+        return jsonify([{ "id": c.id, "url": c.url, "notify_on_node_online": c.notify_on_node_online, "notify_on_node_offline": c.notify_on_node_offline, "notify_on_account_error": c.notify_on_account_error, "notify_on_verification_code": c.notify_on_verification_code } for c in configs])
 
     if request.method == 'POST':
         data = request.get_json()
@@ -498,6 +498,7 @@ def manage_push_configs():
         config.notify_on_node_online = data.get('notify_on_node_online', False)
         config.notify_on_node_offline = data.get('notify_on_node_offline', False)
         config.notify_on_account_error = data.get('notify_on_account_error', False)
+        config.notify_on_verification_code = data.get('notify_on_verification_code', False)
         
         db.session.commit()
         return jsonify({"status": "success"})

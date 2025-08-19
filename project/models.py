@@ -68,6 +68,7 @@ class PushConfig(db.Model):
     notify_on_node_online = db.Column(db.Boolean, default=False)
     notify_on_node_offline = db.Column(db.Boolean, default=False)
     notify_on_account_error = db.Column(db.Boolean, default=False)
+    notify_on_verification_code = db.Column(db.Boolean, default=False)  # 验证码提醒推送
     status = db.Column(db.Integer, default=1)
 
 

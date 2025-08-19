@@ -3,6 +3,7 @@ from .db import db
 from .models import VerificationCode, BotNode, BotAccount
 from .auth import bot_api_required, web_login_required
 from datetime import datetime, timezone, timedelta
+from .push import trigger_push_notification
 import json
 
 bp = Blueprint('api_verification', __name__, url_prefix='/web_api/verification')
@@ -38,6 +39,19 @@ def request_verification_code():
         
         db.session.add(verification_code)
         db.session.commit()
+        
+        # 发送验证码提醒推送通知
+        try:
+            # 查找对应的账户信息
+            account = BotAccount.query.filter_by(email=email).first()
+            auxiliary_email = account.auxiliary_email if account else '未配置'
+            
+            title = f"验证码请求 - {node.node_name}"
+            body = f"账户: {email}\n辅助邮箱: {auxiliary_email}\n节点: {node.node_name}\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n请及时处理验证码"
+            
+            trigger_push_notification('verification_code', title, body)
+        except Exception as e:
+            print(f"发送验证码推送通知失败: {e}")
         
         return jsonify({
             'success': True, 

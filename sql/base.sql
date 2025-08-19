@@ -96,9 +96,11 @@ CREATE TABLE IF NOT EXISTS push_configs (
     notify_on_node_online BOOLEAN DEFAULT FALSE,
     notify_on_node_offline BOOLEAN DEFAULT FALSE,
     notify_on_account_error BOOLEAN DEFAULT FALSE,
+    notify_on_verification_code BOOLEAN DEFAULT FALSE,
     status INT DEFAULT 1
 );
 COMMENT ON COLUMN push_configs.url IS 'Bark URL';
+COMMENT ON COLUMN push_configs.notify_on_verification_code IS '是否启用验证码提醒推送';
 
 -- 3. 创建tasks表
 CREATE TABLE IF NOT EXISTS tasks (

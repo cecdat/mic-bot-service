@@ -16,7 +16,7 @@ def send_bark_notification(url, title, body):
 def trigger_push_notification(event_type, title, body):
     """
     根据事件类型，查找所有订阅了该事件的配置，并发送推送。
-    event_type: 'node_online', 'node_offline', 'account_error'
+    event_type: 'node_online', 'node_offline', 'account_error', 'verification_code'
     """
     configs_to_notify = []
     if event_type == 'node_online':
@@ -25,6 +25,8 @@ def trigger_push_notification(event_type, title, body):
         configs_to_notify = PushConfig.query.filter_by(notify_on_node_offline=True, status=1).all()
     elif event_type == 'account_error':
         configs_to_notify = PushConfig.query.filter_by(notify_on_account_error=True, status=1).all()
+    elif event_type == 'verification_code':
+        configs_to_notify = PushConfig.query.filter_by(notify_on_verification_code=True, status=1).all()
 
     for config in configs_to_notify:
         send_bark_notification(config.url, title, body)
