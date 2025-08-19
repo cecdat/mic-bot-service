@@ -121,3 +121,8 @@ def verification():
 @bp.route('/mobile_points')
 def mobile_points():
     return render_template('mobile_points.html')
+
+# 添加简短的移动端积分页面路由
+@bp.route('/m')
+def mobile_points_short():
+    return render_template('mobile_points.html')

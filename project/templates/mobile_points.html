@@ -42,20 +42,7 @@
             margin-top: 0.5rem;
         }
 
-        /* 认证输入区域 */
-        .auth-prompt {
-            max-width: 100%;
-            margin: 2rem auto;
-            padding: 1.5rem;
-            background: #fff;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
 
-        .auth-prompt h3 {
-            font-size: 1.3rem;
-            margin-bottom: 1.5rem;
-        }
 
         /* 卡片样式 */
         .points-card {
@@ -234,21 +221,8 @@
 </head>
 <body>
     <div class="container-main">
-        <!-- 认证区域 -->
-        <div id="auth-section" class="auth-prompt">
-            <h3 class="text-center">积分监控面板</h3>
-            <div class="mb-3">
-                <label for="api-token-input" class="form-label">访问令牌</label>
-                <input type="password" class="form-control" id="api-token-input" placeholder="请输入您的访问令牌">
-                <div class="form-text">输入令牌后即可查看账户积分情况</div>
-            </div>
-            <button class="btn btn-primary w-100" onclick="saveTokenAndFetch()">
-                <i class="bi bi-check-circle me-2"></i>验证并加载数据
-            </button>
-        </div>
-
         <!-- 主界面 -->
-        <div id="main-section" style="display:none;">
+        <div id="main-section">
             <!-- 头部 -->
             <div class="mobile-header">
                 <h1>积分监控</h1>
@@ -353,24 +327,12 @@
 
         // 获取积分数据
         function fetchPoints() {
-            const token = localStorage.getItem('mobile_api_token');
-            if (!token) {
-                showError('未找到访问令牌，请重新输入');
-                return;
-            }
-
             showLoading();
 
-            fetch('/web_api/mobile/get_points', { 
-                headers: { 'Authorization': 'Bearer ' + token } 
-            })
+            fetch('/web_api/mobile/get_points')
             .then(response => {
                 if (!response.ok) {
-                    if (response.status === 401) {
-                        throw new Error('访问令牌无效，请重新输入');
-                    } else {
-                        throw new Error('服务器错误: ' + response.status);
-                    }
+                    throw new Error('服务器错误: ' + response.status);
                 }
                 return response.json();
             })
@@ -452,57 +414,16 @@
             .catch(error => {
                 console.error('获取数据失败:', error);
                 showError(error.message);
-                
-                // 如果是认证错误，清除令牌并显示认证界面
-                if (error.message.includes('访问令牌无效')) {
-                    localStorage.removeItem('mobile_api_token');
-                    showAuthSection();
-                }
             });
         }
 
-        // 显示主界面
-        function showMainSection() {
-            document.getElementById('auth-section').style.display = 'none';
-            document.getElementById('main-section').style.display = 'block';
+        // 页面加载时直接获取数据
+        window.onload = function() {
             fetchPoints();
             
             // 设置自动刷新（每5分钟）
             setInterval(fetchPoints, 300000);
         }
-
-        // 显示认证界面
-        function showAuthSection() {
-            document.getElementById('auth-section').style.display = 'block';
-            document.getElementById('main-section').style.display = 'none';
-        }
-
-        // 保存令牌并获取数据
-        function saveTokenAndFetch() {
-            const token = document.getElementById('api-token-input').value.trim();
-            if (!token) {
-                alert('请输入访问令牌');
-                return;
-            }
-            
-            localStorage.setItem('mobile_api_token', token);
-            showMainSection();
-        }
-
-        // 页面加载时检查令牌
-        window.onload = function() {
-            const token = localStorage.getItem('mobile_api_token');
-            if (token) {
-                showMainSection();
-            }
-        }
-
-        // 添加回车键支持
-        document.getElementById('api-token-input').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                saveTokenAndFetch();
-            }
-        });
     </script>
 </body>
 </html>

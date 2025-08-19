@@ -8,52 +8,27 @@
 
 ### 页面地址
 ```
-http://your-service-domain:2002/mobile_points
+完整地址: http://your-service-domain:2002/mobile_points
+简短地址: http://your-service-domain:2002/m
 ```
 
 ### 特点
-- **免登录访问**：无需登录service端管理界面
-- **Token认证**：基于节点Token进行身份验证
+- **完全免登录**：无需登录service端管理界面
+- **无需Token认证**：直接打开即可查看所有账户积分
 - **响应式设计**：完美适配移动端设备
 - **实时数据**：显示最新的积分和状态信息
-
-## 获取访问令牌
-
-### 方法一：通过管理界面
-1. 登录service端管理界面
-2. 进入"节点管理"页面
-3. 找到目标节点，查看其Token信息
-
-### 方法二：通过数据库查询
-```sql
-SELECT node_name, api_token_hash FROM bot_nodes;
-```
-注意：数据库中存储的是Token的哈希值，实际Token需要在节点配置中查看。
-
-### 方法三：从Node端配置获取
-在Node端的 `config.json` 文件中查看：
-```json
-{
-  "apiServer": {
-    "token": "your-node-token-here"
-  }
-}
-```
+- **简短地址**：便于移动端输入和分享
 
 ## 使用步骤
 
 1. **打开页面**
-   - 在移动端浏览器中访问页面地址
+   - 在移动端浏览器中访问页面地址（推荐使用简短地址 `/m`）
 
-2. **输入令牌**
-   - 在认证界面输入节点的访问令牌
-   - 点击"验证并加载数据"按钮
-
-3. **查看数据**
-   - 页面将显示该节点下所有账户的积分信息
+2. **查看数据**
+   - 页面会自动加载所有账户的积分信息
    - 包括总积分、今日收益、账户状态等
 
-4. **自动刷新**
+3. **自动刷新**
    - 页面每5分钟自动刷新一次数据
    - 也可手动点击右下角的刷新按钮
 
@@ -84,13 +59,13 @@ SELECT node_name, api_token_hash FROM bot_nodes;
 
 ### 后端API
 - **接口地址**：`/web_api/mobile/get_points`
-- **认证方式**：Bearer Token
+- **认证方式**：无需认证
 - **数据格式**：JSON
 - **响应时间**：实时
 
 ### 安全特性
-- **Token验证**：严格的Token身份验证
-- **数据隔离**：只能查看指定节点的数据
+- **公开访问**：无需任何认证即可访问
+- **数据展示**：显示所有账户的积分数据
 - **无状态设计**：不保存用户会话信息
 
 ## 故障排除
@@ -101,9 +76,9 @@ SELECT node_name, api_token_hash FROM bot_nodes;
    - 检查服务是否正常运行
    - 确认端口2002是否开放
 
-2. **Token验证失败**
-   - 确认Token是否正确
-   - 检查Token是否已过期或被重置
+2. **页面加载失败**
+   - 检查服务是否正常运行
+   - 确认网络连接正常
 
 3. **数据不显示**
    - 确认节点下是否有账户数据
@@ -126,11 +101,16 @@ SELECT node_name, api_token_hash FROM bot_nodes;
 
 3. **测试API接口**
    ```bash
-   curl -H "Authorization: Bearer your-token" \
-        http://localhost:2002/web_api/mobile/get_points
+   curl http://localhost:2002/web_api/mobile/get_points
    ```
 
 ## 更新日志
+
+### v1.1.0 (2025-08-19)
+- 移除Token认证要求
+- 添加简短访问地址 `/m`
+- 实现完全免登录访问
+- 优化用户体验
 
 ### v1.0.0 (2025-08-19)
 - 初始版本发布
