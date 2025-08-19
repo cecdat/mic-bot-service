@@ -38,6 +38,7 @@ class BotAccount(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False)
     password = db.Column(db.String(255))
+    auxiliary_email = db.Column(db.String(255))  # 辅助邮箱，用于接收验证码
     proxy = db.Column(db.Text)
     user_agents = db.Column(db.Text)
     hot_search_endpoints = db.Column(db.Text)

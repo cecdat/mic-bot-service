@@ -70,6 +70,12 @@
                 </div>
             </div>
             <div class="layui-form-item">
+                <label class="layui-form-label">辅助邮箱</label>
+                <div class="layui-input-block">
+                    <input type="email" name="auxiliary_email" autocomplete="off" class="layui-input" placeholder="用于接收验证码的辅助邮箱（可选）">
+                </div>
+            </div>
+            <div class="layui-form-item">
                 <label class="layui-form-label"><span class="layui-text-red">*</span> 分配节点</label>
                 <div class="layui-input-block">
                     <select name="assigned_node_id" id="assigned_node_id_select" lay-verify="required">
@@ -461,6 +467,7 @@ layui.use(['table', 'form', 'layer'], function(){
                 if (data) {
                     form.val('accountForm', {
                         "id": data.id, "email": data.email, "password": data.password,
+                        "auxiliary_email": data.auxiliary_email || '',
                         "proxyUrl": data.proxy ? data.proxy.url : '',
                         "proxyPort": data.proxy ? data.proxy.port : '',
                         "proxyUsername": data.proxy ? data.proxy.username : '',
@@ -485,6 +492,7 @@ layui.use(['table', 'form', 'layer'], function(){
 
         const finalPayload = {
             id: payload.id, email: payload.email, password: payload.password,
+            auxiliary_email: payload.auxiliary_email || null,
             assigned_node_id: payload.assigned_node_id ? parseInt(payload.assigned_node_id) : null,
             proxy: {
                 url: payload.proxyUrl,

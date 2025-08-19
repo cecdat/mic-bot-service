@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS bot_accounts (
   id SERIAL PRIMARY KEY,
   email VARCHAR(255) NOT NULL UNIQUE,
   password VARCHAR(255) DEFAULT NULL,
+  auxiliary_email VARCHAR(255) DEFAULT NULL,
   proxy TEXT,
   user_agents TEXT,
   hot_search_endpoints TEXT,

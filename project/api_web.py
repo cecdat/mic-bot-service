@@ -381,6 +381,7 @@ def manage_bot_accounts():
             monitoring_data = acc.monitoring_data
             acc_dict = {
                 "id": acc.id, "email": acc.email, "password": acc.password,
+                "auxiliary_email": acc.auxiliary_email,
                 "proxy": json.loads(acc.proxy or '{}'),
                 "userAgents": json.loads(acc.user_agents or '{}'),
                 "hotSearchEndpoints": json.loads(acc.hot_search_endpoints or '[]'),
@@ -415,6 +416,7 @@ def manage_bot_accounts():
                     db.session.add(account)
 
                 account.password = data.get('password')
+                account.auxiliary_email = data.get('auxiliary_email')
                 account.proxy = json.dumps(data.get('proxy', {}))
                 account.user_agents = json.dumps(data.get('userAgents', {}))
                 account.hot_search_endpoints = json.dumps(data.get('hotSearchEndpoints', []))

@@ -195,6 +195,7 @@ def get_assigned_accounts():
     for acc in accounts:
         accounts_data.append({
             "email": acc.email, "password": acc.password,
+            "auxiliary_email": acc.auxiliary_email,
             "proxy": json.loads(acc.proxy or '{}'),
             "userAgents": json.loads(acc.user_agents or '{}'),
             "hotSearchEndpoints": json.loads(acc.hot_search_endpoints or '[]')
