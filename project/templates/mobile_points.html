@@ -63,6 +63,12 @@
             color: white;
             font-weight: 600;
             position: relative;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .card-header:hover {
+            opacity: 0.9;
         }
 
         .card-header .account-email {
@@ -75,14 +81,31 @@
             opacity: 0.9;
             position: absolute;
             top: 1rem;
-            right: 1rem;
+            right: 3.5rem;
             background: rgba(255,255,255,0.2);
             padding: 0.2rem 0.5rem;
             border-radius: 10px;
         }
 
+        .card-header .expand-icon {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+        }
+
+        .card-header.expanded .expand-icon {
+            transform: rotate(180deg);
+        }
+
         .card-body {
             padding: 1rem;
+            display: none;
+        }
+
+        .card-body.expanded {
+            display: block;
         }
 
         .points-row {
@@ -134,6 +157,68 @@
         .status-warning { background-color: #f39c12; }
         .status-danger { background-color: #e74c3c; }
         .status-secondary { background-color: #95a5a6; }
+
+        /* 徽章样式 */
+        .badge {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.4rem;
+            border-radius: 8px;
+            margin-left: 0.3rem;
+            font-weight: 500;
+        }
+
+        .badge-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+
+        .badge-danger {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .badge-info {
+            background-color: #17a2b8;
+            color: white;
+        }
+
+        /* 节点分组样式 */
+        .node-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .node-group-header {
+            background: #fff;
+            padding: 0.8rem 1rem;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            font-weight: 600;
+            color: #495057;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .node-group-title {
+            display: flex;
+            align-items: center;
+        }
+
+        .node-group-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+
+        .node-group-count {
+            background: #e9ecef;
+            color: #6c757d;
+            padding: 0.2rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+        }
 
         /* 加载状态 */
         .loading {
@@ -325,7 +410,7 @@
             `;
         }
 
-        // 获取积分数据
+                // 获取积分数据
         function fetchPoints() {
             showLoading();
 
@@ -349,6 +434,8 @@
                 const lastUpdated = document.getElementById('last-updated');
                 lastUpdated.textContent = `最后更新: ${formatTime(new Date())}`;
 
+                // 按节点分组数据
+                const nodeGroups = {};
                 const nodeColorMap = {};
                 let colorIndex = 0;
 
@@ -358,63 +445,124 @@
                         nodeColorMap[nodeName] = bgColors[colorIndex % bgColors.length];
                         colorIndex++;
                     }
-                    const cardColor = nodeColorMap[nodeName];
-
-                    const totalValue = calculateValue(account.total_points);
-                    const dailyValue = calculateValue(account.daily_gain);
-                    const statusBadge = getStatusBadge(account.status);
-                    const lastUpdated = formatTime(account.last_updated);
                     
-                    // 检查数据是否过期
-                    const isStale = account.is_stale;
-                    const staleIcon = isStale ? '<i class="bi bi-exclamation-triangle-fill text-warning ms-1" title="今日数据尚未更新"></i>' : '';
+                    if (!nodeGroups[nodeName]) {
+                        nodeGroups[nodeName] = [];
+                    }
+                    nodeGroups[nodeName].push(account);
+                });
 
-                    const cardHtml = `
-                        <div class="points-card">
-                            <div class="card-header" style="background-color: ${cardColor};">
-                                <div class="account-email">
-                                    <i class="bi bi-person-circle me-2"></i>
-                                    ${account.email}
-                                    ${staleIcon}
-                                </div>
-                                <div class="node-name">${nodeName}</div>
+                // 为每个节点组创建HTML
+                Object.keys(nodeGroups).forEach(nodeName => {
+                    const accounts = nodeGroups[nodeName];
+                    const cardColor = nodeColorMap[nodeName];
+                    
+                    // 计算节点统计信息
+                    const totalAccounts = accounts.length;
+                    const staleAccounts = accounts.filter(acc => acc.is_stale).length;
+                    const abnormalAccounts = accounts.filter(acc => acc.status !== '正常').length;
+                    
+                    // 创建节点组头部
+                    const groupHeaderHtml = `
+                        <div class="node-group-header">
+                            <div class="node-group-title">
+                                <div class="node-group-color" style="background-color: ${cardColor};"></div>
+                                ${nodeName}
                             </div>
-                            <div class="card-body">
-                                <div class="points-row">
-                                    <span class="points-label">账号状态</span>
-                                    <span class="points-value">${statusBadge}</span>
-                                </div>
-                                <div class="points-row">
-                                    <span class="points-label">总积分</span>
-                                    <span class="points-value total">${account.total_points || 'N/A'}</span>
-                                </div>
-                                <div class="points-row">
-                                    <span class="points-label">总价值</span>
-                                    <span class="points-value value">${totalValue}</span>
-                                </div>
-                                <div class="points-row">
-                                    <span class="points-label">今日收益</span>
-                                    <span class="points-value daily">${account.daily_gain || 'N/A'}</span>
-                                </div>
-                                <div class="points-row">
-                                    <span class="points-label">今日价值</span>
-                                    <span class="points-value value">${dailyValue}</span>
-                                </div>
-                                <div class="points-row">
-                                    <span class="points-label">最后更新</span>
-                                    <span class="points-value">${lastUpdated}</span>
-                                </div>
+                            <div class="node-group-count">
+                                ${totalAccounts} 个账户
+                                ${staleAccounts > 0 ? `<span class="badge badge-warning">${staleAccounts} 未更新</span>` : ''}
+                                ${abnormalAccounts > 0 ? `<span class="badge badge-danger">${abnormalAccounts} 异常</span>` : ''}
                             </div>
                         </div>
                     `;
                     
-                    container.innerHTML += cardHtml;
+                    container.innerHTML += groupHeaderHtml;
+                    
+                    // 创建该节点下的所有账户卡片
+                    accounts.forEach(account => {
+                        const totalValue = calculateValue(account.total_points);
+                        const dailyValue = calculateValue(account.daily_gain);
+                        const statusBadge = getStatusBadge(account.status);
+                        const lastUpdated = formatTime(account.last_updated);
+                        
+                        // 检查数据是否过期和状态异常
+                        const isStale = account.is_stale;
+                        const isAbnormal = account.status !== '正常';
+                        
+                        // 创建徽章
+                        let badges = '';
+                        if (isStale) {
+                            badges += '<span class="badge badge-warning">未更新</span>';
+                        }
+                        if (isAbnormal) {
+                            badges += '<span class="badge badge-danger">异常</span>';
+                        }
+
+                        const cardHtml = `
+                            <div class="points-card">
+                                <div class="card-header" style="background-color: ${cardColor};" onclick="toggleCard(this)">
+                                    <div class="account-email">
+                                        <i class="bi bi-person-circle me-2"></i>
+                                        ${account.email}
+                                        ${badges}
+                                    </div>
+                                    <div class="node-name">${nodeName}</div>
+                                    <i class="bi bi-chevron-down expand-icon"></i>
+                                </div>
+                                <div class="card-body">
+                                    <div class="points-row">
+                                        <span class="points-label">账号状态</span>
+                                        <span class="points-value">${statusBadge}</span>
+                                    </div>
+                                    <div class="points-row">
+                                        <span class="points-label">总积分</span>
+                                        <span class="points-value total">${account.total_points || 'N/A'}</span>
+                                    </div>
+                                    <div class="points-row">
+                                        <span class="points-label">总价值</span>
+                                        <span class="points-value value">${totalValue}</span>
+                                    </div>
+                                    <div class="points-row">
+                                        <span class="points-label">今日收益</span>
+                                        <span class="points-value daily">${account.daily_gain || 'N/A'}</span>
+                                    </div>
+                                    <div class="points-row">
+                                        <span class="points-label">今日价值</span>
+                                        <span class="points-value value">${dailyValue}</span>
+                                    </div>
+                                    <div class="points-row">
+                                        <span class="points-label">最后更新</span>
+                                        <span class="points-value">${lastUpdated}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        
+                        container.innerHTML += cardHtml;
+                    });
                 });
             })
             .catch(error => {
                 console.error('获取数据失败:', error);
                 showError(error.message);
             });
+        }
+
+        // 折叠/展开卡片
+        function toggleCard(headerElement) {
+            const cardBody = headerElement.nextElementSibling;
+            const isExpanded = headerElement.classList.contains('expanded');
+            
+            if (isExpanded) {
+                // 折叠
+                headerElement.classList.remove('expanded');
+                cardBody.classList.remove('expanded');
+            } else {
+                // 展开
+                headerElement.classList.add('expanded');
+                cardBody.classList.add('expanded');
+            }
         }
 
         // 页面加载时直接获取数据
