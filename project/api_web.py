@@ -606,11 +606,28 @@ def mobile_get_points():
         daily_value = account.daily_gain / 179.25 if account.daily_gain else 0
         
         # 检查数据是否过期（超过24小时）
-        last_updated = datetime.fromisoformat(account.last_updated.replace('Z', '+00:00')) if account.last_updated else None
+        last_updated = None
         is_stale = False
-        if last_updated:
-            time_diff = datetime.now(timezone.utc) - last_updated
-            is_stale = time_diff.total_seconds() > 86400  # 24小时
+        
+        if account.last_updated:
+            try:
+                # 尝试处理字符串格式的时间
+                if isinstance(account.last_updated, str):
+                    last_updated = datetime.fromisoformat(account.last_updated.replace('Z', '+00:00'))
+                # 尝试处理整数时间戳
+                elif isinstance(account.last_updated, (int, float)):
+                    last_updated = datetime.fromtimestamp(account.last_updated, tz=timezone.utc)
+                # 如果已经是datetime对象
+                elif isinstance(account.last_updated, datetime):
+                    last_updated = account.last_updated
+                
+                if last_updated:
+                    time_diff = datetime.now(timezone.utc) - last_updated
+                    is_stale = time_diff.total_seconds() > 86400  # 24小时
+            except Exception as e:
+                # 如果时间解析失败，记录错误但不影响其他功能
+                current_app.logger.warning(f"Failed to parse last_updated for account {email}: {e}")
+                is_stale = True  # 解析失败时标记为过期
         
         points_data.append({
             'email': email,
