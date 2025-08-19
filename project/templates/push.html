@@ -148,7 +148,8 @@ layui.use(['table', 'form', 'layer'], function(){
             url: currentConfig.url,
             notify_on_node_online: field === 'notify_on_node_online' ? value : currentConfig.notify_on_node_online,
             notify_on_node_offline: field === 'notify_on_node_offline' ? value : currentConfig.notify_on_node_offline,
-            notify_on_account_error: field === 'notify_on_account_error' ? value : currentConfig.notify_on_account_error
+            notify_on_account_error: field === 'notify_on_account_error' ? value : currentConfig.notify_on_account_error,
+            notify_on_verification_code: field === 'notify_on_verification_code' ? value : currentConfig.notify_on_verification_code
         };
 
         fetchWithAuth('/web_api/push_configs', {

@@ -51,7 +51,8 @@ def request_verification_code():
             
             trigger_push_notification('verification_code', title, body)
         except Exception as e:
-            print(f"发送验证码推送通知失败: {e}")
+            from flask import current_app
+            current_app.logger.error(f"发送验证码推送通知失败: {e}")
         
         return jsonify({
             'success': True, 
