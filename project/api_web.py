@@ -586,3 +586,68 @@ def clear_node_logs(node_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
+
+# 移动端积分数据接口（免登录，基于Token认证）
+@bp.route('/mobile/get_points', methods=['GET'])
+def mobile_get_points():
+    # 从请求头获取Token
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({"error": "缺少访问令牌"}), 401
+    
+    token = auth_header.split(' ')[1]
+    
+    # 验证Token（这里使用简单的Token验证，实际可以更复杂）
+    # 检查Token是否存在于某个节点中
+    from .models import BotNode
+    from werkzeug.security import check_password_hash
+    
+    # 遍历所有节点，检查token_hash是否匹配
+    nodes = BotNode.query.all()
+    node = None
+    for n in nodes:
+        if check_password_hash(n.api_token_hash, token):
+            node = n
+            break
+    
+    if not node:
+        return jsonify({"error": "访问令牌无效"}), 401
+    
+    # 获取该节点下的所有账户积分数据
+    query = db.session.query(Account, BotAccount.email, BotNode.node_name)\
+        .join(BotAccount, Account.bot_account_id == BotAccount.id)\
+        .join(BotNode, BotAccount.assigned_node_id == BotNode.id)\
+        .filter(BotNode.id == node.id)\
+        .order_by(Account.last_updated.desc())
+    
+    results = query.all()
+    
+    points_data = []
+    
+    for account, email, node_name in results:
+        # 计算积分价值
+        total_value = account.total_points / 179.25 if account.total_points else 0
+        daily_value = account.daily_gain / 179.25 if account.daily_gain else 0
+        
+        # 检查数据是否过期（超过24小时）
+        last_updated = datetime.fromisoformat(account.last_updated.replace('Z', '+00:00')) if account.last_updated else None
+        is_stale = False
+        if last_updated:
+            time_diff = datetime.now(timezone.utc) - last_updated
+            is_stale = time_diff.total_seconds() > 86400  # 24小时
+        
+        points_data.append({
+            'email': email,
+            'total_points': account.total_points,
+            'daily_gain': account.daily_gain,
+            'desktop_gain': account.desktop_gain,
+            'mobile_gain': account.mobile_gain,
+            'total_value': round(total_value, 2),
+            'daily_value': round(daily_value, 2),
+            'node_name': node_name,
+            'last_updated': account.last_updated,
+            'is_stale': is_stale,
+            'status': account.status
+        })
+    
+    return jsonify(points_data)

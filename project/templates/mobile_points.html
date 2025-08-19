@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>积分监控 - 移动端</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        /* 全局样式 */
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            margin: 0;
+            padding: 0.5rem;
+        }
+
+        /* 主容器 */
+        .container-main {
+            max-width: 100%;
+            margin: auto;
+        }
+
+        /* 头部样式 */
+        .mobile-header {
+            text-align: center;
+            margin-bottom: 1rem;
+            padding: 1rem 0;
+        }
+
+        .mobile-header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #34495e;
+            margin: 0;
+        }
+
+        .mobile-header .subtitle {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-top: 0.5rem;
+        }
+
+        /* 认证输入区域 */
+        .auth-prompt {
+            max-width: 100%;
+            margin: 2rem auto;
+            padding: 1.5rem;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .auth-prompt h3 {
+            font-size: 1.3rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* 卡片样式 */
+        .points-card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 1rem;
+            overflow: hidden;
+            transition: transform 0.2s ease-in-out;
+        }
+
+        .points-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .card-header {
+            padding: 1rem;
+            color: white;
+            font-weight: 600;
+            position: relative;
+        }
+
+        .card-header .account-email {
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .card-header .node-name {
+            font-size: 0.8rem;
+            opacity: 0.9;
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(255,255,255,0.2);
+            padding: 0.2rem 0.5rem;
+            border-radius: 10px;
+        }
+
+        .card-body {
+            padding: 1rem;
+        }
+
+        .points-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .points-row:last-child {
+            border-bottom: none;
+        }
+
+        .points-label {
+            font-weight: 500;
+            color: #495057;
+            font-size: 0.9rem;
+        }
+
+        .points-value {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .points-value.total {
+            color: #0078d4;
+            font-size: 1rem;
+        }
+
+        .points-value.daily {
+            color: #107c10;
+        }
+
+        .points-value.value {
+            color: #d83b01;
+        }
+
+        /* 状态徽章 */
+        .status-badge {
+            font-weight: bold;
+            padding: 0.3rem 0.6rem;
+            border-radius: 12px;
+            color: white;
+            font-size: 0.8rem;
+        }
+
+        .status-success { background-color: #2ecc71; }
+        .status-warning { background-color: #f39c12; }
+        .status-danger { background-color: #e74c3c; }
+        .status-secondary { background-color: #95a5a6; }
+
+        /* 加载状态 */
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #6c757d;
+        }
+
+        .loading .spinner-border {
+            width: 2rem;
+            height: 2rem;
+        }
+
+        /* 错误状态 */
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            text-align: center;
+        }
+
+        /* 刷新按钮 */
+        .refresh-btn {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 3rem;
+            height: 3rem;
+            border-radius: 50%;
+            background: #0078d4;
+            color: white;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0,120,212,0.3);
+            z-index: 1000;
+        }
+
+        .refresh-btn:hover {
+            background: #106ebe;
+            transform: scale(1.1);
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #6c757d;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        /* 时间显示 */
+        .last-updated {
+            text-align: center;
+            font-size: 0.8rem;
+            color: #6c757d;
+            margin: 1rem 0;
+        }
+
+        /* 响应式调整 */
+        @media (max-width: 576px) {
+            body {
+                padding: 0.25rem;
+            }
+            
+            .auth-prompt {
+                margin: 1rem auto;
+                padding: 1rem;
+            }
+            
+            .card-header {
+                padding: 0.8rem;
+            }
+            
+            .card-body {
+                padding: 0.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-main">
+        <!-- 认证区域 -->
+        <div id="auth-section" class="auth-prompt">
+            <h3 class="text-center">积分监控面板</h3>
+            <div class="mb-3">
+                <label for="api-token-input" class="form-label">访问令牌</label>
+                <input type="password" class="form-control" id="api-token-input" placeholder="请输入您的访问令牌">
+                <div class="form-text">输入令牌后即可查看账户积分情况</div>
+            </div>
+            <button class="btn btn-primary w-100" onclick="saveTokenAndFetch()">
+                <i class="bi bi-check-circle me-2"></i>验证并加载数据
+            </button>
+        </div>
+
+        <!-- 主界面 -->
+        <div id="main-section" style="display:none;">
+            <!-- 头部 -->
+            <div class="mobile-header">
+                <h1>积分监控</h1>
+                <div class="subtitle">Microsoft Rewards 账户状态</div>
+            </div>
+
+            <!-- 最后更新时间 -->
+            <div id="last-updated" class="last-updated"></div>
+
+            <!-- 积分卡片容器 -->
+            <div id="points-container"></div>
+
+            <!-- 刷新按钮 -->
+            <button class="refresh-btn" onclick="fetchPoints()" title="刷新数据">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const POINTS_PER_YUAN = 179.25;
+        const bgColors = [
+            '#0078d4', '#d83b01', '#107c10', '#5c2d91', '#008272', '#b7472a',
+            '#34495e', '#8e44ad', '#27ae60', '#c0392b', '#2980b9', '#7f8c8d'
+        ];
+
+        // 计算积分价值
+        function calculateValue(points) {
+            if (typeof points !== 'number' || points === 0) return '¥ 0.00';
+            return '¥ ' + (points / POINTS_PER_YUAN).toFixed(2);
+        }
+
+        // 获取状态徽章
+        function getStatusBadge(status) {
+            let badgeClass = 'status-secondary';
+            
+            switch (status) {
+                case '正常':
+                    badgeClass = 'status-success';
+                    break;
+                case '需要验证':
+                case '已锁定':
+                    badgeClass = 'status-warning';
+                    break;
+                case '密码错误':
+                case '登录失败':
+                    badgeClass = 'status-danger';
+                    break;
+            }
+            return `<span class="status-badge ${badgeClass}">${status || '未知'}</span>`;
+        }
+
+        // 格式化时间
+        function formatTime(timestamp) {
+            if (!timestamp) return 'N/A';
+            const date = new Date(timestamp);
+            return date.toLocaleString('zh-CN', { 
+                month: '2-digit', 
+                day: '2-digit', 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: false 
+            });
+        }
+
+        // 显示加载状态
+        function showLoading() {
+            const container = document.getElementById('points-container');
+            container.innerHTML = `
+                <div class="loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">加载中...</span>
+                    </div>
+                    <div class="mt-2">正在加载数据...</div>
+                </div>
+            `;
+        }
+
+        // 显示错误信息
+        function showError(message) {
+            const container = document.getElementById('points-container');
+            container.innerHTML = `
+                <div class="error-message">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    ${message}
+                </div>
+            `;
+        }
+
+        // 显示空状态
+        function showEmpty() {
+            const container = document.getElementById('points-container');
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="bi bi-inbox"></i>
+                    <div>暂无账户数据</div>
+                    <div class="mt-2 text-muted">请检查令牌是否正确</div>
+                </div>
+            `;
+        }
+
+        // 获取积分数据
+        function fetchPoints() {
+            const token = localStorage.getItem('mobile_api_token');
+            if (!token) {
+                showError('未找到访问令牌，请重新输入');
+                return;
+            }
+
+            showLoading();
+
+            fetch('/web_api/mobile/get_points', { 
+                headers: { 'Authorization': 'Bearer ' + token } 
+            })
+            .then(response => {
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        throw new Error('访问令牌无效，请重新输入');
+                    } else {
+                        throw new Error('服务器错误: ' + response.status);
+                    }
+                }
+                return response.json();
+            })
+            .then(data => {
+                const container = document.getElementById('points-container');
+                container.innerHTML = '';
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    showEmpty();
+                    return;
+                }
+
+                // 更新最后更新时间
+                const lastUpdated = document.getElementById('last-updated');
+                lastUpdated.textContent = `最后更新: ${formatTime(new Date())}`;
+
+                const nodeColorMap = {};
+                let colorIndex = 0;
+
+                data.forEach((account, index) => {
+                    const nodeName = account.node_name || '未知节点';
+                    if (!nodeColorMap[nodeName]) {
+                        nodeColorMap[nodeName] = bgColors[colorIndex % bgColors.length];
+                        colorIndex++;
+                    }
+                    const cardColor = nodeColorMap[nodeName];
+
+                    const totalValue = calculateValue(account.total_points);
+                    const dailyValue = calculateValue(account.daily_gain);
+                    const statusBadge = getStatusBadge(account.status);
+                    const lastUpdated = formatTime(account.last_updated);
+                    
+                    // 检查数据是否过期
+                    const isStale = account.is_stale;
+                    const staleIcon = isStale ? '<i class="bi bi-exclamation-triangle-fill text-warning ms-1" title="今日数据尚未更新"></i>' : '';
+
+                    const cardHtml = `
+                        <div class="points-card">
+                            <div class="card-header" style="background-color: ${cardColor};">
+                                <div class="account-email">
+                                    <i class="bi bi-person-circle me-2"></i>
+                                    ${account.email}
+                                    ${staleIcon}
+                                </div>
+                                <div class="node-name">${nodeName}</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="points-row">
+                                    <span class="points-label">账号状态</span>
+                                    <span class="points-value">${statusBadge}</span>
+                                </div>
+                                <div class="points-row">
+                                    <span class="points-label">总积分</span>
+                                    <span class="points-value total">${account.total_points || 'N/A'}</span>
+                                </div>
+                                <div class="points-row">
+                                    <span class="points-label">总价值</span>
+                                    <span class="points-value value">${totalValue}</span>
+                                </div>
+                                <div class="points-row">
+                                    <span class="points-label">今日收益</span>
+                                    <span class="points-value daily">${account.daily_gain || 'N/A'}</span>
+                                </div>
+                                <div class="points-row">
+                                    <span class="points-label">今日价值</span>
+                                    <span class="points-value value">${dailyValue}</span>
+                                </div>
+                                <div class="points-row">
+                                    <span class="points-label">最后更新</span>
+                                    <span class="points-value">${lastUpdated}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    container.innerHTML += cardHtml;
+                });
+            })
+            .catch(error => {
+                console.error('获取数据失败:', error);
+                showError(error.message);
+                
+                // 如果是认证错误，清除令牌并显示认证界面
+                if (error.message.includes('访问令牌无效')) {
+                    localStorage.removeItem('mobile_api_token');
+                    showAuthSection();
+                }
+            });
+        }
+
+        // 显示主界面
+        function showMainSection() {
+            document.getElementById('auth-section').style.display = 'none';
+            document.getElementById('main-section').style.display = 'block';
+            fetchPoints();
+            
+            // 设置自动刷新（每5分钟）
+            setInterval(fetchPoints, 300000);
+        }
+
+        // 显示认证界面
+        function showAuthSection() {
+            document.getElementById('auth-section').style.display = 'block';
+            document.getElementById('main-section').style.display = 'none';
+        }
+
+        // 保存令牌并获取数据
+        function saveTokenAndFetch() {
+            const token = document.getElementById('api-token-input').value.trim();
+            if (!token) {
+                alert('请输入访问令牌');
+                return;
+            }
+            
+            localStorage.setItem('mobile_api_token', token);
+            showMainSection();
+        }
+
+        // 页面加载时检查令牌
+        window.onload = function() {
+            const token = localStorage.getItem('mobile_api_token');
+            if (token) {
+                showMainSection();
+            }
+        }
+
+        // 添加回车键支持
+        document.getElementById('api-token-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                saveTokenAndFetch();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -116,3 +116,8 @@ def push():
 @web_login_required
 def verification():
     return render_template('verification.html')
+
+# 添加移动端积分页面路由
+@bp.route('/mobile_points')
+def mobile_points():
+    return render_template('mobile_points.html')
