@@ -6,17 +6,50 @@
 {% block content %}
 <div class="layui-card">
     <div class="layui-card-body">
-        <div class="layui-btn-container">
-            <button class="layui-btn layui-btn-normal" id="add-account-btn"><i class="layui-icon layui-icon-add-1"></i> 新增账户</button>
-
+        <!-- 筛选区域 -->
+        <div class="layui-form layui-form-pane" style="margin-bottom: 15px; padding: 15px; background-color: #f8f8f8; border-radius: 4px;">
+            <div class="layui-row layui-col-space10">
+                <div class="layui-col-md3">
+                    <label class="layui-form-label">账户状态</label>
+                    <div class="layui-input-block">
+                        <select id="statusFilter" lay-filter="statusFilter">
+                            <option value="">全部状态</option>
+                            <option value="true">启用</option>
+                            <option value="false">禁用</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="layui-col-md3">
+                    <label class="layui-form-label">分配节点</label>
+                    <div class="layui-input-block">
+                        <select id="nodeFilter" lay-filter="nodeFilter">
+                            <option value="">全部节点</option>
+                            <option value="unassigned">未分配</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="layui-col-md3">
+                    <label class="layui-form-label">搜索邮箱</label>
+                    <div class="layui-input-block">
+                        <input type="text" id="emailFilter" placeholder="输入邮箱关键词" class="layui-input">
+                    </div>
+                </div>
+                <div class="layui-col-md3">
+                    <label class="layui-form-label"></label>
+                    <div class="layui-input-block">
+                        <button class="layui-btn" id="clearFilter"><i class="layui-icon layui-icon-refresh"></i> 清除筛选</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
+        <div class="layui-btn-container">
+            <button class="layui-btn layui-btn-normal" id="add-account-btn"><i class="layui-icon layui-icon-add-1"></i> 新增账户</button>
+        </div>
 
         <table class="layui-hide" id="accounts-table" lay-filter="accountsTable"></table>
     </div>
 </div>
-
-
 
 <!-- 移除Laytpl模板，将在JavaScript中动态生成操作按钮 -->
 
@@ -105,6 +138,16 @@ layui.use(['table', 'form', 'layer'], function(){
     var form = window.form;
     var layer = window.layer;
 
+    // 筛选变量
+    var currentFilters = {
+        status: '',
+        node: '',
+        email: ''
+    };
+
+    // 存储所有数据用于筛选
+    var allAccountsData = [];
+
     function getStatusIcons(statusDetails) {
         let html = '';
         const platforms = [
@@ -129,10 +172,56 @@ layui.use(['table', 'form', 'layer'], function(){
         return html;
     }
 
+    // 筛选数据函数
+    function filterData() {
+        let filteredData = allAccountsData.filter(account => {
+            // 状态筛选
+            if (currentFilters.status !== '' && account.is_enabled.toString() !== currentFilters.status) {
+                return false;
+            }
+            
+            // 节点筛选
+            if (currentFilters.node !== '') {
+                if (currentFilters.node === 'unassigned' && account.assigned_node_name) {
+                    return false;
+                } else if (currentFilters.node !== 'unassigned' && account.assigned_node_name !== currentFilters.node) {
+                    return false;
+                }
+            }
+            
+            // 邮箱筛选
+            if (currentFilters.email !== '' && !account.email.toLowerCase().includes(currentFilters.email.toLowerCase())) {
+                return false;
+            }
+            
+            return true;
+        });
+
+        // 按节点分组排序
+        filteredData.sort((a, b) => {
+            const nodeA = a.assigned_node_name || '未分配';
+            const nodeB = b.assigned_node_name || '未分配';
+            if (nodeA === nodeB) {
+                return a.email.localeCompare(b.email);
+            }
+            return nodeA.localeCompare(nodeB);
+        });
+
+        return filteredData;
+    }
+
+    // 更新表格数据
+    function updateTableData() {
+        const filteredData = filterData();
+        tableIns.reload({
+            data: filteredData
+        });
+    }
+
     var tableIns = table.render({
         elem: '#accounts-table',
         url: '/web_api/bot_accounts',
-        height: 'full-160',
+        height: 'full-220',
         cellMinWidth: 80,
         cols: [[
             {field: 'email', title: 'Email', width: 250, sort: true, fixed: 'left'},
@@ -175,14 +264,20 @@ layui.use(['table', 'form', 'layer'], function(){
             }
             
             // 处理不同的响应格式
+            let data = [];
             if (Array.isArray(res)) {
-                return { "code": 0, "msg": "", "count": res.length, "data": res };
+                data = res;
             } else if (res.data && Array.isArray(res.data)) {
-                return { "code": 0, "msg": res.msg || "", "count": res.count || res.data.length, "data": res.data };
+                data = res.data;
             }
             
-            // 默认返回空数据
-            return { "code": 0, "msg": "", "count": 0, "data": [] };
+            // 存储所有数据
+            allAccountsData = data;
+            
+            // 应用筛选
+            const filteredData = filterData();
+            
+            return { "code": 0, "msg": res.msg || "", "count": filteredData.length, "data": filteredData };
         }
     });
     
@@ -194,6 +289,60 @@ layui.use(['table', 'form', 'layer'], function(){
         else if(obj.event === 'enable'){ toggleAccountStatus(data.id, data.email, true); }
         else if(obj.event === 'disable'){ toggleAccountStatus(data.id, data.email, false); }
     });
+
+    // 筛选事件监听
+    form.on('select(statusFilter)', function(data){
+        currentFilters.status = data.value;
+        updateTableData();
+    });
+
+    form.on('select(nodeFilter)', function(data){
+        currentFilters.node = data.value;
+        updateTableData();
+    });
+
+    // 邮箱搜索事件
+    $('#emailFilter').on('input', function(){
+        currentFilters.email = $(this).val();
+        updateTableData();
+    });
+
+    // 清除筛选
+    $('#clearFilter').on('click', function(){
+        currentFilters = { status: '', node: '', email: '' };
+        $('#statusFilter').val('');
+        $('#nodeFilter').val('');
+        $('#emailFilter').val('');
+        form.render('select');
+        updateTableData();
+    });
+
+    // 初始化节点筛选下拉框
+    async function initNodeFilter() {
+        try {
+            const response = await fetch('/web_api/nodes', {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            const nodes = await response.json();
+            const nodeSelect = document.getElementById('nodeFilter');
+            nodes.forEach(node => {
+                const option = document.createElement('option');
+                option.value = node.node_name;
+                option.textContent = node.node_name;
+                nodeSelect.appendChild(option);
+            });
+            form.render('select');
+        } catch (e) { 
+            console.error("Could not populate node filter:", e); 
+        }
+    }
+
+    // 页面加载完成后初始化筛选器
+    initNodeFilter();
 
     function toggleAccountStatus(accountId, email, enable) {
         const actionText = enable ? '启用' : '禁用';
