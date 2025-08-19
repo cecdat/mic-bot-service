@@ -110,3 +110,9 @@ def nodes():
 @web_login_required
 def push():
     return render_template('push.html')
+
+# 添加验证码管理路由
+@bp.route('/verification')
+@web_login_required
+def verification():
+    return render_template('verification.html')

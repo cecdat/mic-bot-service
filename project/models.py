@@ -1,6 +1,6 @@
 from .db import db
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 class WebUser(db.Model):
     __tablename__ = 'web_users'
@@ -106,3 +106,17 @@ class NodeLog(db.Model):
     
     # 关联关系
     node = db.relationship('BotNode', backref='logs')
+
+
+class VerificationCode(db.Model):
+    __tablename__ = 'verification_codes'
+    id = db.Column(db.Integer, primary_key=True)
+    node_id = db.Column(db.Integer, db.ForeignKey('bot_nodes.id'), nullable=False)
+    email = db.Column(db.String(255), nullable=False)
+    code = db.Column(db.String(10), nullable=True)
+    status = db.Column(db.String(20), default='pending')  # pending, completed, expired
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    expires_at = db.Column(db.DateTime, default=lambda: datetime.now() + timedelta(minutes=10))
+    
+    node = db.relationship('BotNode', backref='verification_codes')

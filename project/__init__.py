@@ -27,6 +27,9 @@ def create_app(test_config=None):
     
     from . import api_web
     app.register_blueprint(api_web.bp)
+    
+    from . import api_verification
+    app.register_blueprint(api_verification.bp)
 
     from . import frontend
     app.register_blueprint(frontend.bp)

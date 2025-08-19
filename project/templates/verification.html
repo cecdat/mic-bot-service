@@ -1,0 +1,220 @@
+{% extends "layout.html" %}
+
+{% block title %}验证码管理{% endblock %}
+
+{% block content %}
+<style>
+    .verification-container {
+        padding: 20px;
+    }
+    .verification-item {
+        border: 1px solid #e6e6e6;
+        border-radius: 4px;
+        padding: 15px;
+        margin-bottom: 15px;
+        background-color: #fff;
+    }
+    .verification-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    .verification-info {
+        color: #666;
+        font-size: 14px;
+    }
+    .verification-actions {
+        display: flex;
+        gap: 10px;
+    }
+    .expired {
+        background-color: #f5f5f5;
+        opacity: 0.7;
+    }
+    .urgent {
+        border-color: #ff5722;
+        background-color: #fff2f0;
+    }
+    .countdown {
+        color: #ff5722;
+        font-weight: bold;
+    }
+</style>
+
+<div class="verification-container">
+    <div class="layui-card">
+        <div class="layui-card-header">
+            <h2>验证码管理</h2>
+            <p>管理Node端请求的验证码，及时输入验证码以支持自动化流程</p>
+        </div>
+        <div class="layui-card-body">
+            <div class="layui-row">
+                <div class="layui-col-md12">
+                    <button class="layui-btn layui-btn-primary" onclick="refreshList()">
+                        <i class="layui-icon layui-icon-refresh"></i> 刷新列表
+                    </button>
+                </div>
+            </div>
+            
+            <div id="verificationList" class="layui-row" style="margin-top: 20px;">
+                <!-- 验证码列表将在这里动态加载 -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block custom_js %}
+<script>
+    let refreshTimer = null;
+    
+    // 页面加载完成后初始化
+    layui.use(['layer', 'form'], function(){
+        var layer = layui.layer;
+        var form = layui.form;
+        
+        // 加载验证码列表
+        loadVerificationList();
+        
+        // 每30秒自动刷新一次
+        refreshTimer = setInterval(loadVerificationList, 30000);
+    });
+    
+    // 加载验证码列表
+    function loadVerificationList() {
+        fetchWithAuth('/web_api/verification/list')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    renderVerificationList(data.data);
+                } else {
+                    layui.use('layer', function(){
+                        var layer = layui.layer;
+                        layer.msg('加载验证码列表失败: ' + data.message, {icon: 2});
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('加载验证码列表失败:', error);
+                layui.use('layer', function(){
+                    var layer = layui.layer;
+                    layer.msg('加载验证码列表失败', {icon: 2});
+                });
+            });
+    }
+    
+    // 渲染验证码列表
+    function renderVerificationList(codes) {
+        const container = document.getElementById('verificationList');
+        
+        if (codes.length === 0) {
+            container.innerHTML = '<div class="layui-col-md12"><div class="layui-text-center" style="padding: 50px; color: #999;">暂无待处理的验证码</div></div>';
+            return;
+        }
+        
+        let html = '';
+        codes.forEach(code => {
+            const createdAt = new Date(code.created_at);
+            const expiresAt = new Date(code.expires_at);
+            const now = new Date();
+            const timeLeft = Math.max(0, Math.floor((expiresAt - now) / 1000));
+            const isExpired = timeLeft <= 0;
+            const isUrgent = timeLeft < 300; // 5分钟内为紧急
+            
+            const timeLeftText = isExpired ? '已过期' : formatTimeLeft(timeLeft);
+            
+            html += `
+                <div class="layui-col-md12">
+                    <div class="verification-item ${isExpired ? 'expired' : ''} ${isUrgent ? 'urgent' : ''}">
+                        <div class="verification-header">
+                            <div>
+                                <h3>主账户: ${code.email}</h3>
+                                <div class="verification-info">
+                                    <strong>节点:</strong> ${code.node_name} | 
+                                    <strong>辅助邮箱:</strong> ${code.auxiliary_email || '未配置'} | 
+                                    <strong>创建时间:</strong> ${code.created_at} | 
+                                    <strong>过期时间:</strong> ${code.expires_at}
+                                </div>
+                            </div>
+                            <div class="verification-actions">
+                                <span class="countdown">${timeLeftText}</span>
+                                ${!isExpired ? `
+                                    <button class="layui-btn layui-btn-sm" onclick="inputCode(${code.id})">
+                                        输入验证码
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+    
+    // 格式化剩余时间
+    function formatTimeLeft(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+    
+    // 输入验证码
+    function inputCode(verificationId) {
+        layui.use('layer', function(){
+            var layer = layui.layer;
+            
+            layer.prompt({
+                title: '请输入验证码',
+                formType: 0,
+                value: '',
+                area: ['300px', '150px']
+            }, function(value, index, elem){
+                if (!value || value.trim() === '') {
+                    layer.msg('请输入验证码', {icon: 2});
+                    return;
+                }
+                
+                // 提交验证码
+                fetchWithAuth(`/web_api/verification/input/${verificationId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        code: value.trim()
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        layer.msg('验证码输入成功', {icon: 1});
+                        layer.close(index);
+                        loadVerificationList(); // 刷新列表
+                    } else {
+                        layer.msg('验证码输入失败: ' + data.message, {icon: 2});
+                    }
+                })
+                .catch(error => {
+                    console.error('输入验证码失败:', error);
+                    layer.msg('输入验证码失败', {icon: 2});
+                });
+            });
+        });
+    }
+    
+    // 刷新列表
+    function refreshList() {
+        loadVerificationList();
+    }
+    
+    // 页面卸载时清理定时器
+    window.addEventListener('beforeunload', function() {
+        if (refreshTimer) {
+            clearInterval(refreshTimer);
+        }
+    });
+</script>
+{% endblock %}

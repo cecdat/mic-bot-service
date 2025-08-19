@@ -118,4 +118,46 @@ CREATE TABLE IF NOT EXISTS tasks (
   FOREIGN KEY (account_id) REFERENCES bot_accounts (id) ON DELETE CASCADE
 );
 
+-- Table for node logs (v1.5)
+CREATE TABLE IF NOT EXISTS node_logs (
+    id SERIAL PRIMARY KEY,
+    node_id INTEGER NOT NULL,
+    node_name VARCHAR(255) NOT NULL,
+    timestamp TIMESTAMP NOT NULL,
+    level VARCHAR(20) NOT NULL,
+    platform VARCHAR(50),
+    title VARCHAR(255),
+    message TEXT,
+    pid VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (node_id) REFERENCES bot_nodes (id) ON DELETE CASCADE
+);
+
+-- Table for verification codes (v1.8)
+CREATE TABLE IF NOT EXISTS verification_codes (
+    id SERIAL PRIMARY KEY,
+    node_id INTEGER NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    code VARCHAR(10) DEFAULT NULL,
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP + INTERVAL '10 minutes'),
+    FOREIGN KEY (node_id) REFERENCES bot_nodes (id) ON DELETE CASCADE
+);
+
+-- Indexes for verification_codes
+CREATE INDEX IF NOT EXISTS idx_verification_codes_node_email ON verification_codes (node_id, email);
+CREATE INDEX IF NOT EXISTS idx_verification_codes_status ON verification_codes (status);
+
+-- Comments for verification_codes
+COMMENT ON TABLE verification_codes IS '验证码管理表，用于Node端和Service端之间的验证码传递';
+COMMENT ON COLUMN verification_codes.node_id IS '节点ID';
+COMMENT ON COLUMN verification_codes.email IS '账户邮箱';
+COMMENT ON COLUMN verification_codes.code IS '验证码';
+COMMENT ON COLUMN verification_codes.status IS '状态：pending(等待中), completed(已完成), expired(已过期)';
+COMMENT ON COLUMN verification_codes.created_at IS '创建时间';
+COMMENT ON COLUMN verification_codes.updated_at IS '更新时间';
+COMMENT ON COLUMN verification_codes.expires_at IS '过期时间';
+
 -- 后续版本更新通过upgrade_db.sql脚本执行
