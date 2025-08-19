@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, current_app
 from .db import db
 from .models import Account, BotAccount, BotNode, PushConfig, WebUser
 from .auth import web_login_required
@@ -622,7 +622,12 @@ def mobile_get_points():
                     last_updated = account.last_updated
                 
                 if last_updated:
-                    time_diff = datetime.now(timezone.utc) - last_updated
+                    # 确保两个时间都是时区感知的
+                    now_utc = datetime.now(timezone.utc)
+                    if last_updated.tzinfo is None:
+                        # 如果last_updated没有时区信息，假设为UTC
+                        last_updated = last_updated.replace(tzinfo=timezone.utc)
+                    time_diff = now_utc - last_updated
                     is_stale = time_diff.total_seconds() > 86400  # 24小时
             except Exception as e:
                 # 如果时间解析失败，记录错误但不影响其他功能
