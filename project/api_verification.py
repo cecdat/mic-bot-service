@@ -47,7 +47,7 @@ def request_verification_code():
             auxiliary_email = account.auxiliary_email if account else '未配置'
             
             title = f"验证码请求 - {node.node_name}"
-            body = f"账户: {email}\n辅助邮箱: {auxiliary_email}\n节点: {node.node_name}\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n请及时处理验证码"
+            body = f"主账户: {email}\n辅助邮箱: {auxiliary_email}\n节点: {node.node_name}\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n请及时处理验证码"
             
             trigger_push_notification('verification_code', title, body)
         except Exception as e:

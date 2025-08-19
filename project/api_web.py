@@ -495,10 +495,11 @@ def manage_push_configs():
             db.session.add(config)
         
         config.url = url
-        config.notify_on_node_online = data.get('notify_on_node_online', False)
-        config.notify_on_node_offline = data.get('notify_on_node_offline', False)
-        config.notify_on_account_error = data.get('notify_on_account_error', False)
-        config.notify_on_verification_code = data.get('notify_on_verification_code', False)
+        # 处理布尔值转换，确保正确转换为布尔类型
+        config.notify_on_node_online = bool(data.get('notify_on_node_online', False))
+        config.notify_on_node_offline = bool(data.get('notify_on_node_offline', False))
+        config.notify_on_account_error = bool(data.get('notify_on_account_error', False))
+        config.notify_on_verification_code = bool(data.get('notify_on_verification_code', False))
         
         db.session.commit()
         return jsonify({"status": "success"})
