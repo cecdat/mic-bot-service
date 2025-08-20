@@ -30,6 +30,9 @@ def create_app(test_config=None):
     
     from . import api_verification
     app.register_blueprint(api_verification.bp)
+    
+    from . import api_user_agents
+    app.register_blueprint(api_user_agents.bp)
 
     from . import frontend
     app.register_blueprint(frontend.bp)

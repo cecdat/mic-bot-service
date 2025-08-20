@@ -111,10 +111,27 @@
                 </div>
             </div>
             <hr>
-            <div class="layui-form-item layui-form-text">
+            <div class="layui-form-item">
                 <label class="layui-form-label">User Agents</label>
                 <div class="layui-input-block">
-                    <textarea name="userAgents" placeholder='{"desktop": "...", "mobile": "..."}' class="layui-textarea"></textarea>
+                    <div class="layui-row layui-col-space10">
+                        <div class="layui-col-md6">
+                            <select name="user_agent_id" id="user_agent_select" lay-filter="userAgentSelect">
+                                <option value="">选择预定义User-Agent</option>
+                                <option value="custom">自定义User-Agent</option>
+                            </select>
+                        </div>
+                        <div class="layui-col-md6">
+                            <button type="button" class="layui-btn layui-btn-primary" onclick="refreshUserAgents()">
+                                <i class="layui-icon layui-icon-refresh"></i> 刷新
+                            </button>
+                        </div>
+                    </div>
+                    <div class="layui-form-item" id="custom_user_agents_div" style="display: none; margin-top: 10px;">
+                        <div class="layui-input-block">
+                            <textarea name="userAgents" placeholder='{"desktop": "...", "mobile": "..."}' class="layui-textarea"></textarea>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="layui-form-item layui-form-text">
@@ -150,6 +167,19 @@ layui.use(['table', 'form', 'layer'], function(){
         node: '',
         email: ''
     };
+
+    // 初始化User-Agent选择器
+    initUserAgentSelect();
+    
+    // 监听User-Agent选择变化
+    form.on('select(userAgentSelect)', function(data){
+        const customDiv = document.getElementById('custom_user_agents_div');
+        if (data.value === 'custom') {
+            customDiv.style.display = 'block';
+        } else {
+            customDiv.style.display = 'none';
+        }
+    });
 
     // 存储所有数据用于筛选
     var allAccountsData = [];
@@ -349,6 +379,25 @@ layui.use(['table', 'form', 'layer'], function(){
 
     // 页面加载完成后初始化筛选器
     initNodeFilter();
+    
+    // 初始化User-Agent选择器
+    initUserAgentSelect();
+    
+    // 监听User-Agent选择事件
+    form.on('select(userAgentSelect)', function(data){
+        const value = data.value;
+        const customDiv = document.getElementById('custom_user_agents_div');
+        
+        if (value === 'custom') {
+            customDiv.style.display = 'block';
+        } else if (value === '') {
+            customDiv.style.display = 'none';
+        } else {
+            customDiv.style.display = 'none';
+            // 如果选择了预定义的User-Agent，可以在这里设置对应的值
+            setSelectedUserAgent(value);
+        }
+    });
 
     function toggleAccountStatus(accountId, email, enable) {
         const actionText = enable ? '启用' : '禁用';
@@ -465,13 +514,29 @@ layui.use(['table', 'form', 'layer'], function(){
                 populateNodesDropdown(selectElement, data ? data.assigned_node_id : null);
                 
                 if (data) {
+                    // 设置User-Agent选择
+                    const userAgentSelect = layero.find('#user_agent_select')[0];
+                    const customDiv = layero.find('#custom_user_agents_div')[0];
+                    
+                    if (data.user_agent_id) {
+                        // 如果账户使用了预定义的User-Agent
+                        userAgentSelect.value = data.user_agent_id;
+                        customDiv.style.display = 'none';
+                    } else {
+                        // 如果账户使用自定义User-Agent
+                        userAgentSelect.value = 'custom';
+                        customDiv.style.display = 'block';
+                    }
+                    
                     form.val('accountForm', {
                         "id": data.id, "email": data.email, "password": data.password,
                         "auxiliary_email": data.auxiliary_email || '',
+                        "assigned_node_id": data.assigned_node_id || '',
                         "proxyUrl": data.proxy ? data.proxy.url : '',
                         "proxyPort": data.proxy ? data.proxy.port : '',
                         "proxyUsername": data.proxy ? data.proxy.username : '',
                         "proxyPassword": data.proxy ? data.proxy.password : '',
+                        "user_agent_id": data.user_agent_id || 'custom',
                         "userAgents": data.userAgents ? JSON.stringify(data.userAgents, null, 2) : '',
                         "hotSearchEndpoints": data.hotSearchEndpoints ? JSON.stringify(data.hotSearchEndpoints, null, 2) : ''
                     });
@@ -494,6 +559,7 @@ layui.use(['table', 'form', 'layer'], function(){
             id: payload.id, email: payload.email, password: payload.password,
             auxiliary_email: payload.auxiliary_email || null,
             assigned_node_id: payload.assigned_node_id ? parseInt(payload.assigned_node_id) : null,
+            user_agent_id: payload.user_agent_id || null,
             proxy: {
                 url: payload.proxyUrl,
                 port: payload.proxyPort ? parseInt(payload.proxyPort, 10) : 0,
@@ -569,6 +635,50 @@ layui.use(['table', 'form', 'layer'], function(){
 
 // 简单的测试脚本，验证JavaScript是否正常运行
 console.log('账户管理页面加载成功，JavaScript运行正常');
+
+// User-Agent相关函数
+async function initUserAgentSelect() {
+    try {
+        const response = await fetch('/web_api/user_agents/unused', {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            const userAgentSelect = document.getElementById('user_agent_select');
+            // 清空现有选项（保留前两个）
+            while (userAgentSelect.children.length > 2) {
+                userAgentSelect.removeChild(userAgentSelect.lastChild);
+            }
+            
+            data.data.forEach(ua => {
+                const option = document.createElement('option');
+                option.value = ua.id;
+                option.textContent = ua.display_name;
+                userAgentSelect.appendChild(option);
+            });
+            
+            form.render('select');
+        }
+    } catch (e) {
+        console.error("Could not populate user agent select:", e);
+    }
+}
+
+function refreshUserAgents() {
+    initUserAgentSelect();
+    layer.msg('User-Agent列表已刷新', {icon: 1});
+}
+
+function setSelectedUserAgent(uaId) {
+    // 这里可以根据选择的User-Agent ID设置对应的值
+    // 暂时留空，后续可以根据需要实现
+    console.log('Selected User-Agent ID:', uaId);
+}
 
 </script>
 {% endblock %}

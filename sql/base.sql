@@ -1,6 +1,6 @@
 -- 数据库基础结构脚本
--- 版本: v1.2
--- 日期: 2025-08-18
+-- 版本: v2.2
+-- 日期: 2025-08-20
 
 -- 1. 创建版本表
 CREATE TABLE IF NOT EXISTS db_version (
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS db_version (
 
 -- 插入初始版本记录（如果不存在）
 INSERT INTO db_version (version, description)
-SELECT '1.2', '为bot_nodes表添加日志推送相关字段'
+SELECT '2.2', '数据库基础结构v2.2，包含所有最新功能'
 WHERE NOT EXISTS (SELECT 1 FROM db_version);
 
 -- 2. 核心表结构 (使用IF NOT EXISTS避免删除现有数据)
@@ -135,11 +135,12 @@ CREATE TABLE IF NOT EXISTS node_logs (
     FOREIGN KEY (node_id) REFERENCES bot_nodes (id) ON DELETE CASCADE
 );
 
--- Table for verification codes (v1.8)
+-- Table for verification codes (v1.8 + v2.1)
 CREATE TABLE IF NOT EXISTS verification_codes (
     id SERIAL PRIMARY KEY,
     node_id INTEGER NOT NULL,
     email VARCHAR(255) NOT NULL,
+    auxiliary_email VARCHAR(255) DEFAULT NULL,
     code VARCHAR(10) DEFAULT NULL,
     status VARCHAR(20) DEFAULT 'pending',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -148,18 +149,74 @@ CREATE TABLE IF NOT EXISTS verification_codes (
     FOREIGN KEY (node_id) REFERENCES bot_nodes (id) ON DELETE CASCADE
 );
 
+-- Table for User-Agent management (v2.0)
+CREATE TABLE IF NOT EXISTS user_agents (
+    id SERIAL PRIMARY KEY,
+    desktop_ua TEXT NOT NULL,
+    mobile_ua TEXT NOT NULL,
+    is_used BOOLEAN DEFAULT FALSE,
+    used_by_account_id INTEGER DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (used_by_account_id) REFERENCES bot_accounts (id) ON DELETE SET NULL
+);
+
 -- Indexes for verification_codes
 CREATE INDEX IF NOT EXISTS idx_verification_codes_node_email ON verification_codes (node_id, email);
 CREATE INDEX IF NOT EXISTS idx_verification_codes_status ON verification_codes (status);
 
+-- Indexes for node_logs (v2.2)
+CREATE INDEX IF NOT EXISTS idx_node_logs_level ON node_logs (level);
+CREATE INDEX IF NOT EXISTS idx_node_logs_node_id ON node_logs (node_id);
+CREATE INDEX IF NOT EXISTS idx_node_logs_timestamp ON node_logs (timestamp);
+CREATE INDEX IF NOT EXISTS idx_node_logs_created_at ON node_logs (created_at);
+
 -- Comments for verification_codes
 COMMENT ON TABLE verification_codes IS '验证码管理表，用于Node端和Service端之间的验证码传递';
 COMMENT ON COLUMN verification_codes.node_id IS '节点ID';
-COMMENT ON COLUMN verification_codes.email IS '账户邮箱';
+COMMENT ON COLUMN verification_codes.email IS '主账户邮箱（正在执行登录的账户）';
+COMMENT ON COLUMN verification_codes.auxiliary_email IS '辅助邮箱（用于接收验证码）';
 COMMENT ON COLUMN verification_codes.code IS '验证码';
 COMMENT ON COLUMN verification_codes.status IS '状态：pending(等待中), completed(已完成), expired(已过期)';
 COMMENT ON COLUMN verification_codes.created_at IS '创建时间';
 COMMENT ON COLUMN verification_codes.updated_at IS '更新时间';
 COMMENT ON COLUMN verification_codes.expires_at IS '过期时间';
 
--- 后续版本更新通过upgrade_db.sql脚本执行
+-- Comments for user_agents
+COMMENT ON TABLE user_agents IS 'User-Agent管理表，用于存储和管理浏览器User-Agent';
+COMMENT ON COLUMN user_agents.desktop_ua IS '桌面端User-Agent';
+COMMENT ON COLUMN user_agents.mobile_ua IS '移动端User-Agent';
+COMMENT ON COLUMN user_agents.is_used IS '是否已被使用';
+COMMENT ON COLUMN user_agents.used_by_account_id IS '被哪个账户使用';
+
+-- 创建日志清理函数 (v2.2)
+CREATE OR REPLACE FUNCTION cleanup_old_logs()
+RETURNS INTEGER AS $$
+DECLARE
+    deleted_count INTEGER;
+BEGIN
+    -- 删除2天前的日志
+    DELETE FROM node_logs 
+    WHERE created_at < NOW() - INTERVAL '2 days';
+    
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    
+    -- 记录清理操作
+    INSERT INTO node_logs (node_id, node_name, timestamp, level, platform, title, message, pid, created_at)
+    VALUES (
+        0, 
+        'SYSTEM', 
+        NOW(), 
+        'INFO', 
+        'SYSTEM', 
+        '日志清理', 
+        '自动清理了 ' || deleted_count || ' 条过期日志', 
+        'CLEANUP', 
+        NOW()
+    );
+    
+    RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 数据库基础结构v2.2完成

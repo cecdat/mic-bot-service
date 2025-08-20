@@ -117,6 +117,12 @@ def push():
 def verification():
     return render_template('verification.html')
 
+# 添加User-Agent管理路由
+@bp.route('/user_agents')
+@web_login_required
+def user_agents():
+    return render_template('user_agents.html')
+
 # 添加移动端积分页面路由
 @bp.route('/mobile_points')
 def mobile_points():

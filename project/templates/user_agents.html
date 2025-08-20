@@ -1,0 +1,269 @@
+{% extends "layout.html" %}
+
+{% block title %}User-Agent管理{% endblock %}
+
+{% block content %}
+<div class="layui-card">
+    <div class="layui-card-header">
+        <h2>User-Agent管理</h2>
+        <p>管理User-Agent配置，支持从JSON文件导入和手动分配</p>
+    </div>
+    <div class="layui-card-body">
+        <div class="layui-row">
+            <div class="layui-col-md12">
+                <button class="layui-btn layui-btn-primary" onclick="importUserAgents()">
+                    <i class="layui-icon layui-icon-upload"></i> 从JSON导入
+                </button>
+                <button class="layui-btn layui-btn-primary" onclick="refreshList()">
+                    <i class="layui-icon layui-icon-refresh"></i> 刷新列表
+                </button>
+                <button class="layui-btn layui-btn-normal" onclick="toggleShowUnused()">
+                    <i class="layui-icon layui-icon-list"></i> <span id="toggleText">显示全部</span>
+                </button>
+            </div>
+        </div>
+        
+        <div id="userAgentList" class="layui-row" style="margin-top: 20px;">
+            <!-- User-Agent列表将在这里动态加载 -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block custom_js %}
+<script>
+    // 页面加载完成后初始化
+    layui.use(['layer', 'form'], function(){
+        loadUserAgentList();
+    });
+    
+    // 加载User-Agent列表
+    function loadUserAgentList() {
+        const url = showUnusedOnly ? '/web_api/user_agents/list?unused_only=true' : '/web_api/user_agents/list';
+        fetchWithAuth(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    renderUserAgentList(data.data);
+                } else {
+                    layui.use('layer', function(){
+                        var layer = layui.layer;
+                        layer.msg('加载User-Agent列表失败: ' + data.message, {icon: 2});
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('加载User-Agent列表失败:', error);
+            });
+    }
+    
+    // 渲染User-Agent列表
+    function renderUserAgentList(userAgents) {
+        const container = document.getElementById('userAgentList');
+        
+        if (userAgents.length === 0) {
+            container.innerHTML = '<div class="layui-col-md12"><div class="layui-text-center" style="padding: 50px; color: #999;">暂无User-Agent数据</div></div>';
+            return;
+        }
+        
+        // 统计信息
+        const totalCount = userAgents.length;
+        const usedCount = userAgents.filter(ua => ua.is_used).length;
+        const unusedCount = totalCount - usedCount;
+        
+        // 添加统计信息到页面顶部
+        const statsHtml = `
+            <div class="layui-col-md12" style="margin-bottom: 20px;">
+                <div class="layui-card">
+                    <div class="layui-card-body">
+                        <div class="layui-row">
+                            <div class="layui-col-md4">
+                                <div class="layui-text-center">
+                                    <h3>${totalCount}</h3>
+                                    <p>总数量</p>
+                                </div>
+                            </div>
+                            <div class="layui-col-md4">
+                                <div class="layui-text-center">
+                                    <h3 style="color: #52c41a;">${unusedCount}</h3>
+                                    <p>未使用</p>
+                                </div>
+                            </div>
+                            <div class="layui-col-md4">
+                                <div class="layui-text-center">
+                                    <h3 style="color: #1890ff;">${usedCount}</h3>
+                                    <p>已使用</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        let html = '';
+        userAgents.forEach(ua => {
+            const statusText = ua.is_used ? '已使用' : '未使用';
+            const statusColor = ua.is_used ? '#1890ff' : '#52c41a';
+            const statusBadge = ua.is_used ? 'layui-badge layui-bg-blue' : 'layui-badge layui-bg-green';
+            
+            html += `
+                <div class="layui-col-md6">
+                    <div class="layui-card" style="margin-bottom: 15px;">
+                        <div class="layui-card-body">
+                            <h3>User-Agent #${ua.id} <span class="${statusBadge}">${statusText}</span></h3>
+                            <p><strong>桌面端:</strong> <span style="font-size: 12px; color: #666;">${ua.desktop_ua.substring(0, 80)}${ua.desktop_ua.length > 80 ? '...' : ''}</span></p>
+                            <p><strong>移动端:</strong> <span style="font-size: 12px; color: #666;">${ua.mobile_ua.substring(0, 80)}${ua.mobile_ua.length > 80 ? '...' : ''}</span></p>
+                            <p><button class="layui-btn layui-btn-xs layui-btn-primary" onclick="showFullUserAgent(${ua.id}, '${ua.desktop_ua.replace(/'/g, "\\'").replace(/"/g, '\\"')}', '${ua.mobile_ua.replace(/'/g, "\\'").replace(/"/g, '\\"')}')">查看完整</button></p>
+                            <p><strong>创建时间:</strong> ${ua.created_at}</p>
+                            ${ua.used_by_account_email ? `<p><strong>使用账户:</strong> <span class="layui-badge layui-bg-blue">${ua.used_by_account_email}</span></p>` : ''}
+                            <div style="margin-top: 10px;">
+                                ${!ua.is_used ? `
+                                    <button class="layui-btn layui-btn-sm layui-btn-danger" onclick="deleteUserAgent(${ua.id})">删除</button>
+                                ` : `
+                                    <button class="layui-btn layui-btn-sm layui-btn-warm" onclick="unassignUserAgent(${ua.id})">取消分配</button>
+                                `}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = statsHtml + html;
+    }
+    
+    // 导入User-Agent
+    function importUserAgents() {
+        layui.use('layer', function(){
+            var layer = layui.layer;
+            
+            layer.confirm('确定要从user_agents.json文件导入User-Agent吗？', {icon: 3, title:'确认导入'}, function(index){
+                layer.close(index);
+                
+                fetchWithAuth('/web_api/user_agents/import', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        layer.msg(data.message, {icon: 1});
+                        loadUserAgentList();
+                    } else {
+                        layer.msg('导入失败: ' + data.message, {icon: 2});
+                    }
+                })
+                .catch(error => {
+                    console.error('导入失败:', error);
+                    layer.msg('导入失败', {icon: 2});
+                });
+            });
+        });
+    }
+    
+    // 删除User-Agent
+    function deleteUserAgent(uaId) {
+        layui.use('layer', function(){
+            var layer = layui.layer;
+            
+            layer.confirm('确定要删除这个User-Agent吗？', {icon: 3, title:'确认删除'}, function(index){
+                layer.close(index);
+                
+                fetchWithAuth(`/web_api/user_agents/${uaId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        layer.msg('删除成功', {icon: 1});
+                        loadUserAgentList();
+                    } else {
+                        layer.msg('删除失败: ' + data.message, {icon: 2});
+                    }
+                })
+                .catch(error => {
+                    console.error('删除失败:', error);
+                    layer.msg('删除失败', {icon: 2});
+                });
+            });
+        });
+    }
+    
+    // 取消分配User-Agent
+    function unassignUserAgent(uaId) {
+        layui.use('layer', function(){
+            var layer = layui.layer;
+            
+            layer.confirm('确定要取消分配这个User-Agent吗？', {icon: 3, title:'确认取消分配'}, function(index){
+                layer.close(index);
+                
+                fetchWithAuth(`/web_api/user_agents/unassign/${uaId}`, {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        layer.msg('取消分配成功', {icon: 1});
+                        loadUserAgentList();
+                    } else {
+                        layer.msg('取消分配失败: ' + data.message, {icon: 2});
+                    }
+                })
+                .catch(error => {
+                    console.error('取消分配失败:', error);
+                    layer.msg('取消分配失败', {icon: 2});
+                });
+            });
+        });
+    }
+    
+    // 刷新列表
+    function refreshList() {
+        loadUserAgentList();
+    }
+    
+    // 切换显示模式
+    let showUnusedOnly = false;
+    function toggleShowUnused() {
+        showUnusedOnly = !showUnusedOnly;
+        const toggleText = document.getElementById('toggleText');
+        toggleText.textContent = showUnusedOnly ? '显示全部' : '仅显示未使用';
+        loadUserAgentList();
+    }
+    
+    // 显示完整User-Agent
+    function showFullUserAgent(id, desktopUA, mobileUA) {
+        layui.use('layer', function(){
+            var layer = layui.layer;
+            
+            const content = `
+                <div style="padding: 20px;">
+                    <h3>User-Agent #${id}</h3>
+                    <div style="margin-bottom: 15px;">
+                        <h4>桌面端:</h4>
+                        <div style="background: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all; font-family: monospace; font-size: 12px;">
+                            ${desktopUA}
+                        </div>
+                    </div>
+                    <div>
+                        <h4>移动端:</h4>
+                        <div style="background: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all; font-family: monospace; font-size: 12px;">
+                            ${mobileUA}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            layer.open({
+                type: 1,
+                title: '完整User-Agent信息',
+                area: ['800px', '500px'],
+                content: content
+            });
+        });
+    }
+</script>
+{% endblock %}

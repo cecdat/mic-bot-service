@@ -113,7 +113,8 @@ class VerificationCode(db.Model):
     __tablename__ = 'verification_codes'
     id = db.Column(db.Integer, primary_key=True)
     node_id = db.Column(db.Integer, db.ForeignKey('bot_nodes.id'), nullable=False)
-    email = db.Column(db.String(255), nullable=False)
+    email = db.Column(db.String(255), nullable=False)  # 主账户邮箱（正在执行登录的账户）
+    auxiliary_email = db.Column(db.String(255), nullable=False)  # 辅助邮箱（用于接收验证码）
     code = db.Column(db.String(10), nullable=True)
     status = db.Column(db.String(20), default='pending')  # pending, completed, expired
     created_at = db.Column(db.DateTime, default=datetime.now)
@@ -121,3 +122,17 @@ class VerificationCode(db.Model):
     expires_at = db.Column(db.DateTime, default=lambda: datetime.now() + timedelta(minutes=10))
     
     node = db.relationship('BotNode', backref='verification_codes')
+
+
+class UserAgent(db.Model):
+    __tablename__ = 'user_agents'
+    id = db.Column(db.Integer, primary_key=True)
+    desktop_ua = db.Column(db.Text, nullable=False)  # 桌面端User-Agent
+    mobile_ua = db.Column(db.Text, nullable=False)   # 移动端User-Agent
+    is_used = db.Column(db.Boolean, default=False)   # 是否已被使用
+    used_by_account_id = db.Column(db.Integer, db.ForeignKey('bot_accounts.id'), nullable=True)  # 被哪个账户使用
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    # 关联关系
+    used_by_account = db.relationship('BotAccount', backref='user_agent', uselist=False)

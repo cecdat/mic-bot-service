@@ -44,6 +44,16 @@ def init_scheduler(app):
             replace_existing=True
         )
         logger.info('已添加任务表扫描定时任务')
+        
+        # 添加日志清理定时任务 (每天凌晨2点执行)
+        scheduler.add_job(
+            func=cleanup_old_logs,
+            trigger=CronTrigger(hour=2, minute=0),
+            id='log_cleanup',
+            name='日志清理任务',
+            replace_existing=True
+        )
+        logger.info('已添加日志清理定时任务')
     
     # 启动调度器
     scheduler.start()
@@ -288,3 +298,21 @@ def reset_node_tasks(node_id):
 
         except Exception as e:
             logger.error(f'重置节点任务失败: {str(e)}')
+
+
+def cleanup_old_logs():
+    """清理2天前的日志"""
+    global app_instance
+    with app_instance.app_context():
+        try:
+            from .models import NodeLog
+            from sqlalchemy import text
+            
+            # 执行数据库清理函数
+            result = db.session.execute(text('SELECT cleanup_old_logs()'))
+            deleted_count = result.scalar()
+            
+            logger.info(f'日志清理完成，删除了 {deleted_count} 条过期日志')
+            
+        except Exception as e:
+            logger.error(f'日志清理失败: {str(e)}')

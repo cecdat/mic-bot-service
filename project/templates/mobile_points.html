@@ -151,12 +151,20 @@
             border-radius: 12px;
             color: white;
             font-size: 0.8rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
         }
 
         .status-success { background-color: #2ecc71; }
         .status-warning { background-color: #f39c12; }
         .status-danger { background-color: #e74c3c; }
         .status-secondary { background-color: #95a5a6; }
+
+        /* 设备状态徽章特殊样式 */
+        .status-badge i {
+            font-size: 0.9rem;
+        }
 
         /* 徽章样式 */
         .badge {
@@ -179,6 +187,16 @@
 
         .badge-info {
             background-color: #17a2b8;
+            color: white;
+        }
+
+        .badge-success {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .badge-secondary {
+            background-color: #6c757d;
             color: white;
         }
 
@@ -361,6 +379,55 @@
             return `<span class="status-badge ${badgeClass}">${status || '未知'}</span>`;
         }
 
+        // 获取账号登录状态徽章
+        function getLoginStatusBadge(status) {
+            let badgeClass = 'status-secondary';
+            let icon = 'bi-question-circle';
+            let text = '未知';
+            
+            switch (status) {
+                case '正常':
+                    badgeClass = 'status-success';
+                    icon = 'bi-check-circle';
+                    text = '正常';
+                    break;
+                case '需要验证':
+                    badgeClass = 'status-warning';
+                    icon = 'bi-exclamation-triangle';
+                    text = '需要验证';
+                    break;
+                case '已锁定':
+                    badgeClass = 'status-warning';
+                    icon = 'bi-lock';
+                    text = '已锁定';
+                    break;
+                case '密码错误':
+                    badgeClass = 'status-danger';
+                    icon = 'bi-x-circle';
+                    text = '密码错误';
+                    break;
+                case '登录失败':
+                    badgeClass = 'status-danger';
+                    icon = 'bi-x-circle';
+                    text = '登录失败';
+                    break;
+                case '禁用':
+                    badgeClass = 'status-danger';
+                    icon = 'bi-slash-circle';
+                    text = '禁用';
+                    break;
+                default:
+                    badgeClass = 'status-secondary';
+                    icon = 'bi-question-circle';
+                    text = status || '未知';
+            }
+            
+            return `<span class="status-badge ${badgeClass}">
+                <i class="bi ${icon}"></i>
+                ${text}
+            </span>`;
+        }
+
         // 格式化时间
         function formatTime(timestamp) {
             if (!timestamp) return 'N/A';
@@ -460,7 +527,10 @@
                     // 计算节点统计信息
                     const totalAccounts = accounts.length;
                     const staleAccounts = accounts.filter(acc => acc.is_stale).length;
-                    const abnormalAccounts = accounts.filter(acc => acc.status !== '正常').length;
+                    const normalAccounts = accounts.filter(acc => acc.status === '正常').length;
+                    const warningAccounts = accounts.filter(acc => acc.status === '需要验证' || acc.status === '已锁定').length;
+                    const errorAccounts = accounts.filter(acc => acc.status === '密码错误' || acc.status === '登录失败').length;
+                    const disabledAccounts = accounts.filter(acc => acc.status === '禁用').length;
                     
                     // 创建节点组头部
                     const groupHeaderHtml = `
@@ -472,7 +542,10 @@
                             <div class="node-group-count">
                                 ${totalAccounts} 个账户
                                 ${staleAccounts > 0 ? `<span class="badge badge-warning">${staleAccounts} 未更新</span>` : ''}
-                                ${abnormalAccounts > 0 ? `<span class="badge badge-danger">${abnormalAccounts} 异常</span>` : ''}
+                                ${normalAccounts > 0 ? `<span class="badge badge-success">${normalAccounts} 正常</span>` : ''}
+                                ${warningAccounts > 0 ? `<span class="badge badge-warning">${warningAccounts} 需验证</span>` : ''}
+                                ${errorAccounts > 0 ? `<span class="badge badge-danger">${errorAccounts} 异常</span>` : ''}
+                                ${disabledAccounts > 0 ? `<span class="badge badge-secondary">${disabledAccounts} 禁用</span>` : ''}
                             </div>
                         </div>
                     `;
@@ -486,19 +559,25 @@
                         const statusBadge = getStatusBadge(account.status);
                         const lastUpdated = formatTime(account.last_updated);
                         
-                        // 检查数据是否过期和状态异常
+                        // 检查数据是否过期和状态
                         const isStale = account.is_stale;
-                        const isAbnormal = account.status !== '正常';
+                        const isAbnormal = account.status !== '正常' && account.status !== '禁用';
+                        const isDisabled = account.status === '禁用';
                         
                         // 创建徽章
                         let badges = '';
                         if (isStale) {
                             badges += '<span class="badge badge-warning">未更新</span>';
                         }
-                        if (isAbnormal) {
+                        if (isDisabled) {
+                            badges += '<span class="badge badge-secondary">禁用</span>';
+                        } else if (isAbnormal) {
                             badges += '<span class="badge badge-danger">异常</span>';
                         }
 
+                        // 获取账号登录状态徽章
+                        const loginStatusBadge = getLoginStatusBadge(account.status);
+                        
                         const cardHtml = `
                             <div class="points-card">
                                 <div class="card-header" style="background-color: ${cardColor};" onclick="toggleCard(this)">
@@ -512,8 +591,8 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="points-row">
-                                        <span class="points-label">账号状态</span>
-                                        <span class="points-value">${statusBadge}</span>
+                                        <span class="points-label">登录状态</span>
+                                        <span class="points-value">${loginStatusBadge}</span>
                                     </div>
                                     <div class="points-row">
                                         <span class="points-label">总积分</span>
@@ -530,6 +609,14 @@
                                     <div class="points-row">
                                         <span class="points-label">今日价值</span>
                                         <span class="points-value value">${dailyValue}</span>
+                                    </div>
+                                    <div class="points-row">
+                                        <span class="points-label">桌面端收益</span>
+                                        <span class="points-value">${account.desktop_gain || 'N/A'}</span>
+                                    </div>
+                                    <div class="points-row">
+                                        <span class="points-label">移动端收益</span>
+                                        <span class="points-value">${account.mobile_gain || 'N/A'}</span>
                                     </div>
                                     <div class="points-row">
                                         <span class="points-label">最后更新</span>

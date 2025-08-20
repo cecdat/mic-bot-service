@@ -14,16 +14,17 @@ def request_verification_code():
     """Node端请求验证码接口"""
     data = request.get_json()
     node = g.node
-    email = data.get('email')
+    main_account_email = data.get('main_account_email')  # 主账户邮箱（正在执行登录的账户）
+    auxiliary_email = data.get('auxiliary_email')  # 辅助邮箱（用于接收验证码）
     
-    if not email:
-        return jsonify({'success': False, 'message': '缺少邮箱参数'}), 400
+    if not main_account_email or not auxiliary_email:
+        return jsonify({'success': False, 'message': '缺少主账户邮箱或辅助邮箱参数'}), 400
     
     try:
         # 清理过期的验证码记录
         expired_codes = VerificationCode.query.filter(
             VerificationCode.node_id == node.id,
-            VerificationCode.email == email,
+            VerificationCode.email == main_account_email,
             VerificationCode.status.in_(['pending', 'expired'])
         ).all()
         
@@ -33,7 +34,8 @@ def request_verification_code():
         # 创建新的验证码请求
         verification_code = VerificationCode(
             node_id=node.id,
-            email=email,
+            email=main_account_email,  # 存储主账户邮箱
+            auxiliary_email=auxiliary_email,  # 存储辅助邮箱
             status='pending'
         )
         
@@ -42,12 +44,8 @@ def request_verification_code():
         
         # 发送验证码提醒推送通知
         try:
-            # 查找对应的账户信息
-            account = BotAccount.query.filter_by(email=email).first()
-            auxiliary_email = account.auxiliary_email if account else '未配置'
-            
             title = f"验证码请求 - {node.node_name}"
-            body = f"主账户: {email}\n辅助邮箱: {auxiliary_email}\n节点: {node.node_name}\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n请及时处理验证码"
+            body = f"主账户: {main_account_email}\n辅助邮箱: {auxiliary_email}\n节点: {node.node_name}\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n请及时处理验证码"
             
             trigger_push_notification('verification_code', title, body)
         except Exception as e:
@@ -127,8 +125,8 @@ def list_verification_codes():
             codes_data.append({
                 'id': code.id,
                 'node_name': code.node.node_name,
-                'email': code.email,  # 主账户邮箱
-                'auxiliary_email': auxiliary_email,  # 辅助邮箱
+                'main_account_email': code.email,  # 主账户邮箱（正在执行登录的账户）
+                'auxiliary_email': auxiliary_email,  # 辅助邮箱（用于接收验证码）
                 'created_at': code.created_at.strftime('%Y-%m-%d %H:%M:%S'),
                 'expires_at': code.expires_at.strftime('%Y-%m-%d %H:%M:%S'),
                 'status': code.status

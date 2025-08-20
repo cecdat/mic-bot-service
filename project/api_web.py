@@ -379,11 +379,18 @@ def manage_bot_accounts():
         accounts_data = []
         for acc in accounts:
             monitoring_data = acc.monitoring_data
+            
+            # 查找该账户使用的User-Agent
+            from .models import UserAgent
+            user_agent = UserAgent.query.filter_by(used_by_account_id=acc.id).first()
+            user_agent_id = user_agent.id if user_agent else None
+            
             acc_dict = {
                 "id": acc.id, "email": acc.email, "password": acc.password,
                 "auxiliary_email": acc.auxiliary_email,
                 "proxy": json.loads(acc.proxy or '{}'),
                 "userAgents": json.loads(acc.user_agents or '{}'),
+                "user_agent_id": user_agent_id,
                 "hotSearchEndpoints": json.loads(acc.hot_search_endpoints or '[]'),
                 "assigned_node_id": acc.assigned_node_id,
                 "assigned_node_name": acc.node.node_name if acc.node else None,
@@ -418,9 +425,36 @@ def manage_bot_accounts():
                 account.password = data.get('password')
                 account.auxiliary_email = data.get('auxiliary_email')
                 account.proxy = json.dumps(data.get('proxy', {}))
-                account.user_agents = json.dumps(data.get('userAgents', {}))
                 account.hot_search_endpoints = json.dumps(data.get('hotSearchEndpoints', []))
                 account.assigned_node_id = data.get('assigned_node_id')
+                
+                # 处理User-Agent分配
+                user_agent_id = data.get('user_agent_id')
+                
+                # 先释放当前账户使用的User-Agent
+                from .models import UserAgent
+                current_user_agent = UserAgent.query.filter_by(used_by_account_id=account.id).first()
+                if current_user_agent:
+                    current_user_agent.is_used = False
+                    current_user_agent.used_by_account_id = None
+                
+                if user_agent_id and user_agent_id != 'custom':
+                    # 如果选择了预定义的User-Agent
+                    user_agent = UserAgent.query.get(user_agent_id)
+                    if user_agent and not user_agent.is_used:
+                        # 分配User-Agent给账户
+                        user_agent.is_used = True
+                        user_agent.used_by_account_id = account.id
+                        # 设置账户的User-Agent
+                        account.user_agents = json.dumps({
+                            'desktop': user_agent.desktop_ua,
+                            'mobile': user_agent.mobile_ua
+                        })
+                    else:
+                        return jsonify({"status": "error", "message": "选择的User-Agent不可用或已被使用"}), 400
+                else:
+                    # 使用自定义User-Agent
+                    account.user_agents = json.dumps(data.get('userAgents', {}))
                 
                 db.session.commit()
                 return jsonify({"status": "success", "message": "Account saved."})
@@ -468,6 +502,13 @@ def delete_bot_account(account_id):
     try:
         account = BotAccount.query.get(account_id)
         if account:
+            # 释放该账户使用的User-Agent
+            from .models import UserAgent
+            user_agent = UserAgent.query.filter_by(used_by_account_id=account.id).first()
+            if user_agent:
+                user_agent.is_used = False
+                user_agent.used_by_account_id = None
+            
             db.session.delete(account)
             db.session.commit()
         return jsonify({"status": "success", "message": "Account deleted."})
@@ -592,7 +633,7 @@ def clear_node_logs(node_id):
 @bp.route('/mobile/get_points', methods=['GET'])
 def mobile_get_points():
     # 直接获取所有账户的积分数据，无需Token认证
-    query = db.session.query(Account, BotAccount.email, BotNode.node_name)\
+    query = db.session.query(Account, BotAccount.email, BotAccount.status, BotAccount.is_enabled, BotNode.node_name)\
         .join(BotAccount, Account.bot_account_id == BotAccount.id)\
         .join(BotNode, BotAccount.assigned_node_id == BotNode.id)\
         .order_by(Account.last_updated.desc())
@@ -601,7 +642,7 @@ def mobile_get_points():
     
     points_data = []
     
-    for account, email, node_name in results:
+    for account, email, bot_status, is_enabled, node_name in results:
         # 计算积分价值
         total_value = account.total_points / 179.25 if account.total_points else 0
         daily_value = account.daily_gain / 179.25 if account.daily_gain else 0
@@ -635,6 +676,22 @@ def mobile_get_points():
                 current_app.logger.warning(f"Failed to parse last_updated for account {email}: {e}")
                 is_stale = True  # 解析失败时标记为过期
         
+        # 根据BotAccount的状态和启用状态确定显示状态
+        if not is_enabled:
+            status = '禁用'
+        elif bot_status == 0:
+            status = '正常'
+        elif bot_status == 1:
+            status = '需要验证'
+        elif bot_status == 2:
+            status = '密码错误'
+        elif bot_status == 3:
+            status = '已锁定'
+        elif bot_status == 4:
+            status = '登录失败'
+        else:
+            status = '未知'
+        
         points_data.append({
             'email': email,
             'total_points': account.total_points,
@@ -646,7 +703,7 @@ def mobile_get_points():
             'node_name': node_name,
             'last_updated': account.last_updated,
             'is_stale': is_stale,
-            'status': '正常'  # 默认状态，可以根据需要从status_details解析
+            'status': status
         })
     
     return jsonify(points_data)
