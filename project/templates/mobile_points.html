@@ -391,16 +391,6 @@
                     icon = 'bi-check-circle';
                     text = '正常';
                     break;
-                case '移动端异常':
-                    badgeClass = 'status-warning';
-                    icon = 'bi-phone';
-                    text = '移动端异常';
-                    break;
-                case '桌面端异常':
-                    badgeClass = 'status-warning';
-                    icon = 'bi-laptop';
-                    text = '桌面端异常';
-                    break;
                 case '需要验证':
                     badgeClass = 'status-warning';
                     icon = 'bi-exclamation-triangle';
@@ -441,6 +431,20 @@
                 <i class="bi ${icon}"></i>
                 ${text}
             </span>`;
+        }
+        
+        // 获取桌面端状态徽章
+        function getDesktopStatusBadge(status) {
+            return `<span class="status-badge badge-sm me-1" style="background-color: #6c757d; color: white;">
+                <i class="bi bi-laptop"></i> 桌面端
+            </span>` + getLoginStatusBadge(status);
+        }
+        
+        // 获取移动端状态徽章
+        function getMobileStatusBadge(status) {
+            return `<span class="status-badge badge-sm me-1" style="background-color: #6c757d; color: white;">
+                <i class="bi bi-phone"></i> 移动端
+            </span>` + getLoginStatusBadge(status);
         }
 
         // 格式化时间
@@ -542,19 +546,26 @@
                     // 计算节点统计信息
                     const totalAccounts = accounts.length;
                     const staleAccounts = accounts.filter(acc => acc.is_stale).length;
-                    const normalAccounts = accounts.filter(acc => acc.status === '正常').length;
-                    const warningAccounts = accounts.filter(acc => 
-                        acc.status === '需要验证' || 
-                        acc.status === '已锁定' || 
-                        acc.status === '移动端异常' || 
-                        acc.status === '桌面端异常'
+                    
+                    // 统计桌面端状态
+                    const desktopNormalAccounts = accounts.filter(acc => acc.desktop_status === '正常').length;
+                    const desktopWarningAccounts = accounts.filter(acc => 
+                        acc.desktop_status === '需要验证' || acc.desktop_status === '已锁定'
                     ).length;
-                    const errorAccounts = accounts.filter(acc => 
-                        acc.status === '密码错误' || 
-                        acc.status === '登录失败' || 
-                        acc.status === '异常'
+                    const desktopErrorAccounts = accounts.filter(acc => 
+                        acc.desktop_status === '密码错误' || acc.desktop_status === '登录失败' || acc.desktop_status === '异常'
                     ).length;
-                    const disabledAccounts = accounts.filter(acc => acc.status === '禁用').length;
+                    const desktopDisabledAccounts = accounts.filter(acc => acc.desktop_status === '禁用').length;
+                    
+                    // 统计移动端状态
+                    const mobileNormalAccounts = accounts.filter(acc => acc.mobile_status === '正常').length;
+                    const mobileWarningAccounts = accounts.filter(acc => 
+                        acc.mobile_status === '需要验证' || acc.mobile_status === '已锁定'
+                    ).length;
+                    const mobileErrorAccounts = accounts.filter(acc => 
+                        acc.mobile_status === '密码错误' || acc.mobile_status === '登录失败' || acc.mobile_status === '异常'
+                    ).length;
+                    const mobileDisabledAccounts = accounts.filter(acc => acc.mobile_status === '禁用').length;
                     
                     // 创建节点组头部
                     const groupHeaderHtml = `
@@ -566,10 +577,10 @@
                             <div class="node-group-count">
                                 ${totalAccounts} 个账户
                                 ${staleAccounts > 0 ? `<span class="badge badge-warning">${staleAccounts} 未更新</span>` : ''}
-                                ${normalAccounts > 0 ? `<span class="badge badge-success">${normalAccounts} 正常</span>` : ''}
-                                ${warningAccounts > 0 ? `<span class="badge badge-warning">${warningAccounts} 需验证</span>` : ''}
-                                ${errorAccounts > 0 ? `<span class="badge badge-danger">${errorAccounts} 异常</span>` : ''}
-                                ${disabledAccounts > 0 ? `<span class="badge badge-secondary">${disabledAccounts} 禁用</span>` : ''}
+                                <br>
+                                <small>桌面端: ${desktopNormalAccounts} 正常 ${desktopWarningAccounts > 0 ? `${desktopWarningAccounts} 需验证` : ''} ${desktopErrorAccounts > 0 ? `${desktopErrorAccounts} 异常` : ''} ${desktopDisabledAccounts > 0 ? `${desktopDisabledAccounts} 禁用` : ''}</small>
+                                <br>
+                                <small>移动端: ${mobileNormalAccounts} 正常 ${mobileWarningAccounts > 0 ? `${mobileWarningAccounts} 需验证` : ''} ${mobileErrorAccounts > 0 ? `${mobileErrorAccounts} 异常` : ''} ${mobileDisabledAccounts > 0 ? `${mobileDisabledAccounts} 禁用` : ''}</small>
                             </div>
                         </div>
                     `;
@@ -585,9 +596,11 @@
                         
                         // 检查数据是否过期和状态
                         const isStale = account.is_stale;
-                        const isDisabled = account.status === '禁用';
-                        const isWarning = ['需要验证', '已锁定', '移动端异常', '桌面端异常'].includes(account.status);
-                        const isError = ['密码错误', '登录失败', '异常'].includes(account.status);
+                        const isDisabled = account.desktop_status === '禁用' && account.mobile_status === '禁用';
+                        const isWarning = (account.desktop_status === '需要验证' || account.desktop_status === '已锁定' || 
+                                         account.mobile_status === '需要验证' || account.mobile_status === '已锁定');
+                        const isError = (account.desktop_status === '密码错误' || account.desktop_status === '登录失败' || account.desktop_status === '异常' ||
+                                       account.mobile_status === '密码错误' || account.mobile_status === '登录失败' || account.mobile_status === '异常');
                         
                         // 创建徽章
                         let badges = '';
@@ -602,8 +615,9 @@
                             badges += '<span class="badge badge-warning">警告</span>';
                         }
 
-                        // 获取账号登录状态徽章
-                        const loginStatusBadge = getLoginStatusBadge(account.status);
+                        // 获取桌面端和移动端状态徽章
+                        const desktopStatusBadge = getDesktopStatusBadge(account.desktop_status);
+                        const mobileStatusBadge = getMobileStatusBadge(account.mobile_status);
                         
                         const cardHtml = `
                             <div class="points-card">
@@ -618,8 +632,12 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="points-row">
-                                        <span class="points-label">登录状态</span>
-                                        <span class="points-value">${loginStatusBadge}</span>
+                                        <span class="points-label">桌面端状态</span>
+                                        <span class="points-value">${desktopStatusBadge}</span>
+                                    </div>
+                                    <div class="points-row">
+                                        <span class="points-label">移动端状态</span>
+                                        <span class="points-value">${mobileStatusBadge}</span>
                                     </div>
                                     <div class="points-row">
                                         <span class="points-label">总积分</span>
