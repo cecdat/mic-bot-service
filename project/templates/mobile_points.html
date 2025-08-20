@@ -147,13 +147,14 @@
         /* 状态徽章 */
         .status-badge {
             font-weight: bold;
-            padding: 0.3rem 0.6rem;
-            border-radius: 12px;
+            padding: 0.25rem 0.5rem;
+            border-radius: 8px;
             color: white;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             display: inline-flex;
             align-items: center;
-            gap: 0.3rem;
+            gap: 0.2rem;
+            margin-right: 0.3rem;
         }
 
         .status-success { background-color: #2ecc71; }
@@ -435,16 +436,74 @@
         
         // 获取桌面端状态徽章
         function getDesktopStatusBadge(status) {
-            return `<span class="status-badge badge-sm me-1" style="background-color: #6c757d; color: white;">
-                <i class="bi bi-laptop"></i> 桌面端
-            </span>` + getLoginStatusBadge(status);
+            let badgeClass = 'status-secondary';
+            let icon = 'bi-question-circle';
+            
+            switch (status) {
+                case '正常':
+                    badgeClass = 'status-success';
+                    icon = 'bi-check-circle';
+                    break;
+                case '需要验证':
+                    badgeClass = 'status-warning';
+                    icon = 'bi-exclamation-triangle';
+                    break;
+                case '已锁定':
+                    badgeClass = 'status-warning';
+                    icon = 'bi-lock';
+                    break;
+                case '密码错误':
+                case '登录失败':
+                case '异常':
+                    badgeClass = 'status-danger';
+                    icon = 'bi-x-circle';
+                    break;
+                case '禁用':
+                    badgeClass = 'status-secondary';
+                    icon = 'bi-slash-circle';
+                    break;
+            }
+            
+            return `<span class="status-badge ${badgeClass}">
+                <i class="bi bi-laptop"></i>
+                <i class="bi ${icon}"></i>
+            </span>`;
         }
         
         // 获取移动端状态徽章
         function getMobileStatusBadge(status) {
-            return `<span class="status-badge badge-sm me-1" style="background-color: #6c757d; color: white;">
-                <i class="bi bi-phone"></i> 移动端
-            </span>` + getLoginStatusBadge(status);
+            let badgeClass = 'status-secondary';
+            let icon = 'bi-question-circle';
+            
+            switch (status) {
+                case '正常':
+                    badgeClass = 'status-success';
+                    icon = 'bi-check-circle';
+                    break;
+                case '需要验证':
+                    badgeClass = 'status-warning';
+                    icon = 'bi-exclamation-triangle';
+                    break;
+                case '已锁定':
+                    badgeClass = 'status-warning';
+                    icon = 'bi-lock';
+                    break;
+                case '密码错误':
+                case '登录失败':
+                case '异常':
+                    badgeClass = 'status-danger';
+                    icon = 'bi-x-circle';
+                    break;
+                case '禁用':
+                    badgeClass = 'status-secondary';
+                    icon = 'bi-slash-circle';
+                    break;
+            }
+            
+            return `<span class="status-badge ${badgeClass}">
+                <i class="bi bi-phone"></i>
+                <i class="bi ${icon}"></i>
+            </span>`;
         }
 
         // 格式化时间
@@ -632,12 +691,8 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="points-row">
-                                        <span class="points-label">桌面端状态</span>
-                                        <span class="points-value">${desktopStatusBadge}</span>
-                                    </div>
-                                    <div class="points-row">
-                                        <span class="points-label">移动端状态</span>
-                                        <span class="points-value">${mobileStatusBadge}</span>
+                                        <span class="points-label">账户登录状态</span>
+                                        <span class="points-value">${desktopStatusBadge}${mobileStatusBadge}</span>
                                     </div>
                                     <div class="points-row">
                                         <span class="points-label">总积分</span>
