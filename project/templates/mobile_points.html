@@ -391,6 +391,16 @@
                     icon = 'bi-check-circle';
                     text = '正常';
                     break;
+                case '移动端异常':
+                    badgeClass = 'status-warning';
+                    icon = 'bi-phone';
+                    text = '移动端异常';
+                    break;
+                case '桌面端异常':
+                    badgeClass = 'status-warning';
+                    icon = 'bi-laptop';
+                    text = '桌面端异常';
+                    break;
                 case '需要验证':
                     badgeClass = 'status-warning';
                     icon = 'bi-exclamation-triangle';
@@ -411,8 +421,13 @@
                     icon = 'bi-x-circle';
                     text = '登录失败';
                     break;
-                case '禁用':
+                case '异常':
                     badgeClass = 'status-danger';
+                    icon = 'bi-exclamation-triangle';
+                    text = '异常';
+                    break;
+                case '禁用':
+                    badgeClass = 'status-secondary';
                     icon = 'bi-slash-circle';
                     text = '禁用';
                     break;
@@ -528,8 +543,17 @@
                     const totalAccounts = accounts.length;
                     const staleAccounts = accounts.filter(acc => acc.is_stale).length;
                     const normalAccounts = accounts.filter(acc => acc.status === '正常').length;
-                    const warningAccounts = accounts.filter(acc => acc.status === '需要验证' || acc.status === '已锁定').length;
-                    const errorAccounts = accounts.filter(acc => acc.status === '密码错误' || acc.status === '登录失败').length;
+                    const warningAccounts = accounts.filter(acc => 
+                        acc.status === '需要验证' || 
+                        acc.status === '已锁定' || 
+                        acc.status === '移动端异常' || 
+                        acc.status === '桌面端异常'
+                    ).length;
+                    const errorAccounts = accounts.filter(acc => 
+                        acc.status === '密码错误' || 
+                        acc.status === '登录失败' || 
+                        acc.status === '异常'
+                    ).length;
                     const disabledAccounts = accounts.filter(acc => acc.status === '禁用').length;
                     
                     // 创建节点组头部
@@ -561,8 +585,9 @@
                         
                         // 检查数据是否过期和状态
                         const isStale = account.is_stale;
-                        const isAbnormal = account.status !== '正常' && account.status !== '禁用';
                         const isDisabled = account.status === '禁用';
+                        const isWarning = ['需要验证', '已锁定', '移动端异常', '桌面端异常'].includes(account.status);
+                        const isError = ['密码错误', '登录失败', '异常'].includes(account.status);
                         
                         // 创建徽章
                         let badges = '';
@@ -571,8 +596,10 @@
                         }
                         if (isDisabled) {
                             badges += '<span class="badge badge-secondary">禁用</span>';
-                        } else if (isAbnormal) {
+                        } else if (isError) {
                             badges += '<span class="badge badge-danger">异常</span>';
+                        } else if (isWarning) {
+                            badges += '<span class="badge badge-warning">警告</span>';
                         }
 
                         // 获取账号登录状态徽章

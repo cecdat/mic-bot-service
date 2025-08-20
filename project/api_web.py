@@ -632,36 +632,32 @@ def clear_node_logs(node_id):
 # 移动端积分数据接口（完全免登录，无需Token认证）
 @bp.route('/mobile/get_points', methods=['GET'])
 def mobile_get_points():
-    # 直接获取所有账户的积分数据，无需Token认证
-    query = db.session.query(Account, BotAccount.email, BotAccount.status, BotAccount.is_enabled, BotNode.node_name)\
-        .join(BotAccount, Account.bot_account_id == BotAccount.id)\
-        .join(BotNode, BotAccount.assigned_node_id == BotNode.id)\
-        .order_by(Account.last_updated.desc())
-    
-    results = query.all()
-    
+    # 直接获取所有账户的积分数据，无需Token认证，与账户管理页面保持一致
+    accounts = BotAccount.query.order_by(BotAccount.email).all()
     points_data = []
     
-    for account, email, bot_status, is_enabled, node_name in results:
+    for acc in accounts:
+        monitoring_data = acc.monitoring_data
+        
         # 计算积分价值
-        total_value = account.total_points / 179.25 if account.total_points else 0
-        daily_value = account.daily_gain / 179.25 if account.daily_gain else 0
+        total_value = monitoring_data.total_points / 179.25 if monitoring_data and monitoring_data.total_points else 0
+        daily_value = monitoring_data.daily_gain / 179.25 if monitoring_data and monitoring_data.daily_gain else 0
         
         # 检查数据是否过期（超过24小时）
         last_updated = None
         is_stale = False
         
-        if account.last_updated:
+        if monitoring_data and monitoring_data.last_updated:
             try:
                 # 尝试处理字符串格式的时间
-                if isinstance(account.last_updated, str):
-                    last_updated = datetime.fromisoformat(account.last_updated.replace('Z', '+00:00'))
+                if isinstance(monitoring_data.last_updated, str):
+                    last_updated = datetime.fromisoformat(monitoring_data.last_updated.replace('Z', '+00:00'))
                 # 尝试处理整数时间戳
-                elif isinstance(account.last_updated, (int, float)):
-                    last_updated = datetime.fromtimestamp(account.last_updated, tz=timezone.utc)
+                elif isinstance(monitoring_data.last_updated, (int, float)):
+                    last_updated = datetime.fromtimestamp(monitoring_data.last_updated, tz=timezone.utc)
                 # 如果已经是datetime对象
-                elif isinstance(account.last_updated, datetime):
-                    last_updated = account.last_updated
+                elif isinstance(monitoring_data.last_updated, datetime):
+                    last_updated = monitoring_data.last_updated
                 
                 if last_updated:
                     # 确保两个时间都是时区感知的
@@ -673,35 +669,61 @@ def mobile_get_points():
                     is_stale = time_diff.total_seconds() > 86400  # 24小时
             except Exception as e:
                 # 如果时间解析失败，记录错误但不影响其他功能
-                current_app.logger.warning(f"Failed to parse last_updated for account {email}: {e}")
+                current_app.logger.warning(f"Failed to parse last_updated for account {acc.email}: {e}")
                 is_stale = True  # 解析失败时标记为过期
         
-        # 根据BotAccount的状态和启用状态确定显示状态
-        if not is_enabled:
+        # 从status_details中解析状态信息，与账户管理页面保持一致
+        status_details = {}
+        if monitoring_data and monitoring_data.status_details:
+            try:
+                status_details = json.loads(monitoring_data.status_details)
+            except:
+                status_details = {}
+        
+        # 根据status_details和启用状态确定显示状态
+        if not acc.is_enabled:
             status = '禁用'
-        elif bot_status == 0:
-            status = '正常'
-        elif bot_status == 1:
-            status = '需要验证'
-        elif bot_status == 2:
-            status = '密码错误'
-        elif bot_status == 3:
-            status = '已锁定'
-        elif bot_status == 4:
-            status = '登录失败'
         else:
-            status = '未知'
+            # 从status_details中获取状态信息
+            desktop_status = status_details.get('desktop', {}).get('status', False)
+            mobile_status = status_details.get('mobile', {}).get('status', False)
+            
+            # 如果桌面端和移动端都正常，显示正常
+            if desktop_status and mobile_status:
+                status = '正常'
+            # 如果桌面端正常但移动端异常
+            elif desktop_status and not mobile_status:
+                status = '移动端异常'
+            # 如果移动端正常但桌面端异常
+            elif mobile_status and not desktop_status:
+                status = '桌面端异常'
+            # 如果都异常
+            else:
+                # 检查具体的错误信息
+                desktop_error = status_details.get('desktop', {}).get('error', '')
+                mobile_error = status_details.get('mobile', {}).get('error', '')
+                
+                if '需要验证' in desktop_error or '需要验证' in mobile_error:
+                    status = '需要验证'
+                elif '密码错误' in desktop_error or '密码错误' in mobile_error:
+                    status = '密码错误'
+                elif '已锁定' in desktop_error or '已锁定' in mobile_error:
+                    status = '已锁定'
+                elif '登录失败' in desktop_error or '登录失败' in mobile_error:
+                    status = '登录失败'
+                else:
+                    status = '异常'
         
         points_data.append({
-            'email': email,
-            'total_points': account.total_points,
-            'daily_gain': account.daily_gain,
-            'desktop_gain': account.desktop_gain,
-            'mobile_gain': account.mobile_gain,
+            'email': acc.email,
+            'total_points': monitoring_data.total_points if monitoring_data else None,
+            'daily_gain': monitoring_data.daily_gain if monitoring_data else None,
+            'desktop_gain': monitoring_data.desktop_gain if monitoring_data else None,
+            'mobile_gain': monitoring_data.mobile_gain if monitoring_data else None,
             'total_value': round(total_value, 2),
             'daily_value': round(daily_value, 2),
-            'node_name': node_name,
-            'last_updated': account.last_updated,
+            'node_name': acc.node.node_name if acc.node else None,
+            'last_updated': monitoring_data.last_updated if monitoring_data else None,
             'is_stale': is_stale,
             'status': status
         })
