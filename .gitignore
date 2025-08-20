@@ -2,3 +2,39 @@ project/__pycache__
 instance/
 ../mic-bot-node/sessions/
 data/
+
+# Test files and scripts
+test_*.py
+*_test.py
+*_test.ps1
+test_*.js
+test_*.ts
+test_*.html
+test_*.sh
+test_*.bat
+*.test.py
+*.test.js
+*.test.ts
+*.spec.py
+*.spec.js
+*.spec.ts
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.bak
+*.backup
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
