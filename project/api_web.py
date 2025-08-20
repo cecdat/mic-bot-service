@@ -685,8 +685,8 @@ def mobile_get_points():
             status = '禁用'
         else:
             # 优先使用monitoring_data.status_details中的真实状态
-            # 从status_details中获取状态信息
-            desktop_status = status_details.get('desktop', {}).get('status', False)
+            # 从status_details中获取状态信息（注意：键名是'pc'而不是'desktop'）
+            desktop_status = status_details.get('pc', {}).get('status', False)
             mobile_status = status_details.get('mobile', {}).get('status', False)
             
             # 如果桌面端和移动端都正常，显示正常
@@ -701,7 +701,7 @@ def mobile_get_points():
             # 如果都异常
             else:
                 # 检查具体的错误信息
-                desktop_error = status_details.get('desktop', {}).get('error', '')
+                desktop_error = status_details.get('pc', {}).get('error', '')
                 mobile_error = status_details.get('mobile', {}).get('error', '')
                 
                 if '需要验证' in desktop_error or '需要验证' in mobile_error:
