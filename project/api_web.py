@@ -684,48 +684,36 @@ def mobile_get_points():
         if not acc.is_enabled:
             status = '禁用'
         else:
-            # 首先检查BotAccount的status字段
-            if acc.status == 0:
+            # 优先使用monitoring_data.status_details中的真实状态
+            # 从status_details中获取状态信息
+            desktop_status = status_details.get('desktop', {}).get('status', False)
+            mobile_status = status_details.get('mobile', {}).get('status', False)
+            
+            # 如果桌面端和移动端都正常，显示正常
+            if desktop_status and mobile_status:
                 status = '正常'
-            elif acc.status == 1:
-                status = '需要验证'
-            elif acc.status == 2:
-                status = '密码错误'
-            elif acc.status == 3:
-                status = '已锁定'
-            elif acc.status == 4:
-                status = '登录失败'
+            # 如果桌面端正常但移动端异常
+            elif desktop_status and not mobile_status:
+                status = '移动端异常'
+            # 如果移动端正常但桌面端异常
+            elif mobile_status and not desktop_status:
+                status = '桌面端异常'
+            # 如果都异常
             else:
-                # 如果BotAccount.status不是标准值，则从status_details中解析
-                # 从status_details中获取状态信息
-                desktop_status = status_details.get('desktop', {}).get('status', False)
-                mobile_status = status_details.get('mobile', {}).get('status', False)
+                # 检查具体的错误信息
+                desktop_error = status_details.get('desktop', {}).get('error', '')
+                mobile_error = status_details.get('mobile', {}).get('error', '')
                 
-                # 如果桌面端和移动端都正常，显示正常
-                if desktop_status and mobile_status:
-                    status = '正常'
-                # 如果桌面端正常但移动端异常
-                elif desktop_status and not mobile_status:
-                    status = '移动端异常'
-                # 如果移动端正常但桌面端异常
-                elif mobile_status and not desktop_status:
-                    status = '桌面端异常'
-                # 如果都异常
+                if '需要验证' in desktop_error or '需要验证' in mobile_error:
+                    status = '需要验证'
+                elif '密码错误' in desktop_error or '密码错误' in mobile_error:
+                    status = '密码错误'
+                elif '已锁定' in desktop_error or '已锁定' in mobile_error:
+                    status = '已锁定'
+                elif '登录失败' in desktop_error or '登录失败' in mobile_error:
+                    status = '登录失败'
                 else:
-                    # 检查具体的错误信息
-                    desktop_error = status_details.get('desktop', {}).get('error', '')
-                    mobile_error = status_details.get('mobile', {}).get('error', '')
-                    
-                    if '需要验证' in desktop_error or '需要验证' in mobile_error:
-                        status = '需要验证'
-                    elif '密码错误' in desktop_error or '密码错误' in mobile_error:
-                        status = '密码错误'
-                    elif '已锁定' in desktop_error or '已锁定' in mobile_error:
-                        status = '已锁定'
-                    elif '登录失败' in desktop_error or '登录失败' in mobile_error:
-                        status = '登录失败'
-                    else:
-                        status = '异常'
+                    status = '异常'
         
         points_data.append({
             'email': acc.email,
