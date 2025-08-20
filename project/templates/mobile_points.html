@@ -597,54 +597,10 @@
                     nodeGroups[nodeName].push(account);
                 });
 
-                // 为每个节点组创建HTML
-                Object.keys(nodeGroups).forEach(nodeName => {
-                    const accounts = nodeGroups[nodeName];
-                    const cardColor = nodeColorMap[nodeName];
-                    
-                    // 计算节点统计信息
-                    const totalAccounts = accounts.length;
-                    const staleAccounts = accounts.filter(acc => acc.is_stale).length;
-                    
-                    // 统计桌面端状态
-                    const desktopNormalAccounts = accounts.filter(acc => acc.desktop_status === '正常').length;
-                    const desktopWarningAccounts = accounts.filter(acc => 
-                        acc.desktop_status === '需要验证' || acc.desktop_status === '已锁定'
-                    ).length;
-                    const desktopErrorAccounts = accounts.filter(acc => 
-                        acc.desktop_status === '密码错误' || acc.desktop_status === '登录失败' || acc.desktop_status === '异常'
-                    ).length;
-                    const desktopDisabledAccounts = accounts.filter(acc => acc.desktop_status === '禁用').length;
-                    
-                    // 统计移动端状态
-                    const mobileNormalAccounts = accounts.filter(acc => acc.mobile_status === '正常').length;
-                    const mobileWarningAccounts = accounts.filter(acc => 
-                        acc.mobile_status === '需要验证' || acc.mobile_status === '已锁定'
-                    ).length;
-                    const mobileErrorAccounts = accounts.filter(acc => 
-                        acc.mobile_status === '密码错误' || acc.mobile_status === '登录失败' || acc.mobile_status === '异常'
-                    ).length;
-                    const mobileDisabledAccounts = accounts.filter(acc => acc.mobile_status === '禁用').length;
-                    
-                    // 创建节点组头部
-                    const groupHeaderHtml = `
-                        <div class="node-group-header">
-                            <div class="node-group-title">
-                                <div class="node-group-color" style="background-color: ${cardColor};"></div>
-                                ${nodeName}
-                            </div>
-                            <div class="node-group-count">
-                                ${totalAccounts} 个账户
-                                ${staleAccounts > 0 ? `<span class="badge badge-warning">${staleAccounts} 未更新</span>` : ''}
-                                <br>
-                                <small>桌面端: ${desktopNormalAccounts} 正常 ${desktopWarningAccounts > 0 ? `${desktopWarningAccounts} 需验证` : ''} ${desktopErrorAccounts > 0 ? `${desktopErrorAccounts} 异常` : ''} ${desktopDisabledAccounts > 0 ? `${desktopDisabledAccounts} 禁用` : ''}</small>
-                                <br>
-                                <small>移动端: ${mobileNormalAccounts} 正常 ${mobileWarningAccounts > 0 ? `${mobileWarningAccounts} 需验证` : ''} ${mobileErrorAccounts > 0 ? `${mobileErrorAccounts} 异常` : ''} ${mobileDisabledAccounts > 0 ? `${mobileDisabledAccounts} 禁用` : ''}</small>
-                            </div>
-                        </div>
-                    `;
-                    
-                    container.innerHTML += groupHeaderHtml;
+                                 // 为每个节点组创建HTML
+                 Object.keys(nodeGroups).forEach(nodeName => {
+                     const accounts = nodeGroups[nodeName];
+                     const cardColor = nodeColorMap[nodeName];
                     
                     // 创建该节点下的所有账户卡片
                     accounts.forEach(account => {
