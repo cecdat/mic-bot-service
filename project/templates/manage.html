@@ -4,6 +4,7 @@
 {% block page_title %}账户管理{% endblock %}
 
 {% block content %}
+<link rel="stylesheet" href="/static/table-center.css">
 <div class="layui-card">
     <div class="layui-card-body">
         <!-- 筛选区域 -->
@@ -24,661 +25,740 @@
                     <div class="layui-input-block">
                         <select id="nodeFilter" lay-filter="nodeFilter">
                             <option value="">全部节点</option>
-                            <option value="unassigned">未分配</option>
+                            <!-- 节点选项将通过JavaScript动态加载 -->
                         </select>
                     </div>
                 </div>
-                <div class="layui-col-md3">
-                    <label class="layui-form-label">搜索邮箱</label>
+                <div class="layui-col-md4">
+                    <label class="layui-form-label">邮箱</label>
                     <div class="layui-input-block">
-                        <input type="text" id="emailFilter" placeholder="输入邮箱关键词" class="layui-input">
+                        <input type="text" id="emailSearch" placeholder="请输入邮箱关键词" autocomplete="off" class="layui-input">
                     </div>
                 </div>
-                <div class="layui-col-md3">
-                    <label class="layui-form-label"></label>
-                    <div class="layui-input-block">
-                        <button class="layui-btn" id="clearFilter"><i class="layui-icon layui-icon-refresh"></i> 清除筛选</button>
+                <div class="layui-col-md2">
+                    <div class="layui-btn-group">
+                        <button class="layui-btn layui-btn-primary" id="clearFilter">清除筛选</button>
                     </div>
                 </div>
             </div>
         </div>
-
-        <div class="layui-btn-container">
-            <button class="layui-btn layui-btn-normal" id="add-account-btn"><i class="layui-icon layui-icon-add-1"></i> 新增账户</button>
+        
+        <!-- 操作按钮 -->
+        <div class="layui-btn-group" style="margin-bottom: 15px;">
+            <button class="layui-btn layui-btn-primary" id="refreshTable">
+                <i class="layui-icon layui-icon-refresh"></i> 刷新
+            </button>
+            <button class="layui-btn" id="addAccount">
+                <i class="layui-icon layui-icon-add-circle"></i> 新增账户
+            </button>
+            <button class="layui-btn layui-btn-danger" id="batchDelete">
+                <i class="layui-icon layui-icon-delete"></i> 批量删除
+            </button>
         </div>
-
-        <table class="layui-hide" id="accounts-table" lay-filter="accountsTable"></table>
+        
+        <!-- 数据表格 -->
+        <table class="layui-hide" id="accountTable" lay-filter="accountTable"></table>
+        
+        <!-- 配置表单模板 -->
+        <script type="text/html" id="account-config-form-template">
+            <div style="padding: 20px 30px 0 0;">
+                <form class="layui-form" lay-filter="accountForm">
+                    <input type="hidden" name="id">
+                    <div class="layui-form-item">
+                        <label class="layui-form-label"><span class="layui-text-red">*</span> 邮箱</label>
+                        <div class="layui-input-block">
+                            <input type="email" name="email" required lay-verify="required|email" autocomplete="off" class="layui-input">
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label"><span class="layui-text-red">*</span> 密码</label>
+                        <div class="layui-input-block">
+                            <input type="password" name="password" required lay-verify="required" autocomplete="off" class="layui-input" placeholder="新增时必填，编辑时可不填表示不修改">
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">辅助邮箱</label>
+                        <div class="layui-input-block">
+                            <input type="email" name="auxiliary_email" autocomplete="off" class="layui-input" placeholder="用于接收验证码的辅助邮箱（可选）">
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label"><span class="layui-text-red">*</span> 分配节点</label>
+                        <div class="layui-input-block">
+                            <select name="assigned_node_id" id="assigned_node_id_select" lay-verify="required">
+                                <option value="">正在加载节点...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">代理配置</label>
+                        <div class="layui-input-block">
+                            <div class="layui-row layui-col-space10">
+                                <div class="layui-col-md8">
+                                    <input type="text" name="proxyUrl" placeholder="代理地址 (e.g., http://proxy.server)" class="layui-input">
+                                </div>
+                                <div class="layui-col-md4">
+                                    <input type="number" name="proxyPort" placeholder="端口" class="layui-input">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label"></label>
+                        <div class="layui-input-block">
+                            <div class="layui-row layui-col-space10">
+                                <div class="layui-col-md6">
+                                    <input type="text" name="proxyUsername" placeholder="用户名 (选填)" class="layui-input">
+                                </div>
+                                <div class="layui-col-md6">
+                                    <input type="password" name="proxyPassword" placeholder="密码 (选填)" class="layui-input">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">User Agents</label>
+                        <div class="layui-input-block">
+                            <div class="layui-row layui-col-space10">
+                                <div class="layui-col-md6">
+                                    <select name="user_agent_id" id="user_agent_select" lay-filter="userAgentSelect">
+                                        <option value="">选择预定义User-Agent</option>
+                                        <option value="custom">自定义User-Agent</option>
+                                    </select>
+                                </div>
+                                <div class="layui-col-md6">
+                                    <button type="button" class="layui-btn layui-btn-primary" onclick="refreshUserAgents()">
+                                        <i class="layui-icon layui-icon-refresh"></i> 刷新
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="layui-form-item" id="custom_user_agents_div" style="display: none; margin-top: 10px;">
+                                <div class="layui-input-block">
+                                    <textarea name="userAgents" placeholder='{"desktop": "...", "mobile": "..."}' class="layui-textarea"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="layui-form-item layui-form-text">
+                        <label class="layui-form-label">热搜词端点</label>
+                        <div class="layui-input-block">
+                            <textarea name="hotSearchEndpoints" placeholder='["weibo", "toutiao"]' class="layui-textarea"></textarea>
+                            <div class="layui-form-mid layui-text-em">
+                                请到 <a href="https://hots.237890.xyz/all" target="_blank" style="color: #FF5722;">热搜源列表</a> 中获取端点名称。
+                            </div>
+                        </div>
+                    </div>
+                    <button class="layui-btn" lay-submit lay-filter="saveAccount" id="saveAccountSubmit" style="display: none;">提交</button>
+                </form>
+            </div>
+        </script>
     </div>
 </div>
 
-<!-- 移除Laytpl模板，将在JavaScript中动态生成操作按钮 -->
-
-  <script type="text/html" id="account-config-form-template">
-    <div style="padding: 20px 30px 0 0;">
-        <form class="layui-form" lay-filter="accountForm">
-            <input type="hidden" name="id">
-            <div class="layui-form-item">
-                <label class="layui-form-label"><span class="layui-text-red">*</span> 邮箱</label>
-                <div class="layui-input-block">
-                    <input type="email" name="email" required lay-verify="required|email" autocomplete="off" class="layui-input">
-                </div>
-            </div>
-            <div class="layui-form-item">
-                <label class="layui-form-label"><span class="layui-text-red">*</span> 密码</label>
-                <div class="layui-input-block">
-                    <input type="password" name="password" required lay-verify="required" autocomplete="off" class="layui-input" placeholder="新增时必填，编辑时可不填表示不修改">
-                </div>
-            </div>
-            <div class="layui-form-item">
-                <label class="layui-form-label">辅助邮箱</label>
-                <div class="layui-input-block">
-                    <input type="email" name="auxiliary_email" autocomplete="off" class="layui-input" placeholder="用于接收验证码的辅助邮箱（可选）">
-                </div>
-            </div>
-            <div class="layui-form-item">
-                <label class="layui-form-label"><span class="layui-text-red">*</span> 分配节点</label>
-                <div class="layui-input-block">
-                    <select name="assigned_node_id" id="assigned_node_id_select" lay-verify="required">
-                        <option value="">正在加载节点...</option>
-                    </select>
-                </div>
-            </div>
-            <hr>
-            <div class="layui-form-item">
-                <label class="layui-form-label">代理配置</label>
-                <div class="layui-input-block">
-                    <div class="layui-row layui-col-space10">
-                        <div class="layui-col-md8">
-                            <input type="text" name="proxyUrl" placeholder="代理地址 (e.g., http://proxy.server)" class="layui-input">
-                        </div>
-                        <div class="layui-col-md4">
-                            <input type="number" name="proxyPort" placeholder="端口" class="layui-input">
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="layui-form-item">
-                <label class="layui-form-label"></label>
-                <div class="layui-input-block">
-                    <div class="layui-row layui-col-space10">
-                        <div class="layui-col-md6">
-                            <input type="text" name="proxyUsername" placeholder="用户名 (选填)" class="layui-input">
-                        </div>
-                        <div class="layui-col-md6">
-                            <input type="password" name="proxyPassword" placeholder="密码 (选填)" class="layui-input">
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <hr>
-            <div class="layui-form-item">
-                <label class="layui-form-label">User Agents</label>
-                <div class="layui-input-block">
-                    <div class="layui-row layui-col-space10">
-                        <div class="layui-col-md6">
-                            <select name="user_agent_id" id="user_agent_select" lay-filter="userAgentSelect">
-                                <option value="">选择预定义User-Agent</option>
-                                <option value="custom">自定义User-Agent</option>
-                            </select>
-                        </div>
-                        <div class="layui-col-md6">
-                            <button type="button" class="layui-btn layui-btn-primary" onclick="refreshUserAgents()">
-                                <i class="layui-icon layui-icon-refresh"></i> 刷新
-                            </button>
-                        </div>
-                    </div>
-                    <div class="layui-form-item" id="custom_user_agents_div" style="display: none; margin-top: 10px;">
-                        <div class="layui-input-block">
-                            <textarea name="userAgents" placeholder='{"desktop": "...", "mobile": "..."}' class="layui-textarea"></textarea>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="layui-form-item layui-form-text">
-                <label class="layui-form-label">热搜词端点</label>
-                <div class="layui-input-block">
-                    <textarea name="hotSearchEndpoints" placeholder='["weibo", "toutiao"]' class="layui-textarea"></textarea>
-                    <div class="layui-form-mid layui-text-em">
-                        请到 <a href="https://hots.237890.xyz/all" target="_blank" style="color: #FF5722;">热搜源列表</a> 中获取端点名称。
-                    </div>
-                </div>
-            </div>
-            <button class="layui-btn" lay-submit lay-filter="saveAccount" id="saveAccountSubmit" style="display: none;">提交</button>
-        </form>
-    </div>
-</script>
 {% endblock %}
 
-
 {% block custom_js %}
-<!-- 引入jQuery库 -->
-<script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
-<!-- 引入测试脚本 -->
-<script src="{{ url_for('frontend.static', filename='test-status-toggle.js') }}"></script>
 <script>
-layui.use(['table', 'form', 'layer'], function(){
-    var table = window.table;
-    var form = window.form;
-    var layer = window.layer;
 
-    // 筛选变量
-    var currentFilters = {
-        status: '',
-        node: '',
-        email: ''
-    };
-
-    // 初始化User-Agent选择器
-    initUserAgentSelect();
-    
-    // 监听User-Agent选择变化
-    form.on('select(userAgentSelect)', function(data){
-        const customDiv = document.getElementById('custom_user_agents_div');
-        if (data.value === 'custom') {
-            customDiv.style.display = 'block';
-        } else {
-            customDiv.style.display = 'none';
+    // 等待DOM加载完成
+    document.addEventListener('DOMContentLoaded', function() {
+        const $ = layui.jquery;
+        const layer = layui.layer;
+        const form = layui.form;
+        const table = layui.table;
+        
+        // 加载分配节点列表
+        function loadNodes() {
+            $.ajax({
+                url: '/web_api/nodes',
+                type: 'GET',
+                success: function(res) {
+                    // 检查res是否符合规范格式 {"success": true, "data": nodes_data}
+                    if (res && res.success && Array.isArray(res.data)) {
+                        const nodeFilter = $('#nodeFilter');
+                        const assignedNodeSelect = $('#assigned_node_id_select');
+                        
+                        // 清空现有选项（保留第一个）
+                        nodeFilter.html('<option value="">全部节点</option>');
+                        assignedNodeSelect.html('<option value="">请选择节点</option>');
+                        
+                        // 添加节点选项
+                        res.data.forEach(node => {
+                            nodeFilter.append(`<option value="${node.id}">${node.node_name}</option>`);
+                            assignedNodeSelect.append(`<option value="${node.id}">${node.node_name}</option>`);
+                        });
+                        
+                        // 重新渲染表单
+                        form.render('select');
+                    }
+                },
+                error: function() {
+                    layer.alert('加载节点列表失败', {icon: 2});
+                }
+            });
         }
-    });
-
-    // 存储所有数据用于筛选
-    var allAccountsData = [];
-
-    function getStatusIcons(statusDetails) {
-        let html = '';
-        const platforms = [
-            { key: 'pc', icon: 'layui-icon-auz', name: '桌面端' },
-            { key: 'mobile', icon: 'layui-icon-cellphone', name: '移动端' }
-        ];
-        platforms.forEach(p => {
-            const details = statusDetails ? statusDetails[p.key] : null;
-            let iconClass = 'text-secondary';
-            let title = `${p.name}: 状态未知`;
-            if (details) {
-                if (details.status === true) {
-                    iconClass = 'text-success';
-                    title = `${p.name}: 正常 (Code: ${details.code})`;
-                } else {
-                    iconClass = [1, 2].includes(details.code) ? 'text-danger' : 'text-warning';
-                    title = `${p.name}: 异常 - ${details.message} (Code: ${details.code})`;
+        
+        // 初始化表格
+        const tableIns = table.render({
+            elem: '#accountTable',
+            url: '/web_api/bot_accounts',
+            method: 'GET',
+            where: {
+                page: 1,
+                pageSize: 10
+            },
+            request: {
+                pageName: 'page',
+                limitName: 'pageSize'
+            },
+            response: {
+                statusName: 'success',
+                statusCode: true,
+                countName: 'total',
+                dataName: 'data.items'
+            },
+            toolbar: '#toolbarDemo',
+            defaultToolbar: ['filter', 'exports', 'print'],
+            title: '账户数据表',
+            cols: [[
+                {type: 'checkbox', fixed: 'left'},
+                {field: 'id', title: 'ID', width: 80, fixed: 'left'},
+                {field: 'email', title: '邮箱', minWidth: 200},
+                {field: 'assigned_node_id', title: '分配节点', minWidth: 150, templet: function(d) {
+                    return d.node ? d.node.name : '未分配';
+                }},
+                {field: 'status', title: '状态', width: 100, templet: function(d) {
+                    return d.status ? '<span class="layui-badge layui-bg-green">启用</span>' : '<span class="layui-badge layui-bg-gray">禁用</span>';
+                }},
+                {field: 'last_active_time', title: '最后活跃', minWidth: 160, templet: function(d) {
+                    return d.last_active_time || '-';
+                }},
+                {field: 'created_at', title: '创建时间', minWidth: 160},
+                {fixed: 'right', title: '操作', minWidth: 200, toolbar: '#tableBar'}
+            ]],
+            page: true,
+            limit: 10,
+            limits: [10, 20, 30, 50],
+            height: 'full-210',
+            text: {
+                none: '暂无数据'
+            },
+            done: function(res, curr, count) {
+                // 表格渲染完成后的回调
+            }
+        });
+        
+        // 状态切换事件
+        window.toggleAccountStatus = function(accountId, currentStatus) {
+            const newStatus = !currentStatus;
+            $.ajax({
+                url: `/web_api/bot_accounts/${accountId}/status`,
+                type: 'POST',
+                data: JSON.stringify({status: newStatus}),
+                contentType: 'application/json',
+                success: function(res) {
+                    if (res.success) {
+                        layer.msg(newStatus ? '已启用' : '已禁用', {icon: 1});
+                        tableIns.reload();
+                    } else {
+                        layer.alert('操作失败: ' + res.message, {icon: 2});
+                    }
+                },
+                error: function() {
+                    layer.alert('请求失败', {icon: 2});
                 }
-            }
-            html += `<i class="layui-icon ${p.icon} status-icon ${iconClass}" title="${title}"></i>`;
-        });
-        return html;
-    }
+            });
+        };
+        
+        // 编辑账户
+        function editAccount(accountId) {
+            $.ajax({
+                url: `/web_api/bot_accounts/${accountId}`,
+                type: 'GET',
+                success: function(res) {
+                    if (res.success && res.data) {
+                        const account = res.data;
+                        
+                        // 填充表单数据
+                        form.val('accountForm', {
+                            'id': account.id,
+                            'email': account.email,
+                            'auxiliary_email': account.auxiliary_email || '',
+                            'assigned_node_id': account.assigned_node_id || '',
+                            'proxyUrl': account.proxy?.url || '',
+                            'proxyPort': account.proxy?.port || '',
+                            'proxyUsername': account.proxy?.username || '',
+                            'proxyPassword': account.proxy?.password || '',
+                            'user_agent_id': account.user_agent_id || '',
+                            'userAgents': account.userAgents ? JSON.stringify(account.userAgents) : '',
+                            'hotSearchEndpoints': account.hotSearchEndpoints ? JSON.stringify(account.hotSearchEndpoints) : ''
+                        });
+                        
+                        // 处理编辑模式下的特殊逻辑
+                        if (account.id) {
+                            form.verify({
+                                password: function() { return true; }
+                            });
+                            $('[name="email"]')[0].readOnly = true;
+                        }
+                        
+                        form.render(null, 'accountForm');
+                        
+                        // 打开编辑弹窗
+                        layer.open({
+                            type: 1,
+                            title: '编辑账户',
+                            content: $('#account-config-form-template').html(),
+                            area: ['600px', 'auto'],
+                            btn: ['保存', '取消'],
+                            yes: function(index, layero) {
+                                $('#saveAccountSubmit').click();
+                            },
+                            success: function(layero) {
+                                // 重新绑定表单事件
+                                const form = layui.form;
+                                
+                                // 重新加载节点
+                                // 先获取节点选择框并设置为加载中状态
+                                const assignedNodeSelect = layero.find('#assigned_node_id_select');
+                                assignedNodeSelect.html('<option value="">正在加载节点...</option>');
+                                form.render('select');
+                                 
+                                $.ajax({
+                                    url: '/web_api/nodes',
+                                    type: 'GET',
+                                    success: function(res) {
+                                        // 检查res是否符合规范格式 {"success": true, "data": nodes_data}
+                                        if (res && res.success && Array.isArray(res.data)) {
+                                            assignedNodeSelect.html('<option value="">请选择节点</option>');
+                                            
+                                            res.data.forEach(node => {
+                                                const selected = account.assigned_node_id === node.id ? 'selected' : '';
+                                                assignedNodeSelect.append(`<option value="${node.id}" ${selected}>${node.node_name}</option>`);
+                                            });
+                                            
+                                            form.render('select');
+                                        } else {
+                                            // 数据格式不正确时的处理
+                                            assignedNodeSelect.html('<option value="">加载节点失败：数据格式错误</option>');
+                                            form.render('select');
+                                        }
+                                    },
+                                    error: function(xhr, status, error) {
+                                        // 请求失败时的处理
+                                        assignedNodeSelect.html('<option value="">加载节点失败：' + (error || '未知错误') + '</option>');
+                                        form.render('select');
+                                        console.error('加载节点失败:', xhr.status, status, error);
+                                    }
+                                });
+                                
+                                // 重新加载User-Agent
+                                initUserAgentSelect(layero, account.user_agent_id);
+                                
+                                // 绑定保存按钮事件
+                                form.on('submit(saveAccount)', function(data) {
+                                    const payload = data.field;
+                                    let userAgents, hotSearchEndpoints;
+                                    try {
+                                        userAgents = payload.userAgents.trim() ? JSON.parse(payload.userAgents) : {};
+                                        hotSearchEndpoints = payload.hotSearchEndpoints.trim() ? JSON.parse(payload.hotSearchEndpoints) : [];
+                                    } catch (e) { 
+                                        layer.alert('User Agents 或 热搜词端点 的 JSON 格式不正确！', {icon: 2}); 
+                                        return false; 
+                                    }
 
-    // 筛选数据函数
-    function filterData() {
-        let filteredData = allAccountsData.filter(account => {
-            // 状态筛选
-            if (currentFilters.status !== '' && account.is_enabled.toString() !== currentFilters.status) {
-                return false;
-            }
-            
-            // 节点筛选
-            if (currentFilters.node !== '') {
-                if (currentFilters.node === 'unassigned' && account.assigned_node_name) {
-                    return false;
-                } else if (currentFilters.node !== 'unassigned' && account.assigned_node_name !== currentFilters.node) {
-                    return false;
+                                    const finalPayload = {
+                                        id: payload.id,
+                                        email: payload.email,
+                                        password: payload.password,
+                                        auxiliary_email: payload.auxiliary_email || null,
+                                        assigned_node_id: payload.assigned_node_id ? parseInt(payload.assigned_node_id) : null,
+                                        user_agent_id: payload.user_agent_id || null,
+                                        proxy: {
+                                            url: payload.proxyUrl,
+                                            port: payload.proxyPort ? parseInt(payload.proxyPort, 10) : 0,
+                                            username: payload.proxyUsername,
+                                            password: payload.proxyPassword,
+                                        },
+                                        userAgents, hotSearchEndpoints
+                                    };
+                                    
+                                    layer.load(1);
+                                    // 使用标准 fetch API
+                                    fetch('/web_api/bot_accounts', {
+                                        method: 'POST', 
+                                        body: JSON.stringify(finalPayload),
+                                        credentials: 'same-origin', // 包含 cookie
+                                        headers: {
+                                            'Content-Type': 'application/json'
+                                        }
+                                    })
+                                    .then(response => response.json())
+                                    .then(result => {
+                                        layer.closeAll('loading');
+                                        if (result.status === 'success') {
+                                            layer.closeAll('page');
+                                            tableIns.reload();
+                                            layer.msg('保存成功', {icon: 1});
+                                            
+                                            // 设置标志，通知监控面板刷新数据
+                                            localStorage.setItem('accountsUpdated', 'true');
+                                            // 如果当前不在监控面板页面，尝试刷新父页面
+                                            if (window.parent && window.parent.location.pathname !== '/') {
+                                                window.parent.location.reload();
+                                            }
+                                        } else {
+                                            layer.alert('操作失败: ' + result.message, {icon: 2});
+                                        }
+                                    })
+                                    .catch(error => {
+                                        layer.closeAll('loading');
+                                        layer.alert('请求失败: ' + error.message, {icon: 2});
+                                    });
+                                    return false;
+                                });
+                            }
+                        });
+                    } else {
+                        layer.alert('获取账户信息失败: ' + res.message, {icon: 2});
+                    }
+                },
+                error: function() {
+                    layer.alert('请求失败', {icon: 2});
                 }
-            }
-            
-            // 邮箱筛选
-            if (currentFilters.email !== '' && !account.email.toLowerCase().includes(currentFilters.email.toLowerCase())) {
-                return false;
-            }
-            
-            return true;
-        });
-
-        // 按节点分组排序
-        filteredData.sort((a, b) => {
-            const nodeA = a.assigned_node_name || '未分配';
-            const nodeB = b.assigned_node_name || '未分配';
-            if (nodeA === nodeB) {
-                return a.email.localeCompare(b.email);
-            }
-            return nodeA.localeCompare(nodeB);
-        });
-
-        return filteredData;
-    }
-
-    // 更新表格数据
-    function updateTableData() {
-        const filteredData = filterData();
-        tableIns.reload({
-            data: filteredData
-        });
-    }
-
-    var tableIns = table.render({
-        elem: '#accounts-table',
-        url: '/web_api/bot_accounts',
-        height: 'full-220',
-        cellMinWidth: 80,
-        cols: [[
-            {field: 'email', title: 'Email', width: 250, sort: true, fixed: 'left'},
-            {field: 'is_enabled', title: '账户状态', width: 120, templet: function(d) { return d.is_enabled ? '<span class="layui-badge layui-bg-green">启用</span>' : '<span class="layui-badge layui-bg-red">禁用</span>'; }},
-            {field: 'assigned_node_name', title: '分配节点', width: 150, templet: d => `<span class="layui-badge layui-bg-cyan">${d.assigned_node_name || '未分配'}</span>`},
-            {title: '终端状态', width: 120, align: 'center', templet: d => getStatusIcons(d.monitoring_data.status_details)},
-            {field: 'total_points', title: '总积分', width: 120, sort: true, templet: d => d.monitoring_data.total_points || 0},
-            {title: '今日总收益', width: 120, sort: true, templet: function(d) {
-                const desktopGain = d.monitoring_data.desktop_gain || 0;
-                const mobileGain = d.monitoring_data.mobile_gain || 0;
-                const totalGain = desktopGain + mobileGain;
-                return `<span class="layui-badge layui-bg-green">${totalGain}</span>`;
-            }},
-            {field: 'desktop_gain', title: '桌面收益', width: 110, sort: true, templet: d => d.monitoring_data.desktop_gain || 0},
-            {field: 'mobile_gain', title: '移动收益', width: 110, sort: true, templet: d => d.monitoring_data.mobile_gain || 0},
-            {field: 'last_updated', title: '最后更新时间', sort: true, minWidth: 180, templet: d => d.monitoring_data.last_updated ? new Date(d.monitoring_data.last_updated).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : 'N/A'},
-            {fixed: 'right', title:'操作', templet: function(d) {
-                var html = '';
-                html += '<a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>';
-                html += '<a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del">删除</a>';
-                if (d.is_enabled) {
-                    html += '<a class="layui-btn layui-btn-xs layui-btn-warm" lay-event="disable">禁用</a>';
-                } else {
-                    html += '<a class="layui-btn layui-btn-xs layui-btn-normal" lay-event="enable">启用</a>';
-                }
-                return html;
-            }, width: 200, align: 'center'}
-        ]],
-        page: true,
-        parseData: function(res){
-            // 确保 res 是一个对象
-            if (!res || typeof res !== 'object') {
-                return { "code": 0, "msg": "无效的响应格式", "count": 0, "data": [] };
-            }
-            
-            // 处理未授权情况
-            if (res.code === 401 || (res.status && res.status === 401)) {
-                window.location.href = "{{ url_for('frontend.login') }}";
-                return { "code": 1, "msg": "未授权访问", "count": 0, "data": [] };
-            }
-            
-            // 处理不同的响应格式
-            let data = [];
-            if (Array.isArray(res)) {
-                data = res;
-            } else if (res.data && Array.isArray(res.data)) {
-                data = res.data;
-            }
-            
-            // 存储所有数据
-            allAccountsData = data;
-            
-            // 应用筛选
-            const filteredData = filterData();
-            
-            return { "code": 0, "msg": res.msg || "", "count": filteredData.length, "data": filteredData };
+            });
         }
+        
+        // 删除账户
+        function deleteAccount(accountId, email) {
+            layer.confirm(`确定要删除账户 ${email} 吗？`, {icon: 3, title:'提示'}, function(index){
+                layer.load(1);
+                // 使用标准 fetch API
+                fetch(`/web_api/bot_accounts/${accountId}`, {
+                    method: 'DELETE',
+                    credentials: 'same-origin', // 包含 cookie
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(res => res.json())
+                .then(result => {
+                    layer.closeAll('loading');
+                    if (result.status === 'success') {
+                        layer.msg('删除成功', {icon: 1});
+                        tableIns.reload();
+                    } else {
+                        layer.alert('删除失败: ' + result.message, {icon: 2});
+                    }
+                }).catch(e => {
+                    layer.closeAll('loading');
+                    layer.alert('请求失败: ' + e.message, {icon: 2});
+                });
+                layer.close(index);
+            });
+        }
+        
+        // 初始化表格工具条事件
+        table.on('tool(accountTable)', function(obj) {
+            const data = obj.data;
+            if (obj.event === 'edit') {
+                editAccount(data.id);
+            } else if (obj.event === 'delete') {
+                deleteAccount(data.id, data.email);
+            } else if (obj.event === 'toggle') {
+                toggleAccountStatus(data.id, data.status);
+            }
+        });
+        
+        // 新增账户按钮点击事件
+        $('#addAccount').on('click', function() {
+            // 重置表单
+            form.val('accountForm', {
+                'id': '',
+                'email': '',
+                'password': '',
+                'auxiliary_email': '',
+                'assigned_node_id': '',
+                'proxyUrl': '',
+                'proxyPort': '',
+                'proxyUsername': '',
+                'proxyPassword': '',
+                'user_agent_id': '',
+                'userAgents': '',
+                'hotSearchEndpoints': ''
+            });
+            
+            form.render(null, 'accountForm');
+            
+            // 打开新增弹窗
+            layer.open({
+                type: 1,
+                title: '新增账户',
+                content: $('#account-config-form-template').html(),
+                area: ['600px', 'auto'],
+                btn: ['保存', '取消'],
+                yes: function(index, layero) {
+                    layero.find('#saveAccountSubmit').click();
+                },
+                success: function(layero) {
+                    // 重新绑定表单事件
+                    const form = layui.form;
+                    
+                    // 重新加载节点
+                    // 先获取节点选择框并设置为加载中状态
+                    const assignedNodeSelect = layero.find('#assigned_node_id_select');
+                    assignedNodeSelect.html('<option value="">正在加载节点...</option>');
+                    form.render('select');
+                     
+                    $.ajax({
+                        url: '/web_api/nodes',
+                        type: 'GET',
+                        success: function(res) {
+                            // 检查res是否符合规范格式 {"success": true, "data": nodes_data}
+                            if (res && res.success && Array.isArray(res.data)) {
+                                assignedNodeSelect.html('<option value="">请选择节点</option>');
+                                
+                                res.data.forEach(node => {
+                                    assignedNodeSelect.append(`<option value="${node.id}">${node.node_name}</option>`);
+                                });
+                                
+                                form.render('select');
+                            } else {
+                                // 数据格式不正确时的处理
+                                assignedNodeSelect.html('<option value="">加载节点失败：数据格式错误</option>');
+                                form.render('select');
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            // 请求失败时的处理
+                            assignedNodeSelect.html('<option value="">加载节点失败：' + (error || '未知错误') + '</option>');
+                            form.render('select');
+                            console.error('加载节点失败:', xhr.status, status, error);
+                        }
+                    });
+                    
+                    // 重新加载User-Agent
+                    initUserAgentSelect(layero);
+                    
+                    // 绑定保存按钮事件
+                    form.on('submit(saveAccount)', function(data) {
+                        const payload = data.field;
+                        let userAgents, hotSearchEndpoints;
+                        try {
+                            userAgents = payload.userAgents.trim() ? JSON.parse(payload.userAgents) : {};
+                            hotSearchEndpoints = payload.hotSearchEndpoints.trim() ? JSON.parse(payload.hotSearchEndpoints) : [];
+                        } catch (e) { 
+                            layer.alert('User Agents 或 热搜词端点 的 JSON 格式不正确！', {icon: 2}); 
+                            return false; 
+                        }
+
+                        const finalPayload = {
+                            id: payload.id,
+                            email: payload.email,
+                            password: payload.password,
+                            auxiliary_email: payload.auxiliary_email || null,
+                            assigned_node_id: payload.assigned_node_id ? parseInt(payload.assigned_node_id) : null,
+                            user_agent_id: payload.user_agent_id || null,
+                            proxy: {
+                                url: payload.proxyUrl,
+                                port: payload.proxyPort ? parseInt(payload.proxyPort, 10) : 0,
+                                username: payload.proxyUsername,
+                                password: payload.proxyPassword,
+                            },
+                            userAgents, hotSearchEndpoints
+                        };
+                        
+                        layer.load(1);
+                        // 使用标准 fetch API
+                        fetch('/web_api/bot_accounts', {
+                            method: 'POST', 
+                            body: JSON.stringify(finalPayload),
+                            credentials: 'same-origin', // 包含 cookie
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(result => {
+                            layer.closeAll('loading');
+                            if (result.status === 'success') {
+                                layer.closeAll('page');
+                                tableIns.reload();
+                                layer.msg('保存成功', {icon: 1});
+                            } else {
+                                layer.alert('操作失败: ' + result.message, {icon: 2});
+                            }
+                        })
+                        .catch(error => {
+                            layer.closeAll('loading');
+                            layer.alert('请求失败: ' + error.message, {icon: 2});
+                        });
+                        return false;
+                    });
+                }
+            });
+        });
+        
+        // 刷新表格按钮点击事件
+        $('#refreshTable').on('click', function() {
+            tableIns.reload();
+        });
+        
+        // 批量删除按钮点击事件
+        $('#batchDelete').on('click', function() {
+            const checkStatus = table.checkStatus('accountTable');
+            const data = checkStatus.data;
+            if (data.length === 0) {
+                layer.msg('请选择要删除的账户', {icon: 2});
+                return;
+            }
+            
+            const ids = data.map(item => item.id);
+            layer.confirm(`确定要删除选中的 ${data.length} 个账户吗？`, {icon: 3, title:'提示'}, function(index){
+                layer.load(1);
+                
+                // 使用标准 fetch API
+                fetch('/web_api/bot_accounts/batch_delete', {
+                    method: 'POST',
+                    body: JSON.stringify({ids: ids}),
+                    credentials: 'same-origin', // 包含 cookie
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(result => {
+                    layer.closeAll('loading');
+                    if (result.status === 'success') {
+                        layer.msg('删除成功', {icon: 1});
+                        tableIns.reload();
+                    } else {
+                        layer.alert('删除失败: ' + result.message, {icon: 2});
+                    }
+                })
+                .catch(error => {
+                    layer.closeAll('loading');
+                    layer.alert('请求失败: ' + error.message, {icon: 2});
+                });
+                
+                layer.close(index);
+            });
+        });
+        
+        // 筛选相关事件
+        $('#statusFilter').on('change', function() {
+            applyFilters();
+        });
+        
+        $('#nodeFilter').on('change', function() {
+            applyFilters();
+        });
+        
+        $('#emailSearch').on('keypress', function(e) {
+            if (e.which === 13) {
+                applyFilters();
+            }
+        });
+        
+        $('#clearFilter').on('click', function() {
+            $('#statusFilter').val('');
+            $('#nodeFilter').val('');
+            $('#emailSearch').val('');
+            form.render('select');
+            applyFilters();
+        });
+        
+        // 应用筛选条件
+        function applyFilters() {
+            const status = $('#statusFilter').val();
+            const nodeId = $('#nodeFilter').val();
+            const emailKeyword = $('#emailSearch').val().trim();
+            
+            tableIns.reload({
+                where: {
+                    status: status,
+                    node_id: nodeId,
+                    email: emailKeyword
+                },
+                page: {
+                    curr: 1
+                }
+            });
+        }
+        
+        // 加载节点列表
+        loadNodes();
     });
     
-    // 监听表格工具事件
-    table.on('tool(accountsTable)', function(obj){
-        var data = obj.data;
-        if(obj.event === 'edit'){ openAccountModal(data); } 
-        else if(obj.event === 'del'){ deleteAccount(data.id, data.email); }
-        else if(obj.event === 'enable'){ toggleAccountStatus(data.id, data.email, true); }
-        else if(obj.event === 'disable'){ toggleAccountStatus(data.id, data.email, false); }
-    });
-
-    // 筛选事件监听
-    form.on('select(statusFilter)', function(data){
-        currentFilters.status = data.value;
-        updateTableData();
-    });
-
-    form.on('select(nodeFilter)', function(data){
-        currentFilters.node = data.value;
-        updateTableData();
-    });
-
-    // 邮箱搜索事件
-    $('#emailFilter').on('input', function(){
-        currentFilters.email = $(this).val();
-        updateTableData();
-    });
-
-    // 清除筛选
-    $('#clearFilter').on('click', function(){
-        currentFilters = { status: '', node: '', email: '' };
-        $('#statusFilter').val('');
-        $('#nodeFilter').val('');
-        $('#emailFilter').val('');
-        form.render('select');
-        updateTableData();
-    });
-
-    // 初始化节点筛选下拉框
-    async function initNodeFilter() {
+    // 简单的测试脚本，验证JavaScript是否正常运行
+    console.log('账户管理页面加载成功，JavaScript运行正常');
+    
+    // User-Agent相关函数
+    async function initUserAgentSelect(layero, selectedUaId = null) {
         try {
-            const response = await fetch('/web_api/nodes', {
+            // 首先检查用户代理选择元素是否存在
+            const userAgentSelect = layero ? layero.find('#user_agent_select')[0] : document.getElementById('user_agent_select');
+            if (!userAgentSelect) {
+                console.warn("User agent select element not found");
+                return;
+            }
+            
+            const response = await fetch('/web_api/user_agents/unused', {
                 method: 'GET',
                 credentials: 'same-origin',
                 headers: {
                     'Content-Type': 'application/json'
                 }
             });
-            const nodes = await response.json();
-            const nodeSelect = document.getElementById('nodeFilter');
-            nodes.forEach(node => {
-                const option = document.createElement('option');
-                option.value = node.node_name;
-                option.textContent = node.node_name;
-                nodeSelect.appendChild(option);
-            });
-            form.render('select');
-        } catch (e) { 
-            console.error("Could not populate node filter:", e); 
-        }
-    }
-
-    // 页面加载完成后初始化筛选器
-    initNodeFilter();
-    
-    // 初始化User-Agent选择器
-    initUserAgentSelect();
-    
-    // 监听User-Agent选择事件
-    form.on('select(userAgentSelect)', function(data){
-        const value = data.value;
-        const customDiv = document.getElementById('custom_user_agents_div');
-        
-        if (value === 'custom') {
-            customDiv.style.display = 'block';
-        } else if (value === '') {
-            customDiv.style.display = 'none';
-        } else {
-            customDiv.style.display = 'none';
-            // 如果选择了预定义的User-Agent，可以在这里设置对应的值
-            setSelectedUserAgent(value);
-        }
-    });
-
-    function toggleAccountStatus(accountId, email, enable) {
-        const actionText = enable ? '启用' : '禁用';
-        console.log(`[toggleAccountStatus] 函数被调用，准备${actionText}账户: ${email} (ID: ${accountId})`);
-        console.log(`[toggleAccountStatus] fetchWithAuth函数是否存在:`, typeof fetchWithAuth === 'function');
-        console.log(`[toggleAccountStatus] 当前页面URL:`, window.location.href);
-        console.log(`[toggleAccountStatus] 账户ID类型:`, typeof accountId);
-        console.log(`[toggleAccountStatus] 账户ID值:`, accountId);
-
-        layer.confirm(`确定要${actionText}账户 ${email} 吗？`, {icon: 3, title:'提示'}, function(index){
-            console.log(`[toggleAccountStatus] 用户确认${actionText}账户`);
-            layer.load(1);
-
-            try {
-                // 确保accountId是数字类型
-                const numericAccountId = parseInt(accountId, 10);
-                if (isNaN(numericAccountId)) {
-                    throw new Error(`无效的账户ID: ${accountId}`);
+            const data = await response.json();
+            
+            if (data.success && Array.isArray(data.data)) {
+                // 清空现有选项（保留前两个）
+                if (userAgentSelect.children && userAgentSelect.children.length > 2) {
+                    while (userAgentSelect.children.length > 2) {
+                        userAgentSelect.removeChild(userAgentSelect.lastChild);
+                    }
                 }
-
-                const url = `/web_api/bot_accounts/${numericAccountId}/toggle`;
-                console.log(`[toggleAccountStatus] 准备发送请求到:`, url);
-
-                // 手动构建请求而不依赖fetchWithAuth
-                const xhr = new XMLHttpRequest();
-                xhr.open('POST', url, true);
-                xhr.setRequestHeader('Content-Type', 'application/json');
-                xhr.withCredentials = true; // 包含cookie
-
-                xhr.onreadystatechange = function() {
-                    if (xhr.readyState === 4) {
-                        layer.closeAll('loading');
-                        console.log(`[toggleAccountStatus] 响应状态:`, xhr.status);
-                        console.log(`[toggleAccountStatus] 响应文本:`, xhr.responseText);
-
-                        if (xhr.status === 200) {
-                            try {
-                                const result = JSON.parse(xhr.responseText);
-                                console.log(`[toggleAccountStatus] Toggle result:`, result);
-                                if (result.status === 'success') {
-                                    layer.msg(`账户已${actionText}`, {icon: 1});
-                                    tableIns.reload({page: {curr: 1}});
-                                } else {
-                                    layer.alert(`${actionText}失败: ` + result.message, {icon: 2});
-                                }
-                            } catch (error) {
-                                console.error(`[toggleAccountStatus] 解析JSON响应失败:`, error);
-                                layer.alert('响应格式错误: ' + error.message, {icon: 2});
-                            }
-                        } else if (xhr.status === 401) {
-                            console.error(`[toggleAccountStatus] 认证失败`);
-                            layer.alert('认证失败，请重新登录', {icon: 2});
-                            window.location.href = '{{ url_for('frontend.login') }}';
-                        } else {
-                            console.error(`[toggleAccountStatus] 请求失败，状态码:`, xhr.status);
-                            layer.alert(`请求失败，状态码: ${xhr.status}`, {icon: 2});
+                
+                data.data.forEach(ua => {
+                    if (ua && ua.id && ua.display_name) {
+                        const option = document.createElement('option');
+                        option.value = ua.id;
+                        option.textContent = ua.display_name;
+                        if (selectedUaId && selectedUaId === ua.id) {
+                            option.selected = true;
                         }
+                        userAgentSelect.appendChild(option);
                     }
-                };
-
-                xhr.onerror = function() {
-                    layer.closeAll('loading');
-                    console.error(`[toggleAccountStatus] 请求发生错误`);
-                    layer.alert('请求发生错误，请检查网络连接', {icon: 2});
-                };
-
-                // 发送空请求体
-                xhr.send(JSON.stringify({}));
-            } catch (e) {
-                layer.closeAll('loading');
-                layer.alert('函数执行异常: ' + e.message, {icon: 2});
-                console.error('[toggleAccountStatus] 函数执行异常:', e);
-            }
-            layer.close(index);
-        });
-    }
-
-    document.getElementById('add-account-btn').addEventListener('click', function(){
-        openAccountModal();
-    });
-
-    async function populateNodesDropdown(selectElement, selected_id) {
-        try {
-            // 使用标准 fetch API
-            const response = await fetch('/web_api/nodes', {
-                method: 'GET',
-                credentials: 'same-origin', // 包含 cookie
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-            const nodes = await response.json();
-            selectElement.innerHTML = '<option value="">请选择一个节点</option>';
-            nodes.forEach(node => {
-                const selected = (node.id == selected_id) ? 'selected' : '';
-                selectElement.innerHTML += `<option value="${node.id}" ${selected}>${node.node_name}</option>`;
-            });
-            form.render('select');
-        } catch (e) { console.error("Could not populate nodes:", e); }
-    }
-
-    function openAccountModal(data = null) {
-        layer.open({
-            type: 1,
-            title: data ? `编辑账户: ${data.email}` : '新增账户',
-            area: ['750px', 'auto'],
-            content: document.getElementById('account-config-form-template').innerHTML,
-            btn: ['保存', '取消'],
-            yes: function(index, layero){
-                layero.find('form').find('#saveAccountSubmit').click();
-            },
-            success: function(layero, index){
-                const selectElement = layero.find('#assigned_node_id_select')[0];
-                populateNodesDropdown(selectElement, data ? data.assigned_node_id : null);
+                });
                 
-                if (data) {
-                    // 设置User-Agent选择
-                    const userAgentSelect = layero.find('#user_agent_select')[0];
-                    const customDiv = layero.find('#custom_user_agents_div')[0];
-                    
-                    if (data.user_agent_id) {
-                        // 如果账户使用了预定义的User-Agent
-                        userAgentSelect.value = data.user_agent_id;
-                        customDiv.style.display = 'none';
-                    } else {
-                        // 如果账户使用自定义User-Agent
-                        userAgentSelect.value = 'custom';
-                        customDiv.style.display = 'block';
-                    }
-                    
-                    form.val('accountForm', {
-                        "id": data.id, "email": data.email, "password": data.password,
-                        "auxiliary_email": data.auxiliary_email || '',
-                        "assigned_node_id": data.assigned_node_id || '',
-                        "proxyUrl": data.proxy ? data.proxy.url : '',
-                        "proxyPort": data.proxy ? data.proxy.port : '',
-                        "proxyUsername": data.proxy ? data.proxy.username : '',
-                        "proxyPassword": data.proxy ? data.proxy.password : '',
-                        "user_agent_id": data.user_agent_id || 'custom',
-                        "userAgents": data.userAgents ? JSON.stringify(data.userAgents, null, 2) : '',
-                        "hotSearchEndpoints": data.hotSearchEndpoints ? JSON.stringify(data.hotSearchEndpoints, null, 2) : ''
-                    });
-                    layero.find('[name="email"]')[0].readOnly = true;
+                const form = layui.form;
+                if (typeof form !== 'undefined' && form.render) {
+                    form.render('select');
                 }
-                form.render(null, 'accountForm');
             }
-        });
-    }
-
-    form.on('submit(saveAccount)', function(data){
-        const payload = data.field;
-        let userAgents, hotSearchEndpoints;
-        try {
-            userAgents = payload.userAgents.trim() ? JSON.parse(payload.userAgents) : {};
-            hotSearchEndpoints = payload.hotSearchEndpoints.trim() ? JSON.parse(payload.hotSearchEndpoints) : [];
-        } catch (e) { layer.alert('User Agents 或 热搜词端点 的 JSON 格式不正确！', {icon: 2}); return false; }
-
-        const finalPayload = {
-            id: payload.id, email: payload.email, password: payload.password,
-            auxiliary_email: payload.auxiliary_email || null,
-            assigned_node_id: payload.assigned_node_id ? parseInt(payload.assigned_node_id) : null,
-            user_agent_id: payload.user_agent_id || null,
-            proxy: {
-                url: payload.proxyUrl,
-                port: payload.proxyPort ? parseInt(payload.proxyPort, 10) : 0,
-                username: payload.proxyUsername,
-                password: payload.proxyPassword,
-            },
-            userAgents, hotSearchEndpoints
-        };
-        
-        layer.load(1);
-        // 使用标准 fetch API
-        fetch('/web_api/bot_accounts', {
-            method: 'POST', 
-            body: JSON.stringify(finalPayload),
-            credentials: 'same-origin', // 包含 cookie
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(result => {
-            layer.closeAll('loading');
-            if (result.status === 'success') {
-                layer.closeAll('page');
-                tableIns.reload();
-                layer.msg('保存成功', {icon: 1});
-                
-                // 设置标志，通知监控面板刷新数据
-                localStorage.setItem('accountsUpdated', 'true');
-                // 如果当前不在监控面板页面，尝试刷新父页面
-                if (window.parent && window.parent.location.pathname !== '/') {
-                    window.parent.location.reload();
-                }
-            } else {
-                layer.alert('操作失败: ' + result.message, {icon: 2});
-            }
-        })
-        .catch(error => {
-            layer.closeAll('loading');
-            layer.alert('请求失败: ' + error.message, {icon: 2});
-        });
-        return false;
-    });
-
-    function deleteAccount(accountId, email) {
-        layer.confirm(`确定要删除账户 ${email} 吗？`, {icon: 3, title:'提示'}, function(index){
-            layer.load(1);
-            // 使用标准 fetch API
-            fetch(`/web_api/bot_accounts/${accountId}`, {
-                method: 'DELETE',
-                credentials: 'same-origin', // 包含 cookie
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            })
-            .then(res => res.json())
-            .then(result => {
-                layer.closeAll('loading');
-                if (result.status === 'success') {
-                    layer.msg('删除成功', {icon: 1});
-                    tableIns.reload();
-                } else {
-                    layer.alert('删除失败: ' + result.message, {icon: 2});
-                }
-            }).catch(e => {
-                layer.closeAll('loading');
-                layer.alert('请求失败: ' + e.message, {icon: 2});
-            });
-            layer.close(index);
-        });
-    }
-});
-
-// 简单的测试脚本，验证JavaScript是否正常运行
-console.log('账户管理页面加载成功，JavaScript运行正常');
-
-// User-Agent相关函数
-async function initUserAgentSelect() {
-    try {
-        const response = await fetch('/web_api/user_agents/unused', {
-            method: 'GET',
-            credentials: 'same-origin',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        const data = await response.json();
-        
-        if (data.success) {
-            const userAgentSelect = document.getElementById('user_agent_select');
-            // 清空现有选项（保留前两个）
-            while (userAgentSelect.children.length > 2) {
-                userAgentSelect.removeChild(userAgentSelect.lastChild);
-            }
-            
-            data.data.forEach(ua => {
-                const option = document.createElement('option');
-                option.value = ua.id;
-                option.textContent = ua.display_name;
-                userAgentSelect.appendChild(option);
-            });
-            
-            form.render('select');
+        } catch (e) {
+            console.error("Could not populate user agent select:", e);
         }
-    } catch (e) {
-        console.error("Could not populate user agent select:", e);
     }
-}
-
-function refreshUserAgents() {
-    initUserAgentSelect();
-    layer.msg('User-Agent列表已刷新', {icon: 1});
-}
-
-function setSelectedUserAgent(uaId) {
-    // 这里可以根据选择的User-Agent ID设置对应的值
-    // 暂时留空，后续可以根据需要实现
-    console.log('Selected User-Agent ID:', uaId);
-}
-
+    
+    function refreshUserAgents() {
+        const activeLayer = layui.layer.getChildFrame('#user_agent_select', 0)[0] || document.getElementById('user_agent_select');
+        if (activeLayer) {
+            const layero = activeLayer.closest('.layui-layer-content') ? {
+                find: function(selector) { return $(activeLayer.closest('.layui-layer-content')).find(selector); }
+            } : null;
+            initUserAgentSelect(layero);
+        }
+        layui.layer.msg('User-Agent列表已刷新', {icon: 1});
+    }
+    
+    function setSelectedUserAgent(uaId) {
+        // 这里可以根据选择的User-Agent ID设置对应的值
+        // 暂时留空，后续可以根据需要实现
+        console.log('Selected User-Agent ID:', uaId);
+    }
 </script>
 {% endblock %}

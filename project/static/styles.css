@@ -1,17 +1,124 @@
 /* 全局和布局 */
 body {
     background-color: #f2f2f2;
+    min-height: 100vh;
 }
+
 .main-content {
-    padding: 15px;
+    padding: 20px;
+    background: transparent;
 }
+
+/* 头部美化 */
+.layui-header {
+    background: rgba(0, 0, 0, 0.8) !important;
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+}
+
+.layui-logo {
+    background: linear-gradient(135deg, #667eea, #764ba2) !important;
+    color: white !important;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.layui-nav .layui-nav-item a {
+    color: rgba(255, 255, 255, 0.9) !important;
+    transition: all 0.3s ease;
+}
+
+.layui-nav .layui-nav-item a:hover {
+    color: white !important;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* 侧边栏美化 */
+.layui-side {
+    background: rgba(0, 0, 0, 0.8) !important;
+    backdrop-filter: blur(20px);
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 2px 0 20px rgba(0, 0, 0, 0.1);
+}
+
+.layui-nav-tree {
+    background: transparent !important;
+}
+
+.layui-nav-tree .layui-nav-item a {
+    color: rgba(255, 255, 255, 0.8) !important;
+    transition: all 0.3s ease;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.layui-nav-tree .layui-nav-item a:hover {
+    color: white !important;
+    background: rgba(255, 255, 255, 0.1);
+    padding-left: 25px;
+}
+
+.layui-nav-tree .layui-nav-item.layui-this > a {
+    background: linear-gradient(135deg, #667eea, #764ba2) !important;
+    color: white !important;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.layui-nav-tree .layui-nav-item.layui-this > a:hover {
+    background: linear-gradient(135deg, #5a67d8, #6b46c1) !important;
+}
+
+.layui-nav-tree .layui-nav-item i {
+    color: rgba(255, 255, 255, 0.7);
+    margin-right: 10px;
+    transition: all 0.3s ease;
+}
+
+.layui-nav-tree .layui-nav-item:hover i,
+.layui-nav-tree .layui-nav-item.layui-this > a i {
+    color: white;
+    transform: scale(1.1);
+}
+
 .layui-footer {
     text-align: center;
+    background: rgba(0, 0, 0, 0.8) !important;
+    color: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(20px);
 }
+
 .page-title {
-    font-size: 22px;
-    font-weight: 500;
+    font-size: 24px;
+    font-weight: 600;
     margin-bottom: 0;
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* 监控面板头部美化 */
+.layui-card {
+    background: rgba(255, 255, 255, 0.1) !important;
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.layui-card-header {
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.1) 100%) !important;
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: white !important;
+    font-weight: 600;
+    padding: 20px 25px !important;
+}
+
+.layui-card-body {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    padding: 20px !important;
 }
 
 /* 登录页面 */
@@ -24,39 +131,242 @@ body {
     justify-content: center;
     height: 100vh;
 }
+
 .login-wrapper {
     width: 375px;
-    background-color: rgba(255, 255, 255, 0.8);
+    background-color: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(20px);
     padding: 20px 30px 30px 30px;
-    border-radius: 5px;
-    box-shadow: 0 0 10px rgba(0,0,0,.08);
+    border-radius: 15px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-/* 卡片样式 (监控面板) */
+/* 卡片样式 (监控面板) - 毛玻璃效果 */
 .info-card {
-    border: 1px solid #e6e6e6;
-    border-left-width: 4px;
-    transition: all .3s;
+    background: rgba(255, 255, 255, 0.15) !important;
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 20px !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.info-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+    pointer-events: none;
+}
+
+.info-card:hover {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.info-card.status-normal { 
+    border-left-color: #4ade80 !important;
+    border-left-width: 6px !important;
+}
+.info-card.status-error { 
+    border-left-color: #ef4444 !important;
+    border-left-width: 6px !important;
+}
+.info-card.status-unknown { 
+    border-left-color: #9ca3af !important; 
+    border-left-width: 6px !important;
+}
+
+/* 非当前时间的背景色 */
+.info-card.outdated { 
+    background: rgba(255, 255, 150, 0.3) !important;
+}
+
+.info-card .layui-card-header { 
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.1) 100%) !important;
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: white !important;
+    font-weight: 600; 
+    font-size: 16px; 
+    padding: 20px !important;
+    border-radius: 20px 20px 0 0;
+}
+
+.info-card .layui-card-body { 
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    padding: 20px !important;
+    border-radius: 0 0 20px 20px;
+}
+
+.info-card .stat-grid { 
+    display: grid; 
+    grid-template-columns: 1fr 1fr; 
+    gap: 20px; 
+    text-align: center; 
+    margin-bottom: 20px; 
+}
+
+.info-card .stat-item p { 
+    color: rgba(255, 255, 255, 0.8); 
+    font-size: 13px; 
+    margin-bottom: 8px; 
+    font-weight: 500;
+}
+
+.info-card .stat-item h3 { 
+    font-size: 24px; 
+    font-weight: 600; 
+    margin: 0; 
+    color: black;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.info-card .stat-item h3.success { 
+    color: #4ade80; 
+    text-shadow: 0 1px 2px rgba(74, 222, 128, 0.3);
+}
+
+.info-card .card-footer { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    font-size: 12px; 
+    color: rgba(255, 255, 255, 0.8); 
+    padding-top: 15px; 
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: 15px;
+}
+
+/* 状态图标美化 */
+.status-icon { 
+    font-size: 20px !important; 
+    margin-right: 8px;
+    transition: all 0.2s ease;
+}
+
+.status-icon:hover {
+    transform: scale(1.1);
+}
+
+.status-icon.text-success { 
+    color: #4ade80 !important; 
+    text-shadow: 0 1px 2px rgba(74, 222, 128, 0.3);
+}
+
+.status-icon.text-warning { 
+    color: #fbbf24 !important; 
+    text-shadow: 0 1px 2px rgba(251, 191, 36, 0.3);
+}
+
+.status-icon.text-danger { 
+    color: #ef4444 !important; 
+    text-shadow: 0 1px 2px rgba(239, 68, 68, 0.3);
+}
+
+.status-icon.text-secondary { 
+    color: #9ca3af !important; 
+    text-shadow: 0 1px 2px rgba(156, 163, 175, 0.3);
+}
+
+/* 节点标签美化 */
+.layui-badge.layui-bg-blue {
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+/* 空状态美化 */
+.layui-card .layui-card-body .layui-col-md12 .layui-card {
+    background: rgba(255, 255, 255, 0.1) !important;
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    color: rgba(255, 255, 255, 0.9) !important;
+    text-align: center;
+    padding: 40px 20px;
+    font-size: 16px;
+}
+
+/* 响应式优化 */
+@media (max-width: 768px) {
+    .main-content {
+        padding: 15px;
+    }
+    
+    .info-card .stat-grid {
+        gap: 15px;
+    }
+    
+    .info-card .stat-item h3 {
+        font-size: 20px;
+    }
+    
+    .info-card .layui-card-header {
+        padding: 15px !important;
+    }
+    
+    .info-card .layui-card-body {
+        padding: 15px !important;
+    }
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
     border-radius: 4px;
 }
-.info-card:hover {
-    box-shadow: 0 0 15px rgba(0,0,0,.1);
-    transform: translateY(-4px);
-}
-.info-card.status-normal { border-left-color: #5FB878; }
-.info-card.status-error { border-left-color: #FF5722; }
-.info-card.status-unknown { border-left-color: #a0a0a0; }
-.info-card .layui-card-header { font-weight: 500; font-size: 16px; }
-.info-card .layui-card-body { padding: 15px; }
-.info-card .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center; margin-bottom: 15px; }
-.info-card .stat-item p { color: #888; font-size: 12px; margin-bottom: 5px; }
-.info-card .stat-item h3 { font-size: 22px; font-weight: 500; margin: 0; }
-.info-card .stat-item h3.success { color: #16b777; }
-.info-card .card-footer { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #999; padding-top: 15px; border-top: 1px solid #f6f6f6; }
 
-/* 状态图标 */
-.status-icon { font-size: 18px !important; }
-.status-icon.text-success { color: #5FB878 !important; }
-.status-icon.text-warning { color: #FFB800 !important; }
-.status-icon.text-danger { color: #FF5722 !important; }
-.status-icon.text-secondary { color: #a0a0a0 !important; }
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+/* 动画效果 */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.info-card {
+    animation: fadeInUp 0.6s ease-out;
+}
+
+/* 最后更新时间美化 */
+#last-updated {
+    color: rgba(255, 255, 255, 0.8) !important;
+    font-size: 13px;
+    font-weight: 400;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    padding: 6px 12px;
+    border-radius: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}

@@ -54,6 +54,16 @@ def init_scheduler(app):
             replace_existing=True
         )
         logger.info('已添加日志清理定时任务')
+        
+        # 添加每日任务重建定时任务 (每天凌晨1点执行)
+        scheduler.add_job(
+            func=recreate_daily_tasks,
+            trigger=CronTrigger(hour=1, minute=0),
+            id='daily_task_recreation',
+            name='每日任务重建任务',
+            replace_existing=True
+        )
+        logger.info('已添加每日任务重建定时任务')
     
     # 启动调度器
     scheduler.start()
@@ -78,18 +88,34 @@ def load_all_node_tasks():
 
 def clear_node_tasks(node_id):
     """清除节点的所有任务"""
-    # 删除调度器中的任务
-    job_id = f'node_{node_id}_task'
-    if scheduler.get_job(job_id):
-        scheduler.remove_job(job_id)
-        logger.info(f'已移除节点 {node_id} 的调度任务')
+    try:
+        # 删除调度器中的任务
+        job_id = f'node_{node_id}_task'
+        if scheduler and scheduler.get_job(job_id):
+            scheduler.remove_job(job_id)
+            logger.info(f'已移除节点 {node_id} 的调度任务')
 
-    # 删除数据库中的任务
-    tasks = Task.query.filter_by(node_id=node_id).all()
-    for task in tasks:
-        db.session.delete(task)
-    db.session.commit()
-    logger.info(f'已清除节点 {node_id} 的 {len(tasks)} 个任务')
+        # 删除数据库中的任务
+        try:
+            tasks = Task.query.filter_by(node_id=node_id).all()
+            task_count = len(tasks)
+            
+            if task_count > 0:
+                for task in tasks:
+                    db.session.delete(task)
+                db.session.commit()
+                logger.info(f'已清除节点 {node_id} 的 {task_count} 个任务')
+            else:
+                logger.info(f'节点 {node_id} 没有待删除的任务')
+                
+        except Exception as db_error:
+            logger.error(f'删除节点 {node_id} 的数据库任务时出错: {str(db_error)}')
+            db.session.rollback()
+            # 继续执行，不阻止节点删除
+            
+    except Exception as e:
+        logger.error(f'清除节点 {node_id} 任务时发生未知错误: {str(e)}')
+        # 不抛出异常，让删除节点操作继续进行
 
 
 def create_node_tasks(node_id, cron_expression, node_name, min_delay, max_delay):
@@ -136,38 +162,42 @@ def create_node_tasks(node_id, cron_expression, node_name, min_delay, max_delay)
         minutes = [m for m in minutes if 0 <= m <= 59]
         logger.info(f'过滤后的小时值: {hours}, 过滤后的分钟值: {minutes}')
             
-        # 为每个时间点创建一个任务
+        # 为每个时间点创建未来3天的任务
         task_count = 0
-        for hour in hours:
-            for minute in minutes:
-                # 生成随机延迟 (分钟)
-                delay = random.randint(min_delay, max_delay)
-                
-                # 计算任务执行时间
-                now = datetime.now()
-                execution_time = datetime(now.year, now.month, now.day, hour, minute)
-                
-                # 如果今天的执行时间已过，则设置为明天
-                if execution_time < now:
-                    execution_time += timedelta(days=1)
-                
-                # 添加延迟
-                execution_time += timedelta(minutes=delay)
-                
-                # 创建任务
-                task = Task(
-                    task_type='node_job',
-                    node_id=node_id,
-                    status='pending',
-                    priority=1,
-                    execution_time=execution_time,
-                    result=json.dumps({
-                        'delay': delay
-                    })
-                )
-                db.session.add(task)
-                task_count += 1
-                logger.info(f'为节点 {node_name} 创建任务，执行时间: {execution_time}, 延迟: {delay}分钟')
+        for day_offset in range(3):  # 创建未来3天的任务
+            for hour in hours:
+                for minute in minutes:
+                    # 生成随机延迟 (分钟)
+                    delay = random.randint(min_delay, max_delay)
+                    
+                    # 计算任务执行时间
+                    now = datetime.now()
+                    execution_time = datetime(now.year, now.month, now.day, hour, minute)
+                    
+                    # 设置为未来第N天
+                    execution_time += timedelta(days=day_offset)
+                    
+                    # 如果今天的执行时间已过，则设置为明天
+                    if execution_time < now:
+                        execution_time += timedelta(days=1)
+                    
+                    # 添加延迟
+                    execution_time += timedelta(minutes=delay)
+                    
+                    # 创建任务
+                    task = Task(
+                        task_type='node_job',
+                        node_id=node_id,
+                        status='pending',
+                        priority=1,
+                        execution_time=execution_time,
+                        result=json.dumps({
+                            'delay': delay
+                        })
+                    )
+                    db.session.add(task)
+                    task_count += 1
+                    logger.info(f'为节点 {node_name} 创建任务，执行时间: {execution_time}, 延迟: {delay}分钟')
         
         db.session.commit()
         logger.info(f'已为节点 {node_name} 创建 {task_count} 个任务')
@@ -212,8 +242,10 @@ def scan_task_table():
     global app_instance
     with app_instance.app_context():
         try:
-            # 查询所有待下发的任务
-            pending_tasks = Task.query.filter_by(status='pending').all()
+            # 查询所有待下发的任务（排除已完成、失败和已下发的任务）
+            pending_tasks = Task.query.filter(
+                Task.status.in_(['pending'])
+            ).all()
             logger.info(f'找到 {len(pending_tasks)} 个待下发任务')
 
             for task in pending_tasks:
@@ -298,6 +330,33 @@ def reset_node_tasks(node_id):
 
         except Exception as e:
             logger.error(f'重置节点任务失败: {str(e)}')
+
+
+def recreate_daily_tasks():
+    """每日重新创建所有节点的定时任务"""
+    global app_instance
+    with app_instance.app_context():
+        try:
+            logger.info('开始执行每日任务重建...')
+            
+            # 清除所有过期任务
+            from datetime import datetime, timedelta
+            yesterday = datetime.now() - timedelta(days=1)
+            
+            expired_tasks = Task.query.filter(Task.execution_time < yesterday).all()
+            for task in expired_tasks:
+                db.session.delete(task)
+            
+            if expired_tasks:
+                db.session.commit()
+                logger.info(f'已清除 {len(expired_tasks)} 个过期任务')
+            
+            # 重新加载所有节点的任务
+            load_all_node_tasks()
+            logger.info('每日任务重建完成')
+            
+        except Exception as e:
+            logger.error(f'每日任务重建失败: {str(e)}')
 
 
 def cleanup_old_logs():

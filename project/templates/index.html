@@ -108,9 +108,21 @@ layui.use(['layer', 'element'], function(){
                     const mobileGain = account.mobile_gain || 0;
                     const totalDailyGain = desktopGain + mobileGain;
 
+                    // 检查是否是当前时间
+                    const isCurrentTime = function(timeStr) {
+                        if (!timeStr || timeStr === 'N/A') return true;
+                        const updateTime = new Date(timeStr);
+                        const now = new Date();
+                        // 检查是否是今天
+                        return updateTime.toDateString() === now.toDateString();
+                    };
+                    
+                    const isOutdated = !isCurrentTime(lastUpdated);
+                    const cardClasses = `${cardStatusClass} ${isOutdated ? 'outdated' : ''}`;
+                    
                     const cardHtml = `
                         <div class="layui-col-md3 layui-col-sm6">
-                            <div class="layui-card info-card ${cardStatusClass}" style="box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05); transition: all 0.3s;">
+                            <div class="layui-card info-card ${cardClasses}" style="box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05); transition: all 0.3s;">
                                 <div class="layui-card-header">
                                     ${account.email}
                                     <span class="layui-badge layui-bg-blue" style="float: right;">${nodeName}</span>

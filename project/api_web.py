@@ -8,6 +8,37 @@ import json
 import secrets
 import os
 from werkzeug.security import generate_password_hash, check_password_hash
+import time
+import logging
+
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('api_web')
+
+# 简单的内存缓存
+_cache = {}
+_cache_timeout = 30  # 30秒缓存过期
+
+def get_cached_data(key):
+    """获取缓存数据"""
+    if key in _cache:
+        data, timestamp = _cache[key]
+        if time.time() - timestamp < _cache_timeout:
+            return data
+        else:
+            del _cache[key]
+    return None
+
+def set_cached_data(key, data):
+    """设置缓存数据"""
+    _cache[key] = (data, time.time())
+
+def clear_cache():
+    """清理过期缓存"""
+    current_time = time.time()
+    expired_keys = [k for k, (_, timestamp) in _cache.items() if current_time - timestamp >= _cache_timeout]
+    for key in expired_keys:
+        del _cache[key]
 
 bp = Blueprint('api_web', __name__, url_prefix='/web_api')
 
@@ -29,6 +60,9 @@ def web_login():
 @bp.route('/get_points', methods=['GET'])
 @web_login_required
 def get_points():
+    import time
+    start_time = time.time()
+    
     # [核心修改] 增加 filter 参数
     show_all = request.args.get('filter', 'all') == 'all'
     
@@ -48,7 +82,7 @@ def get_points():
     # 如果没有结果且不是查询所有数据，则尝试查询所有数据
     if not results and not show_all:
         query = db.session.query(Account, BotAccount.email, BotNode.node_name)\
-            .outerjoin(BotAccount, Account.bot_account_id == BotAccount.id)\
+            .outerjoin(BotAccount, Account.bot_account_id == Account.id)\
             .outerjoin(BotNode, BotAccount.assigned_node_id == BotNode.id)\
             .order_by(Account.last_updated.desc())
         results = query.all()
@@ -77,30 +111,80 @@ def get_points():
         else:
             acc_dict['is_stale'] = True
         points_data.append(acc_dict)
+    
+    # 记录查询时间
+    query_time = time.time() - start_time
+    if query_time > 1.0:  # 如果查询时间超过1秒，记录警告
+        print(f"警告: get_points查询耗时 {query_time:.2f}秒，返回 {len(points_data)} 条记录")
+    
     return jsonify(points_data)
 
 @bp.route('/nodes', methods=['GET', 'POST', 'PUT'])
 @web_login_required
 def manage_nodes():
     if request.method == 'GET':
-        nodes = BotNode.query.order_by(BotNode.node_name).all()
+        # 检查缓存
+        cache_key = 'nodes_data'
+        cached_data = get_cached_data(cache_key)
+        if cached_data:
+            return jsonify(cached_data)
+        
+        # 优化查询：使用单次查询获取所有数据
+        from sqlalchemy import func, case
+        
+        # 使用子查询优化账户统计
+        account_stats = db.session.query(
+            BotAccount.assigned_node_id,
+            func.count(BotAccount.id).label('total_count'),
+            func.sum(case(
+                (Account.status_details.like('%"status": true%'), 1),
+                else_=0
+            )).label('normal_count')
+        ).outerjoin(Account, BotAccount.id == Account.bot_account_id)\
+         .group_by(BotAccount.assigned_node_id)\
+         .subquery()
+        
+        # 获取所有节点和统计信息
+        nodes_query = db.session.query(
+            BotNode,
+            func.coalesce(account_stats.c.total_count, 0).label('account_count_total'),
+            func.coalesce(account_stats.c.normal_count, 0).label('account_count_normal')
+        ).outerjoin(account_stats, BotNode.id == account_stats.c.assigned_node_id)\
+         .order_by(BotNode.node_name)
+        
+        nodes_with_stats = nodes_query.all()
+        
         nodes_data = []
         now_utc = datetime.now(timezone.utc)
-        for node in nodes:
+        
+        # 批量获取任务信息
+        from .models import Task
+        all_pending_tasks = Task.query.filter(
+            Task.status == 'pending',
+            Task.execution_time > now_utc
+        ).all()
+        
+        # 创建任务映射
+        tasks_by_node = {}
+        for task in all_pending_tasks:
+            if task.node_id not in tasks_by_node:
+                tasks_by_node[task.node_id] = []
+            tasks_by_node[task.node_id].append(task)
+        
+        for node, total_count, normal_count in nodes_with_stats:
             node_dict = {
                 "id": node.id, "node_name": node.node_name, "last_seen": node.last_seen,
                 "heartbeat_timeout": node.heartbeat_timeout, "ip_address": node.ip_address,
                 "cron_schedule": node.cron_schedule, "min_sleep_minutes": node.min_sleep_minutes,
                 "max_sleep_minutes": node.max_sleep_minutes, "clusters": node.clusters,
-                            "search_delay_min": node.search_delay_min, "search_delay_max": node.search_delay_max,
-            "activity_status": node.activity_status,
-            # 日志推送配置
-            "log_push_enabled": node.log_push_enabled,
-            "log_push_interval": node.log_push_interval
+                "search_delay_min": node.search_delay_min, "search_delay_max": node.search_delay_max,
+                "activity_status": node.activity_status,
+                "log_push_enabled": node.log_push_enabled,
+                "log_push_interval": node.log_push_interval
             }
+            
             if node.last_seen:
                 last_seen_dt = node.last_seen
-                # 确保last_seen_dt带有时区信息
                 if last_seen_dt.tzinfo is None:
                     last_seen_dt = last_seen_dt.replace(tzinfo=timezone.utc)
                 timeout = node.heartbeat_timeout or 600
@@ -108,28 +192,17 @@ def manage_nodes():
             else:
                 node_dict['status'] = 'Never Seen'
             
-            # [核心修正] 在这里计算并添加统计数据到字典中
-            total_count = node.accounts.count()
-            # 这是一个简化的状态统计，更精确的统计可能需要更复杂的查询
-            normal_count = Account.query.join(BotAccount).filter(BotAccount.assigned_node_id == node.id, Account.status_details.like('%"status": true%')).count()
-            abnormal_count = total_count - normal_count
+            # 使用预计算的统计数据
+            node_dict['account_count_total'] = int(total_count or 0)
+            node_dict['account_count_normal'] = int(normal_count or 0)
+            node_dict['account_count_abnormal'] = int(total_count or 0) - int(normal_count or 0)
 
-            node_dict['account_count_total'] = total_count
-            node_dict['account_count_normal'] = normal_count
-            node_dict['account_count_abnormal'] = abnormal_count
-
-            # 获取下次执行时间（从任务表中查询）
+            # 获取下次执行时间（从预加载的任务中查找）
             try:
-                from .models import Task
-                
-                # 查询该节点的下一个即将执行的任务
-                next_task = Task.query.filter(
-                    Task.node_id == node.id,
-                    Task.status == 'pending',
-                    Task.execution_time > now_utc
-                ).order_by(Task.execution_time).first()
-                
-                if next_task:
+                node_tasks = tasks_by_node.get(node.id, [])
+                if node_tasks:
+                    # 找到最早的任务
+                    next_task = min(node_tasks, key=lambda t: t.execution_time)
                     node_dict['next_run_time'] = next_task.execution_time.isoformat()
                 else:
                     # 如果没有待执行任务，按原来的方式计算
@@ -137,23 +210,17 @@ def manage_nodes():
                         from apscheduler.triggers.cron import CronTrigger
                         import random
                         
-                        # 创建CronTrigger
                         trigger = CronTrigger.from_crontab(node.cron_schedule)
-                        
-                        # 获取下次执行时间（UTC）
                         next_run_time = trigger.get_next_fire_time(None, now_utc)
                         
-                        # 计算随机延迟（秒）
                         min_delay = node.min_sleep_minutes or 0
                         max_delay = node.max_sleep_minutes or 0
                         
                         if min_delay > 0 or max_delay > 0:
-                            # 确保min_delay不大于max_delay
                             if min_delay > max_delay:
                                 min_delay, max_delay = max_delay, min_delay
                             
                             delay_seconds = random.randint(min_delay * 60, max_delay * 60)
-                            # 添加随机延迟
                             next_run_time = next_run_time + datetime.timedelta(seconds=delay_seconds)
                         
                         node_dict['next_run_time'] = next_run_time.isoformat()
@@ -164,9 +231,19 @@ def manage_nodes():
                 print(f"获取节点 {node.node_name} 下次执行时间失败: {str(e)}")
             
             nodes_data.append(node_dict)
-        return jsonify(nodes_data)
+        
+        # 缓存结果
+        set_cached_data(cache_key, nodes_data)
+        # 返回符合规范的格式，包含success状态码
+        return jsonify({"success": True, "data": nodes_data})
 
     if request.method == 'POST' or request.method == 'PUT':
+        # 清除相关缓存
+        clear_cache()
+        # 特别清理节点数据缓存
+        if 'nodes_data' in _cache:
+            del _cache['nodes_data']
+        
         data = request.get_json()
         
         if request.method == 'POST':
@@ -341,33 +418,116 @@ def reset_node_status(node_id):
 @web_login_required
 def delete_node(node_id):
     try:
+        logger.info(f"开始删除节点，ID: {node_id}")
+        
         node = BotNode.query.get(node_id)
-        if not node: return jsonify({"status": "error", "message": "未找到该节点"}), 404
+        if not node:
+            logger.warning(f"节点不存在，ID: {node_id}")
+            return jsonify({"status": "error", "message": "节点不存在"}), 404
         
-        # 获取关联的账户数量
-        associated_accounts_count = node.accounts.count()
-        
-        # 如果有关联的账户，将它们设置为未分配状态
-        if associated_accounts_count > 0:
-            for account in node.accounts:
-                account.assigned_node_id = None
-            db.session.commit()
-        
-        # 删除节点前先移除定时任务
-        scheduler.update_node_task(node.id, None, node.node_name, 0, 0)
-        
-        # 删除节点
         node_name = node.node_name
-        db.session.delete(node)
-        db.session.commit()
+        logger.info(f"开始删除节点: {node_name} (ID: {node_id})")
         
+        # 第一步：清理节点任务（在删除节点前）
+        try:
+            from .scheduler import clear_node_tasks
+            clear_node_tasks(node.id)
+            logger.info(f"已清理节点 {node_name} 的任务")
+        except Exception as task_error:
+            logger.error(f"清理节点 {node_name} 任务时出错: {str(task_error)}")
+            # 不阻止删除，继续执行
+        
+        # 第二步：清理验证码记录（有CASCADE约束，但为了安全先手动删除）
+        try:
+            from .models import VerificationCode
+            verification_count = VerificationCode.query.filter_by(node_id=node.id).count()
+            if verification_count > 0:
+                VerificationCode.query.filter_by(node_id=node.id).delete()
+                db.session.commit()
+                logger.info(f"已删除节点 {node_name} 的 {verification_count} 条验证码记录")
+        except Exception as verification_error:
+            logger.error(f"删除节点 {node_name} 验证码记录时出错: {str(verification_error)}")
+            db.session.rollback()
+            # 不阻止删除，继续执行
+        
+        # 第三步：清理节点日志（有CASCADE约束，但为了安全先手动删除）
+        try:
+            from .models import NodeLog
+            log_count = NodeLog.query.filter_by(node_id=node.id).count()
+            if log_count > 0:
+                NodeLog.query.filter_by(node_id=node.id).delete()
+                db.session.commit()
+                logger.info(f"已删除节点 {node_name} 的 {log_count} 条日志")
+        except Exception as log_error:
+            logger.error(f"删除节点 {node_name} 日志时出错: {str(log_error)}")
+            db.session.rollback()
+            # 不阻止删除，继续执行
+        
+        # 第四步：清理任务表（有CASCADE约束，但为了安全先手动删除）
+        try:
+            from .models import Task
+            task_count = Task.query.filter_by(node_id=node.id).count()
+            if task_count > 0:
+                Task.query.filter_by(node_id=node.id).delete()
+                db.session.commit()
+                logger.info(f"已删除节点 {node_name} 的 {task_count} 个任务")
+        except Exception as task_db_error:
+            logger.error(f"删除节点 {node_name} 任务记录时出错: {str(task_db_error)}")
+            db.session.rollback()
+            # 不阻止删除，继续执行
+        
+        # 第五步：设置关联账户为未分配状态
+        try:
+            associated_accounts_count = node.accounts.count()
+            logger.info(f"节点 {node_name} 关联了 {associated_accounts_count} 个账户")
+            
+            if associated_accounts_count > 0:
+                for account in node.accounts:
+                    account.assigned_node_id = None
+                db.session.commit()
+                logger.info(f"已将 {associated_accounts_count} 个账户设置为未分配状态")
+        except Exception as account_error:
+            logger.error(f"设置账户未分配状态时出错: {str(account_error)}")
+            db.session.rollback()
+            return jsonify({"status": "error", "message": f"处理关联账户时出错: {str(account_error)}"}), 500
+        
+        # 第六步：删除节点本身
+        try:
+            logger.info(f"准备删除节点 {node_name}")
+            db.session.delete(node)
+            db.session.commit()
+            logger.info(f"节点 {node_name} 删除成功")
+        except Exception as delete_error:
+            logger.error(f"删除节点 {node_name} 时出错: {str(delete_error)}")
+            import traceback
+            logger.error(f"删除节点错误堆栈: {traceback.format_exc()}")
+            db.session.rollback()
+            return jsonify({"status": "error", "message": f"删除节点时出错: {str(delete_error)}"}), 500
+        
+        # 清理缓存
+        clear_cache()
+        # 特别清理节点数据缓存
+        if 'nodes_data' in _cache:
+            del _cache['nodes_data']
+        
+        # 返回成功消息
         if associated_accounts_count > 0:
-            return jsonify({"status": "success", "message": f"节点 {node_name} 已删除，{associated_accounts_count} 个关联账户已设置为未分配状态。"})
+            return jsonify({
+                "status": "success", 
+                "message": f"节点 {node_name} 已删除，{associated_accounts_count} 个关联账户已设置为未分配状态。"
+            })
         else:
-            return jsonify({"status": "success", "message": f"节点 {node_name} 已删除。"})
+            return jsonify({
+                "status": "success", 
+                "message": f"节点 {node_name} 已删除。"
+            })
+            
     except Exception as e:
+        logger.error(f"删除节点时发生未知错误: {str(e)}")
+        import traceback
+        logger.error(f"未知错误堆栈: {traceback.format_exc()}")
         db.session.rollback()
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": f"删除节点时发生未知错误: {str(e)}"}), 500
 
 
 
@@ -375,15 +535,28 @@ def delete_node(node_id):
 @web_login_required
 def manage_bot_accounts():
     if request.method == 'GET':
-        accounts = BotAccount.query.order_by(BotAccount.email).all()
+        # 检查缓存
+        cache_key = 'bot_accounts_data'
+        cached_data = get_cached_data(cache_key)
+        if cached_data:
+            return jsonify(cached_data)
+        
+        # 优化查询：使用预加载减少N+1查询
+        from .models import UserAgent
+        
+        # 预加载所有User-Agent映射
+        user_agents = {ua.used_by_account_id: ua.id for ua in UserAgent.query.filter(UserAgent.used_by_account_id.isnot(None)).all()}
+        
+        # 使用预加载查询账户和监控数据
+        accounts = db.session.query(BotAccount, Account, BotNode.node_name)\
+            .outerjoin(Account, BotAccount.id == Account.bot_account_id)\
+            .outerjoin(BotNode, BotAccount.assigned_node_id == BotNode.id)\
+            .order_by(BotAccount.email)\
+            .all()
+        
         accounts_data = []
-        for acc in accounts:
-            monitoring_data = acc.monitoring_data
-            
-            # 查找该账户使用的User-Agent
-            from .models import UserAgent
-            user_agent = UserAgent.query.filter_by(used_by_account_id=acc.id).first()
-            user_agent_id = user_agent.id if user_agent else None
+        for acc, monitoring_data, node_name in accounts:
+            user_agent_id = user_agents.get(acc.id)
             
             acc_dict = {
                 "id": acc.id, "email": acc.email, "password": acc.password,
@@ -393,7 +566,7 @@ def manage_bot_accounts():
                 "user_agent_id": user_agent_id,
                 "hotSearchEndpoints": json.loads(acc.hot_search_endpoints or '[]'),
                 "assigned_node_id": acc.assigned_node_id,
-                "assigned_node_name": acc.node.node_name if acc.node else None,
+                "assigned_node_name": node_name,
                 "is_enabled": acc.is_enabled,
                 "monitoring_data": {
                     "status_details": json.loads(monitoring_data.status_details) if monitoring_data and monitoring_data.status_details else {},
@@ -405,9 +578,15 @@ def manage_bot_accounts():
                 }
             }
             accounts_data.append(acc_dict)
+        
+        # 缓存结果
+        set_cached_data(cache_key, accounts_data)
         return jsonify(accounts_data)
 
     if request.method == 'POST':
+            # 清除相关缓存
+            clear_cache()
+            
             data = request.get_json()
             email = data.get('email')
             try:

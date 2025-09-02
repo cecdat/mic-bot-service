@@ -272,3 +272,55 @@ def update_points():
     except Exception as e:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@bp.route('/report_task_completion', methods=['POST'])
+@bot_api_required
+def report_task_completion():
+    data = request.get_json()
+    task_id = data.get('task_id')
+    status = data.get('status')
+    error_message = data.get('error_message')
+    
+    if not all([task_id, status]):
+        return jsonify({"status": "error", "message": "Missing task_id or status"}), 400
+        
+    try:
+        # 查找对应的任务
+        task = Task.query.get(task_id)
+        if not task:
+            return jsonify({"status": "error", "message": "Task not found"}), 404
+        
+        # 更新任务状态
+        task.status = status
+        if status == 'completed':
+            task.completed_at = datetime.now(timezone.utc)
+        elif status == 'failed':
+            task.error_message = error_message
+            task.completed_at = datetime.now(timezone.utc)
+        
+        db.session.commit()
+        
+        logger.info(f'任务 {task_id} 状态已更新为: {status}')
+        return jsonify({"status": "success", "message": "Task completion reported"})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@bp.route('/test_push', methods=['POST'])
+def test_push():
+    """测试推送功能"""
+    data = request.get_json()
+    event_type = data.get('event_type')
+    title = data.get('title')
+    body = data.get('body')
+    
+    if not all([event_type, title, body]):
+        return jsonify({"status": "error", "message": "Missing required fields"}), 400
+    
+    try:
+        from .push import trigger_push_notification
+        trigger_push_notification(event_type, title, body)
+        return jsonify({"status": "success", "message": f"Push notification sent for {event_type}"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500

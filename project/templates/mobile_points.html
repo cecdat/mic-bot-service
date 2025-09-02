@@ -8,12 +8,17 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
         /* 全局样式 */
+        * {
+            box-sizing: border-box;
+        }
+        
         body {
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
             background-color: #f0f2f5;
             color: #333;
             margin: 0;
             padding: 0.5rem;
+            min-height: 100vh;
         }
 
         /* 主容器 */
@@ -25,74 +30,108 @@
         /* 头部样式 */
         .mobile-header {
             text-align: center;
-            margin-bottom: 1rem;
-            padding: 1rem 0;
+            margin-bottom: 1.5rem;
+            padding: 1.5rem 0;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
         }
 
         .mobile-header h1 {
-            font-size: 1.5rem;
-            font-weight: 600;
+            font-size: 1.8rem;
+            font-weight: 700;
             color: #34495e;
             margin: 0;
         }
 
         .mobile-header .subtitle {
-            font-size: 0.9rem;
+            font-size: 1rem;
             color: #6c757d;
             margin-top: 0.5rem;
+            font-weight: 400;
         }
 
-
-
-        /* 卡片样式 */
+        /* 毛玻璃卡片样式 */
         .points-card {
-            background: #fff;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin-bottom: 1rem;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
             overflow: hidden;
-            transition: transform 0.2s ease-in-out;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .points-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+            pointer-events: none;
         }
 
         .points-card:hover {
-            transform: translateY(-2px);
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            border-color: rgba(255, 255, 255, 0.3);
         }
 
         .card-header {
-            padding: 1rem;
+            padding: 1.5rem;
             color: white;
             font-weight: 600;
             position: relative;
             cursor: pointer;
             user-select: none;
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.1) 100%);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .card-header:hover {
-            opacity: 0.9;
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.2) 100%);
         }
 
         .card-header .account-email {
-            font-size: 0.9rem;
-            margin-bottom: 0.5rem;
+            font-size: 1rem;
+            margin-bottom: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-header .account-email i {
+            font-size: 1.2rem;
+            color: rgba(255, 255, 255, 0.9);
         }
 
         .card-header .node-name {
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             opacity: 0.9;
             position: absolute;
-            top: 1rem;
-            right: 3.5rem;
-            background: rgba(255,255,255,0.2);
-            padding: 0.2rem 0.5rem;
-            border-radius: 10px;
+            top: 1.5rem;
+            right: 4rem;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.4rem 0.8rem;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
         }
 
         .card-header .expand-icon {
             position: absolute;
-            top: 1rem;
-            right: 1rem;
-            font-size: 1.2rem;
-            transition: transform 0.3s ease;
+            top: 1.5rem;
+            right: 1.5rem;
+            font-size: 1.3rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            color: rgba(255, 255, 255, 0.9);
         }
 
         .card-header.expanded .expand-icon {
@@ -100,20 +139,42 @@
         }
 
         .card-body {
-            padding: 1rem;
+            padding: 1.5rem;
             display: none;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
         }
 
         .card-body.expanded {
             display: block;
+            animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .points-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid #f0f0f0;
+            padding: 0.8rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.2s ease;
+        }
+
+        .points-row:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
         }
 
         .points-row:last-child {
@@ -122,95 +183,131 @@
 
         .points-label {
             font-weight: 500;
-            color: #495057;
-            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
         .points-value {
             font-weight: 600;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
+            color: white;
         }
 
         .points-value.total {
-            color: #0078d4;
-            font-size: 1rem;
+            color: #4ade80;
+            font-size: 1.1rem;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
         }
 
         .points-value.daily {
-            color: #107c10;
+            color: #60a5fa;
         }
 
         .points-value.value {
-            color: #d83b01;
+            color: #fbbf24;
         }
 
         /* 状态徽章 */
         .status-badge {
             font-weight: bold;
-            padding: 0.25rem 0.5rem;
-            border-radius: 8px;
+            padding: 0.4rem 0.8rem;
+            border-radius: 12px;
             color: white;
-            font-size: 0.75rem;
+            font-size: 0.8rem;
             display: inline-flex;
             align-items: center;
-            gap: 0.2rem;
-            margin-right: 0.3rem;
+            gap: 0.3rem;
+            margin-right: 0.4rem;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.2s ease;
         }
 
-        .status-success { background-color: #2ecc71; }
-        .status-warning { background-color: #f39c12; }
-        .status-danger { background-color: #e74c3c; }
-        .status-secondary { background-color: #95a5a6; }
+        .status-badge:hover {
+            transform: scale(1.05);
+        }
+
+        .status-success { 
+            background: linear-gradient(135deg, #10b981, #059669);
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+        }
+        .status-warning { 
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+        }
+        .status-danger { 
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+        }
+        .status-secondary { 
+            background: linear-gradient(135deg, #6b7280, #4b5563);
+            box-shadow: 0 2px 8px rgba(107, 114, 128, 0.3);
+        }
 
         /* 设备状态徽章特殊样式 */
         .status-badge i {
-            font-size: 0.9rem;
+            font-size: 1rem;
         }
 
         /* 徽章样式 */
         .badge {
-            font-size: 0.7rem;
-            padding: 0.2rem 0.4rem;
-            border-radius: 8px;
-            margin-left: 0.3rem;
+            font-size: 0.75rem;
+            padding: 0.3rem 0.6rem;
+            border-radius: 10px;
+            margin-left: 0.4rem;
             font-weight: 500;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.2s ease;
+        }
+
+        .badge:hover {
+            transform: scale(1.05);
         }
 
         .badge-warning {
-            background-color: #ffc107;
-            color: #212529;
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            color: #1f2937;
+            box-shadow: 0 2px 8px rgba(251, 191, 36, 0.3);
         }
 
         .badge-danger {
-            background-color: #dc3545;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
             color: white;
+            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
         }
 
         .badge-info {
-            background-color: #17a2b8;
+            background: linear-gradient(135deg, #60a5fa, #3b82f6);
             color: white;
+            box-shadow: 0 2px 8px rgba(96, 165, 250, 0.3);
         }
 
         .badge-success {
-            background-color: #28a745;
+            background: linear-gradient(135deg, #4ade80, #22c55e);
             color: white;
+            box-shadow: 0 2px 8px rgba(74, 222, 128, 0.3);
         }
 
         .badge-secondary {
-            background-color: #6c757d;
+            background: linear-gradient(135deg, #9ca3af, #6b7280);
             color: white;
+            box-shadow: 0 2px 8px rgba(156, 163, 175, 0.3);
         }
 
         /* 节点分组样式 */
         .node-group {
-            margin-bottom: 1.5rem;
+            margin-bottom: 2rem;
         }
 
         .node-group-header {
             background: #fff;
-            padding: 0.8rem 1rem;
-            border-radius: 8px;
-            margin-bottom: 0.5rem;
+            padding: 1rem 1.5rem;
+            border-radius: 10px;
+            margin-bottom: 1rem;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             font-weight: 600;
             color: #495057;
@@ -225,18 +322,21 @@
         }
 
         .node-group-color {
-            width: 12px;
-            height: 12px;
+            width: 16px;
+            height: 16px;
             border-radius: 50%;
-            margin-right: 0.5rem;
+            margin-right: 0.8rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
 
         .node-group-count {
-            background: #e9ecef;
-            color: #6c757d;
-            padding: 0.2rem 0.5rem;
-            border-radius: 12px;
-            font-size: 0.8rem;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
         }
 
         /* 加载状态 */
@@ -266,19 +366,27 @@
             position: fixed;
             bottom: 2rem;
             right: 2rem;
-            width: 3rem;
-            height: 3rem;
+            width: 4rem;
+            height: 4rem;
             border-radius: 50%;
-            background: #0078d4;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
             color: white;
             border: none;
-            box-shadow: 0 4px 12px rgba(0,120,212,0.3);
+            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4);
             z-index: 1000;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         .refresh-btn:hover {
-            background: #106ebe;
-            transform: scale(1.1);
+            background: linear-gradient(135deg, #2563eb, #1e40af);
+            transform: scale(1.1) rotate(180deg);
+            box-shadow: 0 12px 32px rgba(59, 130, 246, 0.6);
+        }
+
+        .refresh-btn i {
+            font-size: 1.5rem;
         }
 
         /* 空状态 */
@@ -308,18 +416,48 @@
                 padding: 0.25rem;
             }
             
-            .auth-prompt {
-                margin: 1rem auto;
-                padding: 1rem;
+            .mobile-header {
+                padding: 1rem 0;
+                margin-bottom: 1rem;
+            }
+            
+            .mobile-header h1 {
+                font-size: 1.5rem;
             }
             
             .card-header {
-                padding: 0.8rem;
+                padding: 1rem;
             }
             
             .card-body {
-                padding: 0.8rem;
+                padding: 1rem;
             }
+            
+            .refresh-btn {
+                width: 3.5rem;
+                height: 3.5rem;
+                bottom: 1.5rem;
+                right: 1.5rem;
+            }
+        }
+
+        /* 滚动条美化 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
         }
     </style>
 </head>
@@ -350,8 +488,18 @@
     <script>
         const POINTS_PER_YUAN = 179.25;
         const bgColors = [
-            '#0078d4', '#d83b01', '#107c10', '#5c2d91', '#008272', '#b7472a',
-            '#34495e', '#8e44ad', '#27ae60', '#c0392b', '#2980b9', '#7f8c8d'
+            'linear-gradient(135deg, #667eea, #764ba2)',
+            'linear-gradient(135deg, #f093fb, #f5576c)',
+            'linear-gradient(135deg, #4facfe, #00f2fe)',
+            'linear-gradient(135deg, #43e97b, #38f9d7)',
+            'linear-gradient(135deg, #fa7093, #fee140)',
+            'linear-gradient(135deg, #a8edea, #fed6e3)',
+            'linear-gradient(135deg, #ffecd2, #fcb69f)',
+            'linear-gradient(135deg, #ff9a9e, #fecfef)',
+            'linear-gradient(135deg, #a18cd1, #fbc2eb)',
+            'linear-gradient(135deg, #fad0c4, #ffd1ff)',
+            'linear-gradient(135deg, #ffecd2, #fcb69f)',
+            'linear-gradient(135deg, #ff9a9e, #fecfef)'
         ];
 
         // 计算积分价值
@@ -524,10 +672,10 @@
             const container = document.getElementById('points-container');
             container.innerHTML = `
                 <div class="loading">
-                    <div class="spinner-border text-primary" role="status">
+                    <div class="spinner-border" role="status">
                         <span class="visually-hidden">加载中...</span>
                     </div>
-                    <div class="mt-2">正在加载数据...</div>
+                    <div class="mt-3">正在加载数据...</div>
                 </div>
             `;
         }
@@ -550,12 +698,12 @@
                 <div class="empty-state">
                     <i class="bi bi-inbox"></i>
                     <div>暂无账户数据</div>
-                    <div class="mt-2 text-muted">请检查令牌是否正确</div>
+                    <div class="mt-3 text-muted">请检查令牌是否正确</div>
                 </div>
             `;
         }
 
-                // 获取积分数据
+        // 获取积分数据
         function fetchPoints() {
             showLoading();
 
@@ -597,10 +745,10 @@
                     nodeGroups[nodeName].push(account);
                 });
 
-                                 // 为每个节点组创建HTML
-                 Object.keys(nodeGroups).forEach(nodeName => {
-                     const accounts = nodeGroups[nodeName];
-                     const cardColor = nodeColorMap[nodeName];
+                // 为每个节点组创建HTML
+                Object.keys(nodeGroups).forEach(nodeName => {
+                    const accounts = nodeGroups[nodeName];
+                    const cardColor = nodeColorMap[nodeName];
                     
                     // 创建该节点下的所有账户卡片
                     accounts.forEach(account => {
@@ -636,9 +784,9 @@
                         
                         const cardHtml = `
                             <div class="points-card">
-                                <div class="card-header" style="background-color: ${cardColor};" onclick="toggleCard(this)">
+                                <div class="card-header" style="background: ${cardColor};" onclick="toggleCard(this)">
                                     <div class="account-email">
-                                        <i class="bi bi-person-circle me-2"></i>
+                                        <i class="bi bi-person-circle"></i>
                                         ${account.email}
                                         ${badges}
                                     </div>
@@ -647,35 +795,59 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="points-row">
-                                        <span class="points-label">账户登录状态</span>
+                                        <span class="points-label">
+                                            <i class="bi bi-shield-check"></i>
+                                            账户登录状态
+                                        </span>
                                         <span class="points-value">${desktopStatusBadge}${mobileStatusBadge}</span>
                                     </div>
                                     <div class="points-row">
-                                        <span class="points-label">总积分</span>
+                                        <span class="points-label">
+                                            <i class="bi bi-star-fill"></i>
+                                            总积分
+                                        </span>
                                         <span class="points-value total">${account.total_points || 'N/A'}</span>
                                     </div>
                                     <div class="points-row">
-                                        <span class="points-label">总价值</span>
+                                        <span class="points-label">
+                                            <i class="bi bi-currency-yen"></i>
+                                            总价值
+                                        </span>
                                         <span class="points-value value">${totalValue}</span>
                                     </div>
                                     <div class="points-row">
-                                        <span class="points-label">今日收益</span>
+                                        <span class="points-label">
+                                            <i class="bi bi-graph-up"></i>
+                                            今日收益
+                                        </span>
                                         <span class="points-value daily">${account.daily_gain || 'N/A'}</span>
                                     </div>
                                     <div class="points-row">
-                                        <span class="points-label">今日价值</span>
+                                        <span class="points-label">
+                                            <i class="bi bi-currency-yen"></i>
+                                            今日价值
+                                        </span>
                                         <span class="points-value value">${dailyValue}</span>
                                     </div>
                                     <div class="points-row">
-                                        <span class="points-label">桌面端收益</span>
+                                        <span class="points-label">
+                                            <i class="bi bi-laptop"></i>
+                                            桌面端收益
+                                        </span>
                                         <span class="points-value">${account.desktop_gain || 'N/A'}</span>
                                     </div>
                                     <div class="points-row">
-                                        <span class="points-label">移动端收益</span>
+                                        <span class="points-label">
+                                            <i class="bi bi-phone"></i>
+                                            移动端收益
+                                        </span>
                                         <span class="points-value">${account.mobile_gain || 'N/A'}</span>
                                     </div>
                                     <div class="points-row">
-                                        <span class="points-label">最后更新</span>
+                                        <span class="points-label">
+                                            <i class="bi bi-clock"></i>
+                                            最后更新
+                                        </span>
                                         <span class="points-value">${lastUpdated}</span>
                                     </div>
                                 </div>

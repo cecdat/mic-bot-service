@@ -1,0 +1,28 @@
+/* 表格单元格和徽章居中显示 - 专用样式文件 */
+.layui-table-cell {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+}
+
+.layui-table-cell .layui-badge {
+    margin: 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.layui-table-cell span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 修复状态图标在表格中的对齐 */
+.status-icon-group {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}

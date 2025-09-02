@@ -104,6 +104,7 @@ fi
 
 echo "数据库初始化脚本执行完成"
 
+
 # 启动Flask应用
 echo "初始化完成，启动Flask应用..."
 flask run --host=0.0.0.0 --port=5000
