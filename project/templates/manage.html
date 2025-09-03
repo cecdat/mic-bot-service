@@ -7,53 +7,51 @@
 <link rel="stylesheet" href="/static/table-center.css">
 <div class="layui-card">
     <div class="layui-card-body">
-        <!-- 筛选区域 -->
-        <div class="layui-form layui-form-pane" style="margin-bottom: 15px; padding: 15px; background-color: #f8f8f8; border-radius: 4px;">
+        <!-- 筛选和操作区域 -->
+        <div class="layui-form layui-form-pane" style="margin-bottom: 15px; padding: 10px; background-color: #f8f8f8; border-radius: 4px;">
             <div class="layui-row layui-col-space10">
-                <div class="layui-col-md3">
-                    <label class="layui-form-label">账户状态</label>
+                <div class="layui-col-md2">
+                    <label class="layui-form-label" style="padding: 5px 10px; font-size: 12px;">状态</label>
                     <div class="layui-input-block">
-                        <select id="statusFilter" lay-filter="statusFilter">
-                            <option value="">全部状态</option>
+                        <select id="statusFilter" lay-filter="statusFilter" style="height: 28px; font-size: 12px;">
+                            <option value="">全部</option>
                             <option value="true">启用</option>
                             <option value="false">禁用</option>
                         </select>
                     </div>
                 </div>
-                <div class="layui-col-md3">
-                    <label class="layui-form-label">分配节点</label>
+                <div class="layui-col-md2">
+                    <label class="layui-form-label" style="padding: 5px 10px; font-size: 12px;">节点</label>
                     <div class="layui-input-block">
-                        <select id="nodeFilter" lay-filter="nodeFilter">
-                            <option value="">全部节点</option>
+                        <select id="nodeFilter" lay-filter="nodeFilter" style="height: 28px; font-size: 12px;">
+                            <option value="">全部</option>
                             <!-- 节点选项将通过JavaScript动态加载 -->
                         </select>
                     </div>
                 </div>
-                <div class="layui-col-md4">
-                    <label class="layui-form-label">邮箱</label>
+                <div class="layui-col-md3">
+                    <label class="layui-form-label" style="padding: 5px 10px; font-size: 12px;">邮箱</label>
                     <div class="layui-input-block">
-                        <input type="text" id="emailSearch" placeholder="请输入邮箱关键词" autocomplete="off" class="layui-input">
+                        <input type="text" id="emailSearch" placeholder="邮箱关键词" autocomplete="off" class="layui-input" style="height: 28px; font-size: 12px;">
                     </div>
                 </div>
-                <div class="layui-col-md2">
-                    <div class="layui-btn-group">
-                        <button class="layui-btn layui-btn-primary" id="clearFilter">清除筛选</button>
+                <div class="layui-col-md5">
+                    <div class="layui-btn-group" style="margin-top: 5px;">
+                        <button class="layui-btn layui-btn-primary layui-btn-sm" id="clearFilter">
+                            <i class="layui-icon layui-icon-refresh"></i> 清除
+                        </button>
+                        <button class="layui-btn layui-btn-primary layui-btn-sm" id="refreshTable">
+                            <i class="layui-icon layui-icon-refresh"></i> 刷新
+                        </button>
+                        <button class="layui-btn layui-btn-sm" id="addAccount">
+                            <i class="layui-icon layui-icon-add-circle"></i> 新增
+                        </button>
+                        <button class="layui-btn layui-btn-danger layui-btn-sm" id="batchDelete">
+                            <i class="layui-icon layui-icon-delete"></i> 删除
+                        </button>
                     </div>
                 </div>
             </div>
-        </div>
-        
-        <!-- 操作按钮 -->
-        <div class="layui-btn-group" style="margin-bottom: 15px;">
-            <button class="layui-btn layui-btn-primary" id="refreshTable">
-                <i class="layui-icon layui-icon-refresh"></i> 刷新
-            </button>
-            <button class="layui-btn" id="addAccount">
-                <i class="layui-icon layui-icon-add-circle"></i> 新增账户
-            </button>
-            <button class="layui-btn layui-btn-danger" id="batchDelete">
-                <i class="layui-icon layui-icon-delete"></i> 批量删除
-            </button>
         </div>
         
         <!-- 数据表格 -->
@@ -62,6 +60,7 @@
         <!-- 操作栏模板 -->
         <script type="text/html" id="tableBar">
             <a class="layui-btn layui-btn-xs layui-btn-primary" lay-event="edit">编辑</a>
+            <a class="layui-btn layui-btn-xs {{d.is_enabled ? 'layui-btn-warm' : 'layui-btn-normal'}}" lay-event="toggle">{{d.is_enabled ? '禁用' : '启用'}}</a>
             <a class="layui-btn layui-btn-xs layui-btn-danger" lay-event="del">删除</a>
         </script>
         
@@ -237,12 +236,11 @@
                 }
                 return res;
             },
-            toolbar: '#toolbarDemo',
-            defaultToolbar: ['filter', 'exports', 'print'],
+            toolbar: false,
+            defaultToolbar: false,
             title: '账户数据表',
             cols: [[
                 {type: 'checkbox', fixed: 'left'},
-                {field: 'id', title: 'ID', width: 80, fixed: 'left'},
                 {field: 'email', title: '邮箱', minWidth: 200},
                 {field: 'assigned_node_name', title: '分配节点', minWidth: 150, templet: function(d) {
                     return d.assigned_node_name || '未分配';
@@ -266,13 +264,7 @@
                     }
                     return '-';
                 }},
-                {field: 'hotSearchEndpoints', title: '热搜源', minWidth: 120, templet: function(d) {
-                    if (d.hotSearchEndpoints && Array.isArray(d.hotSearchEndpoints)) {
-                        return d.hotSearchEndpoints.join(', ');
-                    }
-                    return '-';
-                }},
-                {fixed: 'right', title: '操作', minWidth: 200, toolbar: '#tableBar'}
+                {fixed: 'right', title: '操作', minWidth: 250, toolbar: '#tableBar'}
             ]],
             page: true,
             limit: 10,
@@ -290,12 +282,12 @@
         window.toggleAccountStatus = function(accountId, currentStatus) {
             const newStatus = !currentStatus;
             $.ajax({
-                url: `/web_api/bot_accounts/${accountId}/status`,
+                url: `/web_api/bot_accounts/${accountId}/toggle`,
                 type: 'POST',
                 data: JSON.stringify({status: newStatus}),
                 contentType: 'application/json',
                 success: function(res) {
-                    if (res.success) {
+                    if (res.status === 'success') {
                         layer.msg(newStatus ? '已启用' : '已禁用', {icon: 1});
                         tableIns.reload();
                     } else {
@@ -314,22 +306,43 @@
                 url: `/web_api/bot_accounts/${accountId}`,
                 type: 'GET',
                 success: function(res) {
-                    if (res.success && res.data) {
+                    if (res.status === 'success' && res.data) {
                         const account = res.data;
                         
                         // 填充表单数据
+                        let proxyData = {};
+                        try {
+                            proxyData = account.proxy ? (typeof account.proxy === 'string' ? JSON.parse(account.proxy) : account.proxy) : {};
+                        } catch (e) {
+                            proxyData = {};
+                        }
+                        
+                        let userAgentsData = {};
+                        try {
+                            userAgentsData = account.user_agents ? (typeof account.user_agents === 'string' ? JSON.parse(account.user_agents) : account.user_agents) : {};
+                        } catch (e) {
+                            userAgentsData = {};
+                        }
+                        
+                        let hotSearchData = [];
+                        try {
+                            hotSearchData = account.hot_search_endpoints ? (typeof account.hot_search_endpoints === 'string' ? JSON.parse(account.hot_search_endpoints) : account.hot_search_endpoints) : [];
+                        } catch (e) {
+                            hotSearchData = [];
+                        }
+                        
                         form.val('accountForm', {
                             'id': account.id,
                             'email': account.email,
                             'auxiliary_email': account.auxiliary_email || '',
                             'assigned_node_id': account.assigned_node_id || '',
-                            'proxyUrl': account.proxy?.url || '',
-                            'proxyPort': account.proxy?.port || '',
-                            'proxyUsername': account.proxy?.username || '',
-                            'proxyPassword': account.proxy?.password || '',
+                            'proxyUrl': proxyData.url || '',
+                            'proxyPort': proxyData.port || '',
+                            'proxyUsername': proxyData.username || '',
+                            'proxyPassword': proxyData.password || '',
                             'user_agent_id': account.user_agent_id || '',
-                            'userAgents': account.userAgents ? JSON.stringify(account.userAgents) : '',
-                            'hotSearchEndpoints': account.hotSearchEndpoints ? JSON.stringify(account.hotSearchEndpoints) : ''
+                            'userAgents': JSON.stringify(userAgentsData),
+                            'hotSearchEndpoints': JSON.stringify(hotSearchData)
                         });
                         
                         // 处理编辑模式下的特殊逻辑
@@ -458,7 +471,7 @@
                             }
                         });
                     } else {
-                        layer.alert('获取账户信息失败: ' + res.message, {icon: 2});
+                        layer.alert('获取账户信息失败: ' + (res.message || '未知错误'), {icon: 2});
                     }
                 },
                 error: function() {
