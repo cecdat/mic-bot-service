@@ -3,6 +3,7 @@ from .db import db
 from .models import Account, BotAccount, BotNode, PushConfig, WebUser
 from .auth import web_login_required
 from . import scheduler
+from .bing_wallpaper import bing_wallpaper
 from datetime import datetime, timedelta, timezone
 import json
 import secrets
@@ -414,6 +415,37 @@ def reset_node_status(node_id):
     return jsonify({"status": "success", "message": f"节点 {node.node_name} 的Bot状态已重置为待机"})
 
 
+@bp.route('/nodes/<int:node_id>/regenerate-token', methods=['POST'])
+@web_login_required
+def regenerate_node_token(node_id):
+    """重新生成节点的API Token"""
+    try:
+        node = BotNode.query.get(node_id)
+        if not node:
+            return jsonify({"status": "error", "message": "节点不存在"}), 404
+        
+        # 生成新的API Token
+        new_token = secrets.token_urlsafe(32)
+        token_hash = generate_password_hash(new_token)
+        
+        # 更新数据库中的token hash
+        node.api_token_hash = token_hash
+        db.session.commit()
+        
+        logger.info(f"节点 {node.node_name} 的API Token已重新生成")
+        
+        return jsonify({
+            "status": "success", 
+            "message": f"节点 {node.node_name} 的API Token已重新生成",
+            "token": new_token
+        })
+        
+    except Exception as e:
+        logger.error(f"重新生成API Token失败: {e}")
+        db.session.rollback()
+        return jsonify({"status": "error", "message": f"重新生成API Token失败: {str(e)}"}), 500
+
+
 @bp.route('/nodes/<int:node_id>', methods=['DELETE'])
 @web_login_required
 def delete_node(node_id):
@@ -509,6 +541,8 @@ def delete_node(node_id):
         # 特别清理节点数据缓存
         if 'nodes_data' in _cache:
             del _cache['nodes_data']
+        # 强制清理所有缓存
+        _cache.clear()
         
         # 返回成功消息
         if associated_accounts_count > 0:
@@ -675,25 +709,78 @@ def toggle_bot_account(account_id):
         print(f"切换账户状态时出错: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@bp.route('/bot_accounts/<int:account_id>', methods=['DELETE'])
+@bp.route('/bot_accounts/<int:account_id>', methods=['GET', 'DELETE'])
 @web_login_required
-def delete_bot_account(account_id):
-    try:
-        account = BotAccount.query.get(account_id)
-        if account:
-            # 释放该账户使用的User-Agent
-            from .models import UserAgent
-            user_agent = UserAgent.query.filter_by(used_by_account_id=account.id).first()
-            if user_agent:
-                user_agent.is_used = False
-                user_agent.used_by_account_id = None
+def manage_single_bot_account(account_id):
+    if request.method == 'GET':
+        # 获取单个账户信息
+        try:
+            account = BotAccount.query.get(account_id)
+            if not account:
+                return jsonify({"status": "error", "message": "Account not found"}), 404
             
-            db.session.delete(account)
-            db.session.commit()
-        return jsonify({"status": "success", "message": "Account deleted."})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"status": "error", "message": str(e)}), 500
+            # 获取关联的监控数据
+            monitoring_data = None
+            if hasattr(account, 'monitoring_data') and account.monitoring_data:
+                monitoring_data = {
+                    'total_points': account.monitoring_data.total_points,
+                    'daily_gain': account.monitoring_data.daily_gain,
+                    'desktop_gain': account.monitoring_data.desktop_gain,
+                    'mobile_gain': account.monitoring_data.mobile_gain,
+                    'last_updated': account.monitoring_data.last_updated.isoformat() if account.monitoring_data.last_updated else None,
+                    'status_details': account.monitoring_data.status_details
+                }
+            
+            # 获取分配的节点信息
+            node_info = None
+            if account.assigned_node_id:
+                node = BotNode.query.get(account.assigned_node_id)
+                if node:
+                    node_info = {
+                        'id': node.id,
+                        'name': node.node_name
+                    }
+            
+            account_data = {
+                'id': account.id,
+                'email': account.email,
+                'password': account.password,
+                'auxiliary_email': account.auxiliary_email,
+                'proxy': account.proxy,
+                'user_agents': account.user_agents,
+                'hot_search_endpoints': account.hot_search_endpoints,
+                'assigned_node_id': account.assigned_node_id,
+                'status': account.status,
+                'is_enabled': account.is_enabled,
+                'monitoring_data': monitoring_data,
+                'node_info': node_info
+            }
+            
+            return jsonify({"status": "success", "data": account_data})
+            
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+    
+    elif request.method == 'DELETE':
+        # 删除账户
+        try:
+            account = BotAccount.query.get(account_id)
+            if account:
+                # 释放该账户使用的User-Agent
+                from .models import UserAgent
+                user_agent = UserAgent.query.filter_by(used_by_account_id=account.id).first()
+                if user_agent:
+                    user_agent.is_used = False
+                    user_agent.used_by_account_id = None
+                
+                db.session.delete(account)
+                db.session.commit()
+            return jsonify({"status": "success", "message": "Account deleted."})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"status": "error", "message": str(e)}), 500
+
+
 
 @bp.route('/push_configs', methods=['GET', 'POST'])
 @web_login_required
@@ -919,3 +1006,18 @@ def mobile_get_points():
         })
     
     return jsonify(points_data)
+
+@bp.route('/wallpaper', methods=['GET'])
+def get_wallpaper():
+    """获取Bing每日壁纸URL"""
+    try:
+        wallpaper_url = bing_wallpaper.get_wallpaper_url()
+        return jsonify({
+            "success": True,
+            "url": wallpaper_url
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"获取壁纸失败: {str(e)}"
+        }), 500

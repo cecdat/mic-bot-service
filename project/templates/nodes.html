@@ -19,6 +19,7 @@
     <span class="layui-badge layui-bg-danger" title="停止" {{# if(d.activity_status !== 'Running'){ }} style='opacity: 0.5; cursor: not-allowed;' {{# }}} lay-event="stop"><i class="layui-icon layui-icon-pause"></i></span>
     <span class="layui-badge layui-bg-primary" title="重置bot状态" lay-event="reset"><i class="layui-icon layui-icon-refresh"></i></span>
     <span class="layui-badge layui-bg-green" title="查看日志" lay-event="logs"><i class="layui-icon layui-icon-console"></i></span>
+    <span class="layui-badge layui-bg-orange" title="重置API Token" lay-event="reset-token"><i class="layui-icon layui-icon-key"></i></span>
     <span class="layui-badge layui-bg-blue" title="编辑" lay-event="edit"><i class="layui-icon layui-icon-edit"></i></span>
     <span class="layui-badge layui-bg-gray" title="删除" lay-event="del"><i class="layui-icon layui-icon-delete"></i></span>
 </script>
@@ -309,13 +310,13 @@ layui.use(['table', 'form', 'layer'], function(){
 
     tableIns = table.render({
         elem: '#nodes-table',
-        url: '/web_api/nodes',
+        url: '/web_api/nodes?_t=' + Date.now(),
         height: 'full-160',
         cellMinWidth: 80,
         cols: [[
             {field: 'node_name', title: '节点名称', width: 150, sort: true, fixed: 'left'},
             {field: 'ip_address', title: 'IP 地址', width: 150},
-            {field: 'account_count_total', title: '账户数', width: 100, align: 'center', templet: d => `<span class="layui-badge layui-bg-blue">${d.account_count_total || 0}</span>`},
+            {field: 'account_count_total', title: '账户数', width: 100, align: 'center', templet: d => d.account_count_total || 0},
             {field: 'status', title: '节点状态', width: 110, align: 'center', templet: function(d){
                 if (d.status === 'Online') {
                     return `<span style="color: #5FB878;" title="在线"><i class="layui-icon layui-icon-ok-circle"></i></span>`;
@@ -342,7 +343,14 @@ layui.use(['table', 'form', 'layer'], function(){
         }
     });
     
-
+    // 确保页面加载完成后强制刷新数据
+    setTimeout(function() {
+        if (tableIns) {
+            tableIns.reload({
+                url: '/web_api/nodes?_t=' + Date.now()
+            });
+        }
+    }, 100);
 
     table.on('tool(nodesTable)', function(obj){
         var data = obj.data;
@@ -361,6 +369,8 @@ layui.use(['table', 'form', 'layer'], function(){
             deleteNode(data.id, data.node_name);
         } else if (obj.event === 'reset') {
             resetNode(data.id, data.node_name);
+        } else if (obj.event === 'reset-token') {
+            resetApiToken(data.id, data.node_name);
         }
     });
 
@@ -579,6 +589,68 @@ layui.use(['table', 'form', 'layer'], function(){
                 .catch(error => {
                     layer.closeAll('loading');
                     layer.msg('重置节点状态失败: ' + error.message, { icon: 2 });
+                });
+            layer.close(index);
+        });
+    }
+
+    // 重置API Token
+    function resetApiToken(nodeId, nodeName) {
+        layer.confirm(`确定要重置节点 [${nodeName}] 的API Token吗？<br><br><span style="color: #ff6b6b;">⚠️ 重置后，旧的API Token将立即失效，需要更新节点配置中的Token！</span>`, {
+            icon: 3, title: '确认重置API Token',
+            btn: ['确认重置', '取消']
+        }, function(index) {
+            layer.load(1);
+            fetchWithAuth(`/web_api/nodes/${nodeId}/regenerate-token`, { method: 'POST' })
+                .then(response => response.json())
+                .then(result => {
+                    layer.closeAll('loading');
+                    if (result.status === 'success') {
+                        // 显示新Token的弹窗
+                        layer.open({
+                            type: 1,
+                            title: '🔑 新的API Token已生成',
+                            area: ['500px', 'auto'],
+                            content: `
+                                <div style="padding: 20px;">
+                                    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                                        <p style="margin: 0; color: #666; font-size: 14px;">节点: <strong>${nodeName}</strong></p>
+                                    </div>
+                                    <div style="margin-bottom: 15px;">
+                                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">新的API Token:</label>
+                                        <div style="position: relative;">
+                                            <input type="text" id="newToken" value="${result.token}" readonly 
+                                                   style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; background: #f8f9fa;">
+                                            <button onclick="copyToken()" style="position: absolute; right: 5px; top: 50%; transform: translateY(-50%); padding: 5px 10px; background: #1E9FFF; color: white; border: none; border-radius: 3px; cursor: pointer;">复制</button>
+                                        </div>
+                                    </div>
+                                    <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
+                                        <p style="margin: 0; color: #856404; font-size: 13px;">
+                                            <i class="layui-icon layui-icon-tips" style="color: #f39c12;"></i>
+                                            <strong>重要提醒:</strong> 请立即更新节点配置文件中的API Token，否则节点将无法连接！
+                                        </p>
+                                    </div>
+                                </div>
+                            `,
+                            btn: ['确定'],
+                            success: function() {
+                                // 添加复制功能
+                                window.copyToken = function() {
+                                    const tokenInput = document.getElementById('newToken');
+                                    tokenInput.select();
+                                    document.execCommand('copy');
+                                    layer.msg('Token已复制到剪贴板', {icon: 1});
+                                };
+                            }
+                        });
+                        tableIns.reload();
+                    } else {
+                        layer.msg(result.message || '重置API Token失败', { icon: 2 });
+                    }
+                })
+                .catch(error => {
+                    layer.closeAll('loading');
+                    layer.msg('重置API Token失败: ' + error.message, { icon: 2 });
                 });
             layer.close(index);
         });

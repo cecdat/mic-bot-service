@@ -59,6 +59,12 @@
         <!-- 数据表格 -->
         <table class="layui-hide" id="accountTable" lay-filter="accountTable"></table>
         
+        <!-- 操作栏模板 -->
+        <script type="text/html" id="tableBar">
+            <a class="layui-btn layui-btn-xs layui-btn-primary" lay-event="edit">编辑</a>
+            <a class="layui-btn layui-btn-xs layui-btn-danger" lay-event="del">删除</a>
+        </script>
+        
         <!-- 配置表单模板 -->
         <script type="text/html" id="account-config-form-template">
             <div style="padding: 20px 30px 0 0;">
@@ -214,10 +220,22 @@
                 limitName: 'pageSize'
             },
             response: {
-                statusName: 'success',
-                statusCode: true,
-                countName: 'total',
-                dataName: 'data.items'
+                statusName: 'code',
+                statusCode: 0,
+                countName: 'count',
+                dataName: 'data'
+            },
+            parseData: function(res) {
+                // 将API返回的数组格式转换为Layui期望的格式
+                if (Array.isArray(res)) {
+                    return {
+                        "code": 0,
+                        "msg": "",
+                        "count": res.length,
+                        "data": res
+                    };
+                }
+                return res;
             },
             toolbar: '#toolbarDemo',
             defaultToolbar: ['filter', 'exports', 'print'],
@@ -226,16 +244,34 @@
                 {type: 'checkbox', fixed: 'left'},
                 {field: 'id', title: 'ID', width: 80, fixed: 'left'},
                 {field: 'email', title: '邮箱', minWidth: 200},
-                {field: 'assigned_node_id', title: '分配节点', minWidth: 150, templet: function(d) {
-                    return d.node ? d.node.name : '未分配';
+                {field: 'assigned_node_name', title: '分配节点', minWidth: 150, templet: function(d) {
+                    return d.assigned_node_name || '未分配';
                 }},
-                {field: 'status', title: '状态', width: 100, templet: function(d) {
-                    return d.status ? '<span class="layui-badge layui-bg-green">启用</span>' : '<span class="layui-badge layui-bg-gray">禁用</span>';
+                {field: 'is_enabled', title: '状态', width: 100, templet: function(d) {
+                    return d.is_enabled ? '<span class="layui-badge layui-bg-green">启用</span>' : '<span class="layui-badge layui-bg-gray">禁用</span>';
                 }},
-                {field: 'last_active_time', title: '最后活跃', minWidth: 160, templet: function(d) {
-                    return d.last_active_time || '-';
+                {field: 'monitoring_data', title: '积分信息', minWidth: 200, templet: function(d) {
+                    if (d.monitoring_data) {
+                        return `<div style="font-size: 12px;">
+                            <div>总积分: <span style="color: #1E9FFF; font-weight: bold;">${d.monitoring_data.total_points || 0}</span></div>
+                            <div>今日获得: <span style="color: #5FB878;">${d.monitoring_data.daily_gain || 0}</span></div>
+                            <div>桌面: ${d.monitoring_data.desktop_gain || 0} | 移动: ${d.monitoring_data.mobile_gain || 0}</div>
+                        </div>`;
+                    }
+                    return '无数据';
                 }},
-                {field: 'created_at', title: '创建时间', minWidth: 160},
+                {field: 'monitoring_data', title: '最后更新', minWidth: 160, templet: function(d) {
+                    if (d.monitoring_data && d.monitoring_data.last_updated) {
+                        return new Date(d.monitoring_data.last_updated).toLocaleString('zh-CN');
+                    }
+                    return '-';
+                }},
+                {field: 'hotSearchEndpoints', title: '热搜源', minWidth: 120, templet: function(d) {
+                    if (d.hotSearchEndpoints && Array.isArray(d.hotSearchEndpoints)) {
+                        return d.hotSearchEndpoints.join(', ');
+                    }
+                    return '-';
+                }},
                 {fixed: 'right', title: '操作', minWidth: 200, toolbar: '#tableBar'}
             ]],
             page: true,
@@ -465,10 +501,10 @@
             const data = obj.data;
             if (obj.event === 'edit') {
                 editAccount(data.id);
-            } else if (obj.event === 'delete') {
+            } else if (obj.event === 'del') {
                 deleteAccount(data.id, data.email);
             } else if (obj.event === 'toggle') {
-                toggleAccountStatus(data.id, data.status);
+                toggleAccountStatus(data.id, data.is_enabled);
             }
         });
         

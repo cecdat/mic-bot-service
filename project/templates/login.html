@@ -6,6 +6,113 @@
     <title>登录 - Mic-Bot Server</title>
     <link rel="stylesheet" href="{{ url_for('frontend.static', filename='layui/css/layui.css') }}">
     <link rel="stylesheet" href="{{ url_for('frontend.static', filename='styles.css') }}">
+    <style>
+        .login-body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        .login-body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: inherit;
+            filter: blur(10px);
+            z-index: -1;
+        }
+        
+        .login-wrapper {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .login-wrapper h2 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 28px;
+            font-weight: 600;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .layui-input {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            border-radius: 10px;
+            padding: 12px 15px;
+            font-size: 16px;
+        }
+        
+        .layui-input::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .layui-input:focus {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.5);
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+        }
+        
+        .layui-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+        
+        .layui-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .layui-alert {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            border-radius: 10px;
+        }
+        
+        .layui-form-item {
+            margin-bottom: 20px;
+        }
+        
+        .layui-form-item a {
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .layui-form-item a:hover {
+            color: white;
+        }
+    </style>
 </head>
 <body class="login-body">
 <div class="login-wrapper">
@@ -36,6 +143,24 @@
 <script>
 layui.use(['form'], function(){
   var form = layui.form;
+});
+
+// 动态加载Bing每日壁纸
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('/web_api/wallpaper')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.url) {
+                // 设置背景图片
+                document.body.style.backgroundImage = `url(${data.url})`;
+                document.body.style.backgroundSize = 'cover';
+                document.body.style.backgroundPosition = 'center';
+                document.body.style.backgroundRepeat = 'no-repeat';
+            }
+        })
+        .catch(error => {
+            console.log('获取Bing壁纸失败，使用默认背景:', error);
+        });
 });
 </script>
 </body>
