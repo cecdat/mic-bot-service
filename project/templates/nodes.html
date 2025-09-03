@@ -20,7 +20,7 @@
     <span class="layui-badge layui-bg-primary" title="重置bot状态" lay-event="reset"><i class="layui-icon layui-icon-refresh"></i></span>
     <span class="layui-badge layui-bg-green" title="查看日志" lay-event="logs"><i class="layui-icon layui-icon-console"></i></span>
     <span class="layui-badge layui-bg-orange" title="重置API Token" lay-event="reset-token"><i class="layui-icon layui-icon-key"></i></span>
-    <span class="layui-badge layui-bg-blue" title="编辑" lay-event="edit"><i class="layui-icon layui-icon-edit"></i></span>
+    <span class="layui-badge layui-bg-primary" title="编辑" lay-event="edit"><i class="layui-icon layui-icon-set"></i></span>
     <span class="layui-badge layui-bg-gray" title="删除" lay-event="del"><i class="layui-icon layui-icon-delete"></i></span>
 </script>
 {% endraw %}
@@ -339,7 +339,9 @@ layui.use(['table', 'form', 'layer'], function(){
                 window.location.href = "{{ url_for('frontend.login') }}";
                 return;
             }
-            return { "code": 0, "msg": "", "count": res.length, "data": res };
+            // 处理新的API返回格式
+            const data = res.success ? res.data : res;
+            return { "code": 0, "msg": "", "count": data.length, "data": data };
         }
     });
     
@@ -401,7 +403,8 @@ layui.use(['table', 'form', 'layer'], function(){
                     "log_push_enabled": data ? data.log_push_enabled : false,
                     "log_push_interval": data ? data.log_push_interval : 30
                 });
-                layero.find('[name="node_name"]')[0].readOnly = !!data;
+                // 允许编辑节点名字
+                layero.find('[name="node_name"]')[0].readOnly = false;
                 form.render(null, 'nodeForm');
             }
         });
@@ -420,7 +423,10 @@ layui.use(['table', 'form', 'layer'], function(){
             layer.closeAll('loading');
             if (result.status === 'success') {
                 layer.closeAll('page');
-                tableIns.reload();
+                // 强制重新加载数据，清除缓存
+                tableIns.reload({
+                    url: '/web_api/nodes?_t=' + Date.now()
+                });
                 if (result.api_token) {
                     // 创建弹窗内容HTML字符串
                     const tokenHtml = `
@@ -515,7 +521,9 @@ layui.use(['table', 'form', 'layer'], function(){
                 layer.closeAll('loading');
                 if (result.status === 'success') {
                     layer.msg('触发指令已发送！', {icon: 1});
-                    tableIns.reload();
+                    tableIns.reload({
+                        url: '/web_api/nodes?_t=' + Date.now()
+                    });
                 } else {
                     layer.alert('触发失败: ' + result.message, {icon: 2});
                 }
@@ -536,7 +544,9 @@ layui.use(['table', 'form', 'layer'], function(){
                 layer.closeAll('loading');
                 if (result.status === 'success') {
                     layer.msg('停止指令已发送！', {icon: 1});
-                    tableIns.reload();
+                    tableIns.reload({
+                        url: '/web_api/nodes?_t=' + Date.now()
+                    });
                 } else {
                     layer.alert('操作失败: ' + result.message, {icon: 2});
                 }
@@ -557,7 +567,9 @@ layui.use(['table', 'form', 'layer'], function(){
                 layer.closeAll('loading');
                 if (result.status === 'success') {
                     layer.msg('节点删除成功', {icon: 1});
-                    tableIns.reload();
+                    tableIns.reload({
+                        url: '/web_api/nodes?_t=' + Date.now()
+                    });
                 } else {
                     layer.alert('删除失败: ' + result.message, {icon: 2});
                 }
@@ -581,7 +593,9 @@ layui.use(['table', 'form', 'layer'], function(){
                     layer.closeAll('loading');
                     if (result.status === 'success') {
                         layer.msg(result.message || '节点状态已重置', { icon: 1 });
-                        tableIns.reload();
+                        tableIns.reload({
+                        url: '/web_api/nodes?_t=' + Date.now()
+                    });
                     } else {
                         layer.msg(result.message || '重置节点状态失败', { icon: 2 });
                     }
@@ -643,7 +657,9 @@ layui.use(['table', 'form', 'layer'], function(){
                                 };
                             }
                         });
-                        tableIns.reload();
+                        tableIns.reload({
+                        url: '/web_api/nodes?_t=' + Date.now()
+                    });
                     } else {
                         layer.msg(result.message || '重置API Token失败', { icon: 2 });
                     }

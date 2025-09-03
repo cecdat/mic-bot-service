@@ -15,8 +15,10 @@
                     <div class="layui-input-block">
                         <select id="statusFilter" lay-filter="statusFilter" style="height: 28px; font-size: 12px;">
                             <option value="">全部</option>
-                            <option value="true">启用</option>
-                            <option value="false">禁用</option>
+                            <option value="enabled">启用</option>
+                            <option value="disabled">禁用</option>
+                            <option value="normal">正常</option>
+                            <option value="error">异常</option>
                         </select>
                     </div>
                 </div>
@@ -58,11 +60,13 @@
         <table class="layui-hide" id="accountTable" lay-filter="accountTable"></table>
         
         <!-- 操作栏模板 -->
+        {% raw %}
         <script type="text/html" id="tableBar">
             <a class="layui-btn layui-btn-xs layui-btn-primary" lay-event="edit">编辑</a>
-            <a class="layui-btn layui-btn-xs {{d.is_enabled ? 'layui-btn-warm' : 'layui-btn-normal'}}" lay-event="toggle">{{d.is_enabled ? '禁用' : '启用'}}</a>
+            <a class="layui-btn layui-btn-xs {{# if(d.is_enabled){ }}layui-btn-warm{{# } else { }}layui-btn-normal{{# } }}" lay-event="toggle">{{# if(d.is_enabled){ }}禁用{{# } else { }}启用{{# } }}</a>
             <a class="layui-btn layui-btn-xs layui-btn-danger" lay-event="del">删除</a>
         </script>
+        {% endraw %}
         
         <!-- 配置表单模板 -->
         <script type="text/html" id="account-config-form-template">
@@ -180,24 +184,37 @@
                 url: '/web_api/nodes',
                 type: 'GET',
                 success: function(res) {
-                    // 检查res是否符合规范格式 {"success": true, "data": nodes_data}
+                    console.log('节点API返回数据:', res);
+                    let nodesData = [];
+                    
+                    // 兼容两种数据格式
                     if (res && res.success && Array.isArray(res.data)) {
-                        const nodeFilter = $('#nodeFilter');
-                        const assignedNodeSelect = $('#assigned_node_id_select');
-                        
-                        // 清空现有选项（保留第一个）
-                        nodeFilter.html('<option value="">全部节点</option>');
-                        assignedNodeSelect.html('<option value="">请选择节点</option>');
-                        
-                        // 添加节点选项
-                        res.data.forEach(node => {
-                            nodeFilter.append(`<option value="${node.id}">${node.node_name}</option>`);
-                            assignedNodeSelect.append(`<option value="${node.id}">${node.node_name}</option>`);
-                        });
-                        
-                        // 重新渲染表单
-                        form.render('select');
+                        // 格式1: {"success": true, "data": [...]}
+                        nodesData = res.data;
+                    } else if (Array.isArray(res)) {
+                        // 格式2: 直接数组 [...]
+                        nodesData = res;
+                    } else {
+                        console.error('节点API返回数据格式错误:', res);
+                        return;
                     }
+                    
+                    const nodeFilter = $('#nodeFilter');
+                    const assignedNodeSelect = $('#assigned_node_id_select');
+                    
+                    // 清空现有选项（保留第一个）
+                    nodeFilter.html('<option value="">全部节点</option>');
+                    assignedNodeSelect.html('<option value="">请选择节点</option>');
+                    
+                    // 添加节点选项
+                    nodesData.forEach(node => {
+                        nodeFilter.append(`<option value="${node.id}">${node.node_name}</option>`);
+                        assignedNodeSelect.append(`<option value="${node.id}">${node.node_name}</option>`);
+                    });
+                    
+                    // 重新渲染表单
+                    form.render('select');
+                    console.log('节点列表加载成功，共', nodesData.length, '个节点');
                 },
                 error: function() {
                     layer.alert('加载节点列表失败', {icon: 2});
@@ -210,13 +227,10 @@
             elem: '#accountTable',
             url: '/web_api/bot_accounts',
             method: 'GET',
-            where: {
-                page: 1,
-                pageSize: 10
-            },
             request: {
                 pageName: 'page',
-                limitName: 'pageSize'
+                limitName: 'pageSize',
+                whereName: 'where'
             },
             response: {
                 statusName: 'code',
@@ -246,7 +260,38 @@
                     return d.assigned_node_name || '未分配';
                 }},
                 {field: 'is_enabled', title: '状态', width: 100, templet: function(d) {
-                    return d.is_enabled ? '<span class="layui-badge layui-bg-green">启用</span>' : '<span class="layui-badge layui-bg-gray">禁用</span>';
+                    if (!d.is_enabled) {
+                        return '<span class="layui-badge layui-bg-red">禁用</span>';
+                    }
+                    
+                    // 检查账户状态是否异常
+                    let hasError = false;
+                    if (d.monitoring_data && d.monitoring_data.status_details) {
+                        try {
+                            const statusDetails = typeof d.monitoring_data.status_details === 'string' 
+                                ? JSON.parse(d.monitoring_data.status_details) 
+                                : d.monitoring_data.status_details;
+                            
+                            // 检查桌面端和移动端状态
+                            const pcStatus = statusDetails.pc && statusDetails.pc.status;
+                            const mobileStatus = statusDetails.mobile && statusDetails.mobile.status;
+                            
+                            // 如果任一平台状态异常，则显示黄色
+                            if (!pcStatus || !mobileStatus) {
+                                hasError = true;
+                            }
+                        } catch (e) {
+                            hasError = true;
+                        }
+                    } else {
+                        hasError = true; // 没有状态信息也认为是异常
+                    }
+                    
+                    if (hasError) {
+                        return '<span class="layui-badge layui-bg-orange">异常</span>';
+                    } else {
+                        return '<span class="layui-badge layui-bg-green">正常</span>';
+                    }
                 }},
                 {field: 'monitoring_data', title: '积分信息', minWidth: 200, templet: function(d) {
                     if (d.monitoring_data) {
@@ -331,30 +376,6 @@
                             hotSearchData = [];
                         }
                         
-                        form.val('accountForm', {
-                            'id': account.id,
-                            'email': account.email,
-                            'auxiliary_email': account.auxiliary_email || '',
-                            'assigned_node_id': account.assigned_node_id || '',
-                            'proxyUrl': proxyData.url || '',
-                            'proxyPort': proxyData.port || '',
-                            'proxyUsername': proxyData.username || '',
-                            'proxyPassword': proxyData.password || '',
-                            'user_agent_id': account.user_agent_id || '',
-                            'userAgents': JSON.stringify(userAgentsData),
-                            'hotSearchEndpoints': JSON.stringify(hotSearchData)
-                        });
-                        
-                        // 处理编辑模式下的特殊逻辑
-                        if (account.id) {
-                            form.verify({
-                                password: function() { return true; }
-                            });
-                            $('[name="email"]')[0].readOnly = true;
-                        }
-                        
-                        form.render(null, 'accountForm');
-                        
                         // 打开编辑弹窗
                         layer.open({
                             type: 1,
@@ -366,8 +387,36 @@
                                 $('#saveAccountSubmit').click();
                             },
                             success: function(layero) {
+                                // 填充表单数据
+                                form.val('accountForm', {
+                                    'id': account.id,
+                                    'email': account.email,
+                                    'auxiliary_email': account.auxiliary_email || '',
+                                    'assigned_node_id': account.assigned_node_id || '',
+                                    'proxyUrl': proxyData.url || '',
+                                    'proxyPort': proxyData.port || '',
+                                    'proxyUsername': proxyData.username || '',
+                                    'proxyPassword': proxyData.password || '',
+                                    'user_agent_id': account.user_agent_id || '',
+                                    'userAgents': JSON.stringify(userAgentsData),
+                                    'hotSearchEndpoints': JSON.stringify(hotSearchData)
+                                });
+                                
+                                // 处理编辑模式下的特殊逻辑
+                                if (account.id) {
+                                    form.verify({
+                                        password: function() { return true; }
+                                    });
+                                    // 安全地设置readOnly属性
+                                    const emailInput = layero.find('[name="email"]')[0];
+                                    if (emailInput) {
+                                        emailInput.readOnly = true;
+                                    }
+                                }
+                                
+                                form.render(null, 'accountForm');
                                 // 重新绑定表单事件
-                                const form = layui.form;
+                                // const form = layui.form; // 移除重复声明
                                 
                                 // 重新加载节点
                                 // 先获取节点选择框并设置为加载中状态
@@ -379,21 +428,32 @@
                                     url: '/web_api/nodes',
                                     type: 'GET',
                                     success: function(res) {
-                                        // 检查res是否符合规范格式 {"success": true, "data": nodes_data}
+                                        console.log('编辑账户-节点API返回数据:', res);
+                                        let nodesData = [];
+                                        
+                                        // 兼容两种数据格式
                                         if (res && res.success && Array.isArray(res.data)) {
-                                            assignedNodeSelect.html('<option value="">请选择节点</option>');
-                                            
-                                            res.data.forEach(node => {
-                                                const selected = account.assigned_node_id === node.id ? 'selected' : '';
-                                                assignedNodeSelect.append(`<option value="${node.id}" ${selected}>${node.node_name}</option>`);
-                                            });
-                                            
-                                            form.render('select');
+                                            // 格式1: {"success": true, "data": [...]}
+                                            nodesData = res.data;
+                                        } else if (Array.isArray(res)) {
+                                            // 格式2: 直接数组 [...]
+                                            nodesData = res;
                                         } else {
-                                            // 数据格式不正确时的处理
+                                            console.error('编辑账户-节点API返回数据格式错误:', res);
                                             assignedNodeSelect.html('<option value="">加载节点失败：数据格式错误</option>');
                                             form.render('select');
+                                            return;
                                         }
+                                        
+                                        assignedNodeSelect.html('<option value="">请选择节点</option>');
+                                        
+                                        nodesData.forEach(node => {
+                                            const selected = account.assigned_node_id === node.id ? 'selected' : '';
+                                            assignedNodeSelect.append(`<option value="${node.id}" ${selected}>${node.node_name}</option>`);
+                                        });
+                                        
+                                        form.render('select');
+                                        console.log('编辑账户-节点列表加载成功，共', nodesData.length, '个节点');
                                     },
                                     error: function(xhr, status, error) {
                                         // 请求失败时的处理
@@ -565,20 +625,31 @@
                         url: '/web_api/nodes',
                         type: 'GET',
                         success: function(res) {
-                            // 检查res是否符合规范格式 {"success": true, "data": nodes_data}
+                            console.log('新增账户-节点API返回数据:', res);
+                            let nodesData = [];
+                            
+                            // 兼容两种数据格式
                             if (res && res.success && Array.isArray(res.data)) {
-                                assignedNodeSelect.html('<option value="">请选择节点</option>');
-                                
-                                res.data.forEach(node => {
-                                    assignedNodeSelect.append(`<option value="${node.id}">${node.node_name}</option>`);
-                                });
-                                
-                                form.render('select');
+                                // 格式1: {"success": true, "data": [...]}
+                                nodesData = res.data;
+                            } else if (Array.isArray(res)) {
+                                // 格式2: 直接数组 [...]
+                                nodesData = res;
                             } else {
-                                // 数据格式不正确时的处理
+                                console.error('新增账户-节点API返回数据格式错误:', res);
                                 assignedNodeSelect.html('<option value="">加载节点失败：数据格式错误</option>');
                                 form.render('select');
+                                return;
                             }
+                            
+                            assignedNodeSelect.html('<option value="">请选择节点</option>');
+                            
+                            nodesData.forEach(node => {
+                                assignedNodeSelect.append(`<option value="${node.id}">${node.node_name}</option>`);
+                            });
+                            
+                            form.render('select');
+                            console.log('新增账户-节点列表加载成功，共', nodesData.length, '个节点');
                         },
                         error: function(xhr, status, error) {
                             // 请求失败时的处理
@@ -696,12 +767,14 @@
             });
         });
         
-        // 筛选相关事件
-        $('#statusFilter').on('change', function() {
+        // 筛选相关事件 - 使用Layui的form.on方法
+        form.on('select(statusFilter)', function(data) {
+            console.log('状态筛选改变:', data.value);
             applyFilters();
         });
         
-        $('#nodeFilter').on('change', function() {
+        form.on('select(nodeFilter)', function(data) {
+            console.log('节点筛选改变:', data.value);
             applyFilters();
         });
         
@@ -719,18 +792,29 @@
             applyFilters();
         });
         
+
         // 应用筛选条件
         function applyFilters() {
-            const status = $('#statusFilter').val();
-            const nodeId = $('#nodeFilter').val();
-            const emailKeyword = $('#emailSearch').val().trim();
+            const status = $('#statusFilter').val() || '';
+            const nodeId = $('#nodeFilter').val() || '';
+            const emailKeyword = $('#emailSearch').val().trim() || '';
+            
+            console.log('应用筛选条件:', {
+                status: status,
+                node_id: nodeId,
+                email: emailKeyword
+            });
+            
+            // 构建筛选参数，只包含非空值
+            const whereParams = {};
+            if (status) whereParams.status = status;
+            if (nodeId) whereParams.node_id = nodeId;
+            if (emailKeyword) whereParams.email = emailKeyword;
+            
+            console.log('发送筛选参数:', whereParams);
             
             tableIns.reload({
-                where: {
-                    status: status,
-                    node_id: nodeId,
-                    email: emailKeyword
-                },
+                where: whereParams,
                 page: {
                     curr: 1
                 }

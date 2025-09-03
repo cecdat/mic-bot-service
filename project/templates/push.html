@@ -36,16 +36,16 @@
 </script>
 
 <script type="text/html" id="onlineSwitchTpl">
-    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_node_online" data-id="{{ d.id }}" data-url="{{ d.url }}" {{ d.notify_on_node_online ? 'checked' : '' }}>
+    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_node_online" data-id="{{ d.id }}" data-url="{{ d.url }}" {{# if(d.notify_on_node_online){ }}checked{{# } }}>
 </script>
 <script type="text/html" id="offlineSwitchTpl">
-    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_node_offline" data-id="{{ d.id }}" data-url="{{ d.url }}" {{ d.notify_on_node_offline ? 'checked' : '' }}>
+    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_node_offline" data-id="{{ d.id }}" data-url="{{ d.url }}" {{# if(d.notify_on_node_offline){ }}checked{{# } }}>
 </script>
 <script type="text/html" id="errorSwitchTpl">
-    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_account_error" data-id="{{ d.id }}" data-url="{{ d.url }}" {{ d.notify_on_account_error ? 'checked' : '' }}>
+    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_account_error" data-id="{{ d.id }}" data-url="{{ d.url }}" {{# if(d.notify_on_account_error){ }}checked{{# } }}>
 </script>
 <script type="text/html" id="verificationSwitchTpl">
-    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_verification_code" data-id="{{ d.id }}" data-url="{{ d.url }}" {{ d.notify_on_verification_code ? 'checked' : '' }}>
+    <input type="checkbox" lay-skin="switch" lay-text="ON|OFF" lay-filter="eventSwitch" data-field="notify_on_verification_code" data-id="{{ d.id }}" data-url="{{ d.url }}" {{# if(d.notify_on_verification_code){ }}checked{{# } }}>
 </script>
 {% endraw %}
 

@@ -236,7 +236,7 @@ def manage_nodes():
         # 缓存结果
         set_cached_data(cache_key, nodes_data)
         # 返回符合规范的格式，包含success状态码
-        return jsonify({"success": True, "data": nodes_data})
+        return jsonify(nodes_data)
 
     if request.method == 'POST' or request.method == 'PUT':
         # 清除相关缓存
@@ -261,7 +261,15 @@ def manage_nodes():
             node_id = data.get('id')
             node = BotNode.query.get(node_id)
             if not node: return jsonify({"status": "error", "message": "未找到该节点"}), 404
-            node.node_name = data.get('node_name', node.node_name)
+            
+            # 检查节点名字是否被修改，如果修改了需要验证是否重复
+            new_node_name = data.get('node_name', node.node_name)
+            if new_node_name != node.node_name:
+                # 检查新名字是否已被其他节点使用
+                existing_node = BotNode.query.filter(BotNode.node_name == new_node_name, BotNode.id != node_id).first()
+                if existing_node:
+                    return jsonify({"status": "error", "message": "该节点名称已存在"}), 409
+                node.node_name = new_node_name
 
         node.cron_schedule = data.get('cron_schedule', node.cron_schedule)
         node.min_sleep_minutes = data.get('min_sleep_minutes', node.min_sleep_minutes)
@@ -569,8 +577,13 @@ def delete_node(node_id):
 @web_login_required
 def manage_bot_accounts():
     if request.method == 'GET':
-        # 检查缓存
-        cache_key = 'bot_accounts_data'
+        # 获取筛选参数
+        status_filter = request.args.get('status', '')
+        node_id_filter = request.args.get('node_id', '')
+        email_keyword = request.args.get('email', '')
+        
+        # 构建缓存键，包含筛选参数
+        cache_key = f'bot_accounts_data_{status_filter}_{node_id_filter}_{email_keyword}'
         cached_data = get_cached_data(cache_key)
         if cached_data:
             return jsonify(cached_data)
@@ -581,16 +594,55 @@ def manage_bot_accounts():
         # 预加载所有User-Agent映射
         user_agents = {ua.used_by_account_id: ua.id for ua in UserAgent.query.filter(UserAgent.used_by_account_id.isnot(None)).all()}
         
-        # 使用预加载查询账户和监控数据
-        accounts = db.session.query(BotAccount, Account, BotNode.node_name)\
+        # 构建查询
+        query = db.session.query(BotAccount, Account, BotNode.node_name)\
             .outerjoin(Account, BotAccount.id == Account.bot_account_id)\
-            .outerjoin(BotNode, BotAccount.assigned_node_id == BotNode.id)\
-            .order_by(BotAccount.email)\
-            .all()
+            .outerjoin(BotNode, BotAccount.assigned_node_id == BotNode.id)
+        
+        # 应用筛选条件
+        if status_filter:
+            if status_filter == 'enabled':
+                query = query.filter(BotAccount.is_enabled == True)
+            elif status_filter == 'disabled':
+                query = query.filter(BotAccount.is_enabled == False)
+            # normal 和 error 筛选将在数据处理阶段进行
+        
+        if node_id_filter:
+            query = query.filter(BotAccount.assigned_node_id == int(node_id_filter))
+        
+        if email_keyword:
+            query = query.filter(BotAccount.email.contains(email_keyword))
+        
+        # 执行查询
+        accounts = query.order_by(BotAccount.email).all()
         
         accounts_data = []
         for acc, monitoring_data, node_name in accounts:
             user_agent_id = user_agents.get(acc.id)
+            
+            # 检查账户状态（用于normal/error筛选）
+            has_error = False
+            if acc.is_enabled and monitoring_data and monitoring_data.status_details:
+                try:
+                    status_details = json.loads(monitoring_data.status_details)
+                    pc_status = status_details.get('pc', {}).get('status', False)
+                    mobile_status = status_details.get('mobile', {}).get('status', False)
+                    if not pc_status or not mobile_status:
+                        has_error = True
+                except:
+                    has_error = True
+            elif acc.is_enabled:
+                has_error = True  # 启用但没有状态信息
+            
+            # 应用normal/error筛选
+            if status_filter == 'normal':
+                # 正常：启用且没有错误
+                if not acc.is_enabled or has_error:
+                    continue
+            elif status_filter == 'error':
+                # 异常：启用但有错误
+                if not acc.is_enabled or not has_error:
+                    continue
             
             acc_dict = {
                 "id": acc.id, "email": acc.email, "password": acc.password,
