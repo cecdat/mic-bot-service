@@ -16,6 +16,7 @@ class BotNode(db.Model):
     api_token_hash = db.Column(db.Text, nullable=False)
     status = db.Column(db.Integer, default=1)
     activity_status = db.Column(db.String(50), default='Idle')
+    status_updated_at = db.Column(db.DateTime, default=db.func.current_timestamp())  # 状态更新时间
     command = db.Column(db.String(50), nullable=True)
     command_status = db.Column(db.String(50), nullable=True, default=None)  # pending, received, executed
     command_data = db.Column(db.Text, nullable=True)  # 存储命令相关数据(JSON格式)

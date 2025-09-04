@@ -165,8 +165,44 @@ def update_activity():
     
     node = g.node
     node.activity_status = status
+    
+    # 记录状态更新时间
+    if 'timestamp' in data:
+        try:
+            from datetime import datetime
+            node.status_updated_at = datetime.fromisoformat(data['timestamp'].replace('Z', '+00:00'))
+        except:
+            node.status_updated_at = datetime.utcnow()
+    else:
+        node.status_updated_at = datetime.utcnow()
+    
     db.session.commit()
     return jsonify({"status": "success", "message": f"Activity status updated to {status}"})
+
+@bp.route('/sync_status', methods=['POST'])
+@bot_api_required
+def sync_status():
+    """精准状态同步接口"""
+    data = request.get_json()
+    status = data.get('activity_status')
+    if status not in ['Running', 'Idle']:
+        return jsonify({"status": "error", "message": "Invalid activity status"}), 400
+    
+    node = g.node
+    node.activity_status = status
+    
+    # 记录状态更新时间
+    if 'timestamp' in data:
+        try:
+            from datetime import datetime
+            node.status_updated_at = datetime.fromisoformat(data['timestamp'].replace('Z', '+00:00'))
+        except:
+            node.status_updated_at = datetime.utcnow()
+    else:
+        node.status_updated_at = datetime.utcnow()
+    
+    db.session.commit()
+    return jsonify({"status": "success", "message": f"Status synced to {status}"})
 
 @bp.route('/get_config', methods=['GET'])
 @bot_api_required

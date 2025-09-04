@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS bot_nodes (
   api_token_hash TEXT NOT NULL,
   status INT DEFAULT 1,
   activity_status VARCHAR(50) DEFAULT 'Idle',
+  status_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   command VARCHAR(50) NULL,
   command_status VARCHAR(50) NULL DEFAULT NULL,
   command_data TEXT NULL DEFAULT NULL,

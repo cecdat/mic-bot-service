@@ -8,6 +8,35 @@ from datetime import datetime, timedelta, timezone
 import json
 import secrets
 import os
+
+def get_inferred_status(node):
+    """智能推断节点状态，误差不超过30秒"""
+    now = datetime.now(timezone.utc)
+    
+    # 如果节点离线，直接返回Idle
+    if node.status != 1:
+        return 'Idle'
+    
+    # 如果状态更新时间在30秒内，直接返回当前状态
+    if node.status_updated_at:
+        time_diff = (now - node.status_updated_at).total_seconds()
+        if time_diff <= 30:
+            return node.activity_status
+    
+    # 如果最后心跳时间在30秒内，且状态为Running，保持Running
+    if node.last_seen:
+        heartbeat_diff = (now - node.last_seen).total_seconds()
+        if heartbeat_diff <= 30 and node.activity_status == 'Running':
+            return 'Running'
+    
+    # 如果最后心跳时间超过30秒，推断为Idle
+    if node.last_seen:
+        heartbeat_diff = (now - node.last_seen).total_seconds()
+        if heartbeat_diff > 30:
+            return 'Idle'
+    
+    # 默认返回当前状态
+    return node.activity_status
 from werkzeug.security import generate_password_hash, check_password_hash
 import time
 import logging
@@ -179,7 +208,7 @@ def manage_nodes():
                 "cron_schedule": node.cron_schedule, "min_sleep_minutes": node.min_sleep_minutes,
                 "max_sleep_minutes": node.max_sleep_minutes, "clusters": node.clusters,
                 "search_delay_min": node.search_delay_min, "search_delay_max": node.search_delay_max,
-                "activity_status": node.activity_status,
+                "activity_status": get_inferred_status(node),
                 "log_push_enabled": node.log_push_enabled,
                 "log_push_interval": node.log_push_interval
             }
