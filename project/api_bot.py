@@ -58,6 +58,13 @@ def node_checkin():
         if 'heartbeat_timeout' in data:
             node.heartbeat_timeout = data.get('heartbeat_timeout')
         db.session.commit()
+        
+        # 广播心跳更新到WebSocket客户端
+        try:
+            from . import websocket_events
+            websocket_events.broadcast_node_heartbeat(node.id, node.last_seen)
+        except Exception as e:
+            logger.warning(f"WebSocket心跳广播失败: {e}")
 
         if is_coming_online:
             trigger_push_notification('node_online', f"节点上线: {node.node_name}", f"IP: {ip_address}")
@@ -177,6 +184,19 @@ def update_activity():
         node.status_updated_at = datetime.utcnow()
     
     db.session.commit()
+    
+    # 广播状态更新到WebSocket客户端
+    try:
+        from . import websocket_events
+        websocket_events.broadcast_node_status_update(
+            node.id, 
+            status, 
+            node.status_updated_at, 
+            node.last_seen
+        )
+    except Exception as e:
+        logger.warning(f"WebSocket广播失败: {e}")
+    
     return jsonify({"status": "success", "message": f"Activity status updated to {status}"})
 
 @bp.route('/sync_status', methods=['POST'])
@@ -202,6 +222,19 @@ def sync_status():
         node.status_updated_at = datetime.utcnow()
     
     db.session.commit()
+    
+    # 广播状态更新到WebSocket客户端
+    try:
+        from . import websocket_events
+        websocket_events.broadcast_node_status_update(
+            node.id, 
+            status, 
+            node.status_updated_at, 
+            node.last_seen
+        )
+    except Exception as e:
+        logger.warning(f"WebSocket广播失败: {e}")
+    
     return jsonify({"status": "success", "message": f"Status synced to {status}"})
 
 @bp.route('/get_config', methods=['GET'])

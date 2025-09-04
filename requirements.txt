@@ -2,8 +2,10 @@ Flask
 click
 Flask-HTTPAuth
 Flask-SQLAlchemy
+Flask-SocketIO==5.3.6
 psycopg2-binary
 cryptography
 Werkzeug
 requests
 APScheduler
+python-socketio==5.9.0

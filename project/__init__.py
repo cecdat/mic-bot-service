@@ -47,4 +47,8 @@ def create_app(test_config=None):
     # 确保在应用退出时关闭调度器
     atexit.register(scheduler.shutdown_scheduler)
     
+    # 注册WebSocket事件处理器
+    from . import websocket_events
+    websocket_events.register_websocket_events(app.socketio)
+    
     return app
