@@ -423,11 +423,21 @@ def trigger_node(node_id):
 
     if node.activity_status != 'Idle':
         return jsonify({"status": "error", "message": f"节点正忙 ({node.activity_status})，无法触发。"}), 409
-        
+    
+    # 尝试使用WebSocket发送任务
+    try:
+        from . import websocket_events
+        success = websocket_events.send_task_to_node(node_id, 'RUN_TASKS')
+        if success:
+            return jsonify({"status": "success", "message": f"已通过WebSocket向节点 {node.node_name} 发送触发指令。"})
+    except Exception as e:
+        logger.warning(f"WebSocket任务发送失败，回退到轮询模式: {e}")
+    
+    # 回退到传统轮询模式
     node.command = 'RUN_TASKS'
     node.command_status = 'pending'  # 设置命令状态为待处理
     db.session.commit()
-    return jsonify({"status": "success", "message": f"已向节点 {node.node_name} 发送触发指令。"})
+    return jsonify({"status": "success", "message": f"已向节点 {node.node_name} 发送触发指令（轮询模式）。"})
 
 @bp.route('/nodes/<int:node_id>/stop', methods=['POST'])
 @web_login_required
