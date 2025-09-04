@@ -577,13 +577,17 @@ def delete_node(node_id):
 @web_login_required
 def manage_bot_accounts():
     if request.method == 'GET':
+        # 获取分页参数
+        page = int(request.args.get('page', 1))
+        page_size = int(request.args.get('pageSize', 10))
+        
         # 获取筛选参数
         status_filter = request.args.get('status', '')
         node_id_filter = request.args.get('node_id', '')
         email_keyword = request.args.get('email', '')
         
-        # 构建缓存键，包含筛选参数
-        cache_key = f'bot_accounts_data_{status_filter}_{node_id_filter}_{email_keyword}'
+        # 构建缓存键，包含分页和筛选参数
+        cache_key = f'bot_accounts_data_{page}_{page_size}_{status_filter}_{node_id_filter}_{email_keyword}'
         cached_data = get_cached_data(cache_key)
         if cached_data:
             return jsonify(cached_data)
@@ -594,18 +598,38 @@ def manage_bot_accounts():
         # 预加载所有User-Agent映射
         user_agents = {ua.used_by_account_id: ua.id for ua in UserAgent.query.filter(UserAgent.used_by_account_id.isnot(None)).all()}
         
-        # 构建查询
-        query = db.session.query(BotAccount, Account, BotNode.node_name)\
-            .outerjoin(Account, BotAccount.id == Account.bot_account_id)\
-            .outerjoin(BotNode, BotAccount.assigned_node_id == BotNode.id)
+        # 构建查询 - 安全处理 created_at 字段
+        try:
+            # 先检查 created_at 字段是否存在
+            from sqlalchemy import inspect
+            inspector = inspect(db.engine)
+            columns = [col['name'] for col in inspector.get_columns('bot_accounts')]
+            has_created_at = 'created_at' in columns
+            
+            if has_created_at:
+                # 字段存在，正常查询
+                query = db.session.query(BotAccount, Account, BotNode.node_name)\
+                    .outerjoin(Account, BotAccount.id == Account.bot_account_id)\
+                    .outerjoin(BotNode, BotAccount.assigned_node_id == BotNode.id)
+            else:
+                # 字段不存在，使用基本查询
+                print("Warning: created_at field not found, using basic query")
+                query = db.session.query(BotAccount, Account, BotNode.node_name)\
+                    .outerjoin(Account, BotAccount.id == Account.bot_account_id)\
+                    .outerjoin(BotNode, BotAccount.assigned_node_id == BotNode.id)
+        except Exception as e:
+            print(f"Error checking created_at field: {e}")
+            # 出错时使用基本查询
+            query = db.session.query(BotAccount, Account, BotNode.node_name)\
+                .outerjoin(Account, BotAccount.id == Account.bot_account_id)\
+                .outerjoin(BotNode, BotAccount.assigned_node_id == BotNode.id)
         
-        # 应用筛选条件
-        if status_filter:
+        # 应用基本筛选条件
+        if status_filter in ['enabled', 'disabled']:
             if status_filter == 'enabled':
                 query = query.filter(BotAccount.is_enabled == True)
             elif status_filter == 'disabled':
                 query = query.filter(BotAccount.is_enabled == False)
-            # normal 和 error 筛选将在数据处理阶段进行
         
         if node_id_filter:
             query = query.filter(BotAccount.assigned_node_id == int(node_id_filter))
@@ -613,37 +637,55 @@ def manage_bot_accounts():
         if email_keyword:
             query = query.filter(BotAccount.email.contains(email_keyword))
         
-        # 执行查询
-        accounts = query.order_by(BotAccount.email).all()
+        # 对于normal/error筛选，需要特殊处理
+        if status_filter in ['normal', 'error']:
+            # 先获取所有数据，然后在内存中筛选
+            all_accounts = query.order_by(BotAccount.email).all()
+            
+            # 筛选数据
+            filtered_accounts = []
+            for acc, monitoring_data, node_name in all_accounts:
+                user_agent_id = user_agents.get(acc.id)
+                
+                # 检查账户状态
+                has_error = False
+                if acc.is_enabled and monitoring_data and monitoring_data.status_details:
+                    try:
+                        status_details = json.loads(monitoring_data.status_details)
+                        pc_status = status_details.get('pc', {}).get('status', False)
+                        mobile_status = status_details.get('mobile', {}).get('status', False)
+                        if not pc_status or not mobile_status:
+                            has_error = True
+                    except:
+                        has_error = True
+                elif acc.is_enabled:
+                    has_error = True  # 启用但没有状态信息
+                
+                # 应用normal/error筛选
+                if status_filter == 'normal':
+                    # 正常：启用且没有错误
+                    if acc.is_enabled and not has_error:
+                        filtered_accounts.append((acc, monitoring_data, node_name, user_agent_id))
+                elif status_filter == 'error':
+                    # 异常：启用但有错误
+                    if acc.is_enabled and has_error:
+                        filtered_accounts.append((acc, monitoring_data, node_name, user_agent_id))
+            
+            # 计算分页
+            total_count = len(filtered_accounts)
+            offset = (page - 1) * page_size
+            accounts = filtered_accounts[offset:offset + page_size]
+            
+        else:
+            # 普通筛选，直接在数据库层面分页
+            total_count = query.count()
+            offset = (page - 1) * page_size
+            accounts = query.order_by(BotAccount.email).offset(offset).limit(page_size).all()
+            # 为普通查询添加user_agent_id
+            accounts = [(acc, monitoring_data, node_name, user_agents.get(acc.id)) for acc, monitoring_data, node_name in accounts]
         
         accounts_data = []
-        for acc, monitoring_data, node_name in accounts:
-            user_agent_id = user_agents.get(acc.id)
-            
-            # 检查账户状态（用于normal/error筛选）
-            has_error = False
-            if acc.is_enabled and monitoring_data and monitoring_data.status_details:
-                try:
-                    status_details = json.loads(monitoring_data.status_details)
-                    pc_status = status_details.get('pc', {}).get('status', False)
-                    mobile_status = status_details.get('mobile', {}).get('status', False)
-                    if not pc_status or not mobile_status:
-                        has_error = True
-                except:
-                    has_error = True
-            elif acc.is_enabled:
-                has_error = True  # 启用但没有状态信息
-            
-            # 应用normal/error筛选
-            if status_filter == 'normal':
-                # 正常：启用且没有错误
-                if not acc.is_enabled or has_error:
-                    continue
-            elif status_filter == 'error':
-                # 异常：启用但有错误
-                if not acc.is_enabled or not has_error:
-                    continue
-            
+        for acc, monitoring_data, node_name, user_agent_id in accounts:
             acc_dict = {
                 "id": acc.id, "email": acc.email, "password": acc.password,
                 "auxiliary_email": acc.auxiliary_email,
@@ -654,6 +696,7 @@ def manage_bot_accounts():
                 "assigned_node_id": acc.assigned_node_id,
                 "assigned_node_name": node_name,
                 "is_enabled": acc.is_enabled,
+                "created_at": acc.created_at.isoformat() if hasattr(acc, 'created_at') and acc.created_at else None,
                 "monitoring_data": {
                     "status_details": json.loads(monitoring_data.status_details) if monitoring_data and monitoring_data.status_details else {},
                     "last_updated": monitoring_data.last_updated if monitoring_data else None,
@@ -665,9 +708,17 @@ def manage_bot_accounts():
             }
             accounts_data.append(acc_dict)
         
+        # 返回Layui表格期望的格式
+        result = {
+            "code": 0,
+            "msg": "",
+            "count": total_count,
+            "data": accounts_data
+        }
+        
         # 缓存结果
-        set_cached_data(cache_key, accounts_data)
-        return jsonify(accounts_data)
+        set_cached_data(cache_key, result)
+        return jsonify(result)
 
     if request.method == 'POST':
             # 清除相关缓存
@@ -687,7 +738,12 @@ def manage_bot_accounts():
                 else:
                     db.session.add(account)
 
-                account.password = data.get('password')
+                # 处理密码字段：完全移除密码验证，允许空密码
+                password = data.get('password')
+                if password:  # 如果密码不为空，则更新密码
+                    account.password = password
+                # 完全移除密码验证，允许空密码
+                
                 account.auxiliary_email = data.get('auxiliary_email')
                 account.proxy = json.dumps(data.get('proxy', {}))
                 account.hot_search_endpoints = json.dumps(data.get('hotSearchEndpoints', []))

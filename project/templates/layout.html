@@ -7,6 +7,55 @@
     <title>{% block title %}监控面板{% endblock %} - Mic-Bot Server</title>
     <link rel="stylesheet" href="{{ url_for('frontend.static', filename='layui/css/layui.css') }}">
     <link rel="stylesheet" href="{{ url_for('frontend.static', filename='styles.css') }}">
+    <style>
+    /* 确保页面铺满浏览器 */
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        height: 100% !important;
+        width: 100% !important;
+        overflow-x: hidden !important;
+    }
+    
+    /* 布局容器铺满屏幕 */
+    .layui-layout {
+        height: 100vh !important;
+        width: 100% !important;
+    }
+    
+    .layui-layout-admin {
+        height: 100vh !important;
+        width: 100% !important;
+    }
+    
+    .layui-layout-body {
+        height: 100vh !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    /* 主内容区域 */
+    .layui-body {
+        height: calc(100vh - 60px - 50px) !important; /* 减去header和footer高度 */
+        overflow-y: auto !important;
+        padding: 15px !important;
+    }
+    
+    /* Footer样式 */
+    .layui-footer {
+        height: 50px !important;
+        line-height: 50px !important;
+        text-align: center !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    /* 移除所有可能的空白 */
+    * {
+        box-sizing: border-box;
+    }
+    </style>
 </head>
 <body class="layui-layout-body">
 

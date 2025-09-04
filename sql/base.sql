@@ -1,6 +1,6 @@
 -- 数据库基础结构脚本
--- 版本: v2.2
--- 日期: 2025-08-20
+-- 版本: v2.5
+-- 日期: 2025-09-04
 
 -- 1. 创建版本表
 CREATE TABLE IF NOT EXISTS db_version (
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS db_version (
 
 -- 插入初始版本记录（如果不存在）
 INSERT INTO db_version (version, description)
-SELECT '2.2', '数据库基础结构v2.2，包含所有最新功能'
+SELECT '2.5', '数据库基础结构v2.5，包含所有最新功能'
 WHERE NOT EXISTS (SELECT 1 FROM db_version);
 
 -- 2. 核心表结构 (使用IF NOT EXISTS避免删除现有数据)
@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS bot_accounts (
   assigned_node_id INT DEFAULT NULL,
   status INT DEFAULT 1,
   is_enabled BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (assigned_node_id) REFERENCES bot_nodes (id) ON DELETE SET NULL
 );
 COMMENT ON COLUMN bot_accounts.status IS '1=Active, 0=Inactive';
@@ -219,4 +220,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 数据库基础结构v2.2完成
+-- 添加性能优化索引
+CREATE INDEX IF NOT EXISTS idx_accounts_bot_account_id ON accounts (bot_account_id);
+CREATE INDEX IF NOT EXISTS idx_accounts_last_updated ON accounts (last_updated);
+CREATE INDEX IF NOT EXISTS idx_tasks_node_status_time ON tasks (node_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_node_logs_node_timestamp ON node_logs (node_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_user_agents_used_by_account ON user_agents (used_by_account_id);
+CREATE INDEX IF NOT EXISTS idx_verification_codes_account_created ON verification_codes (bot_account_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_bot_nodes_activity_status ON bot_nodes (activity_status);
+CREATE INDEX IF NOT EXISTS idx_bot_accounts_created_at ON bot_accounts (created_at);
+
+-- 数据库基础结构v2.5完成

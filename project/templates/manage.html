@@ -5,6 +5,34 @@
 
 {% block content %}
 <link rel="stylesheet" href="/static/table-center.css">
+<style>
+/* 状态图标样式（和监控面板一致） */
+.status-icon {
+    font-size: 16px;
+    margin-right: 5px;
+    transition: all 0.2s ease;
+}
+
+.status-icon:hover {
+    transform: scale(1.1);
+}
+
+.text-success {
+    color: #5FB878 !important;
+}
+
+.text-warning {
+    color: #FFB800 !important;
+}
+
+.text-danger {
+    color: #FF5722 !important;
+}
+
+.text-secondary {
+    color: #999 !important;
+}
+</style>
 <div class="layui-card">
     <div class="layui-card-body">
         <!-- 筛选和操作区域 -->
@@ -74,26 +102,26 @@
                 <form class="layui-form" lay-filter="accountForm">
                     <input type="hidden" name="id">
                     <div class="layui-form-item">
-                        <label class="layui-form-label"><span class="layui-text-red">*</span> 邮箱</label>
-                        <div class="layui-input-block">
+                        <label class="layui-form-label" style="width: 100px; white-space: nowrap;"><span class="layui-text-red">*</span> 邮箱</label>
+                        <div class="layui-input-block" style="margin-left: 110px;">
                             <input type="email" name="email" required lay-verify="required|email" autocomplete="off" class="layui-input">
                         </div>
                     </div>
                     <div class="layui-form-item">
-                        <label class="layui-form-label"><span class="layui-text-red">*</span> 密码</label>
-                        <div class="layui-input-block">
-                            <input type="password" name="password" required lay-verify="required" autocomplete="off" class="layui-input" placeholder="新增时必填，编辑时可不填表示不修改">
+                        <label class="layui-form-label" style="width: 100px; white-space: nowrap;">密码</label>
+                        <div class="layui-input-block" style="margin-left: 110px;">
+                            <input type="password" name="password" autocomplete="off" class="layui-input" placeholder="密码（可选）">
                         </div>
                     </div>
                     <div class="layui-form-item">
-                        <label class="layui-form-label">辅助邮箱</label>
-                        <div class="layui-input-block">
+                        <label class="layui-form-label" style="width: 100px; white-space: nowrap;">辅助邮箱</label>
+                        <div class="layui-input-block" style="margin-left: 110px;">
                             <input type="email" name="auxiliary_email" autocomplete="off" class="layui-input" placeholder="用于接收验证码的辅助邮箱（可选）">
                         </div>
                     </div>
                     <div class="layui-form-item">
-                        <label class="layui-form-label"><span class="layui-text-red">*</span> 分配节点</label>
-                        <div class="layui-input-block">
+                        <label class="layui-form-label" style="width: 100px; white-space: nowrap;"><span class="layui-text-red">*</span> 分配节点</label>
+                        <div class="layui-input-block" style="margin-left: 110px;">
                             <select name="assigned_node_id" id="assigned_node_id_select" lay-verify="required">
                                 <option value="">正在加载节点...</option>
                             </select>
@@ -101,8 +129,8 @@
                     </div>
                     <hr>
                     <div class="layui-form-item">
-                        <label class="layui-form-label">代理配置</label>
-                        <div class="layui-input-block">
+                        <label class="layui-form-label" style="width: 100px; white-space: nowrap;">代理配置</label>
+                        <div class="layui-input-block" style="margin-left: 110px;">
                             <div class="layui-row layui-col-space10">
                                 <div class="layui-col-md8">
                                     <input type="text" name="proxyUrl" placeholder="代理地址 (e.g., http://proxy.server)" class="layui-input">
@@ -114,8 +142,8 @@
                         </div>
                     </div>
                     <div class="layui-form-item">
-                        <label class="layui-form-label"></label>
-                        <div class="layui-input-block">
+                        <label class="layui-form-label" style="width: 100px; white-space: nowrap;"></label>
+                        <div class="layui-input-block" style="margin-left: 110px;">
                             <div class="layui-row layui-col-space10">
                                 <div class="layui-col-md6">
                                     <input type="text" name="proxyUsername" placeholder="用户名 (选填)" class="layui-input">
@@ -128,8 +156,8 @@
                     </div>
                     <hr>
                     <div class="layui-form-item">
-                        <label class="layui-form-label">User Agents</label>
-                        <div class="layui-input-block">
+                        <label class="layui-form-label" style="width: 100px; white-space: nowrap;">User Agents</label>
+                        <div class="layui-input-block" style="margin-left: 110px;">
                             <div class="layui-row layui-col-space10">
                                 <div class="layui-col-md6">
                                     <select name="user_agent_id" id="user_agent_select" lay-filter="userAgentSelect">
@@ -144,15 +172,15 @@
                                 </div>
                             </div>
                             <div class="layui-form-item" id="custom_user_agents_div" style="display: none; margin-top: 10px;">
-                                <div class="layui-input-block">
+                                <div class="layui-input-block" style="margin-left: 0;">
                                     <textarea name="userAgents" placeholder='{"desktop": "...", "mobile": "..."}' class="layui-textarea"></textarea>
                                 </div>
                             </div>
                         </div>
                     </div>
                     <div class="layui-form-item layui-form-text">
-                        <label class="layui-form-label">热搜词端点</label>
-                        <div class="layui-input-block">
+                        <label class="layui-form-label" style="width: 100px; white-space: nowrap;">热搜词端点</label>
+                        <div class="layui-input-block" style="margin-left: 110px;">
                             <textarea name="hotSearchEndpoints" placeholder='["weibo", "toutiao"]' class="layui-textarea"></textarea>
                             <div class="layui-form-mid layui-text-em">
                                 请到 <a href="https://hots.237890.xyz/all" target="_blank" style="color: #FF5722;">热搜源列表</a> 中获取端点名称。
@@ -239,15 +267,7 @@
                 dataName: 'data'
             },
             parseData: function(res) {
-                // 将API返回的数组格式转换为Layui期望的格式
-                if (Array.isArray(res)) {
-                    return {
-                        "code": 0,
-                        "msg": "",
-                        "count": res.length,
-                        "data": res
-                    };
-                }
+                // 后端现在直接返回Layui期望的格式
                 return res;
             },
             toolbar: false,
@@ -255,57 +275,132 @@
             title: '账户数据表',
             cols: [[
                 {type: 'checkbox', fixed: 'left'},
-                {field: 'email', title: '邮箱', minWidth: 200},
+                {field: 'email', title: '邮箱', minWidth: 200, templet: function(d) {
+                    // 检查最后更新时间是否为当天
+                    let isToday = true;
+                    if (d.monitoring_data && d.monitoring_data.last_updated) {
+                        const updateTime = new Date(d.monitoring_data.last_updated);
+                        const now = new Date();
+                        isToday = updateTime.toDateString() === now.toDateString();
+                    }
+                    
+                    // 检查是否为当天新增的账户
+                    let isNewToday = false;
+                    if (d.created_at && d.created_at !== null) {
+                        const createdTime = new Date(d.created_at);
+                        const now = new Date();
+                        isNewToday = createdTime.toDateString() === now.toDateString();
+                    }
+                    
+                    // 如果不是当天更新，邮箱用黄色标识
+                    const emailColor = isToday ? '' : 'color: #FFB800; font-weight: bold;';
+                    
+                    // 构建邮箱显示内容
+                    let emailHtml = `<span style="${emailColor}">${d.email}</span>`;
+                    
+                    // 如果是当天新增的账户，添加绿色叶子图标
+                    if (isNewToday) {
+                        emailHtml += ` <i class="layui-icon layui-icon-leaf" style="color: #5FB878; margin-left: 5px; font-size: 14px;" title="今天新增"></i>`;
+                    }
+                    
+                    return emailHtml;
+                }},
                 {field: 'assigned_node_name', title: '分配节点', minWidth: 150, templet: function(d) {
                     return d.assigned_node_name || '未分配';
                 }},
-                {field: 'is_enabled', title: '状态', width: 100, templet: function(d) {
+                {field: 'is_enabled', title: '状态', width: 120, templet: function(d) {
                     if (!d.is_enabled) {
                         return '<span class="layui-badge layui-bg-red">禁用</span>';
                     }
                     
-                    // 检查账户状态是否异常
-                    let hasError = false;
+                    // 解析状态详情
+                    let statusDetails = null;
                     if (d.monitoring_data && d.monitoring_data.status_details) {
                         try {
-                            const statusDetails = typeof d.monitoring_data.status_details === 'string' 
+                            statusDetails = typeof d.monitoring_data.status_details === 'string' 
                                 ? JSON.parse(d.monitoring_data.status_details) 
                                 : d.monitoring_data.status_details;
-                            
-                            // 检查桌面端和移动端状态
-                            const pcStatus = statusDetails.pc && statusDetails.pc.status;
-                            const mobileStatus = statusDetails.mobile && statusDetails.mobile.status;
-                            
-                            // 如果任一平台状态异常，则显示黄色
-                            if (!pcStatus || !mobileStatus) {
-                                hasError = true;
-                            }
                         } catch (e) {
-                            hasError = true;
+                            statusDetails = null;
                         }
-                    } else {
-                        hasError = true; // 没有状态信息也认为是异常
                     }
                     
-                    if (hasError) {
-                        return '<span class="layui-badge layui-bg-orange">异常</span>';
-                    } else {
-                        return '<span class="layui-badge layui-bg-green">正常</span>';
-                    }
+                    // 生成状态图标（和监控面板一样的样式）
+                    let html = '';
+                    const platforms = [
+                        { key: 'pc', icon: 'layui-icon-auz', name: '桌面端' },
+                        { key: 'mobile', icon: 'layui-icon-cellphone', name: '移动端' }
+                    ];
+
+                    platforms.forEach(p => {
+                        const details = statusDetails ? statusDetails[p.key] : null;
+                        let iconClass = 'text-secondary';
+                        let title = `${p.name}: 状态未知`;
+
+                        if (details) {
+                            if (details.status === true) {
+                                iconClass = 'text-success';
+                                title = `${p.name}: 正常 (Code: ${details.code}, ${details.message})`;
+                            } else {
+                                if ([1, 2].includes(details.code)) {
+                                    iconClass = 'text-danger';
+                                } else if ([3, 4].includes(details.code)) {
+                                    iconClass = 'text-warning';
+                                } else {
+                                    iconClass = 'text-danger';
+                                }
+                                title = `${p.name}: 异常 - ${details.message} (Code: ${details.code})`;
+                            }
+                        }
+                        html += `<i class="layui-icon ${p.icon} status-icon ${iconClass}" title="${title}" style="margin-right: 5px; font-size: 16px;"></i>`;
+                    });
+                    
+                    return html;
                 }},
-                {field: 'monitoring_data', title: '积分信息', minWidth: 200, templet: function(d) {
-                    if (d.monitoring_data) {
-                        return `<div style="font-size: 12px;">
-                            <div>总积分: <span style="color: #1E9FFF; font-weight: bold;">${d.monitoring_data.total_points || 0}</span></div>
-                            <div>今日获得: <span style="color: #5FB878;">${d.monitoring_data.daily_gain || 0}</span></div>
-                            <div>桌面: ${d.monitoring_data.desktop_gain || 0} | 移动: ${d.monitoring_data.mobile_gain || 0}</div>
-                        </div>`;
+                {field: 'monitoring_data', title: '总积分', width: 100, templet: function(d) {
+                    if (d.monitoring_data && d.monitoring_data.total_points !== undefined) {
+                        const totalPoints = d.monitoring_data.total_points || 0;
+                        return `<span style="color: #1E9FFF; font-weight: bold; font-size: 14px;">${totalPoints}</span>`;
                     }
-                    return '无数据';
+                    return '<span style="color: #999;">-</span>';
+                }},
+                {field: 'monitoring_data', title: '今日总计', width: 100, templet: function(d) {
+                    if (d.monitoring_data && d.monitoring_data.daily_gain !== undefined) {
+                        // 检查最后更新时间是否为当天
+                        let isToday = true;
+                        if (d.monitoring_data.last_updated) {
+                            const updateTime = new Date(d.monitoring_data.last_updated);
+                            const now = new Date();
+                            isToday = updateTime.toDateString() === now.toDateString();
+                        }
+                        
+                        // 如果不是当天更新，显示0
+                        const dailyGain = isToday ? (d.monitoring_data.daily_gain || 0) : 0;
+                        
+                        // 今日总计为0时用黄色显示
+                        const color = dailyGain === 0 ? '#FFB800' : '#5FB878';
+                        return `<span style="color: ${color}; font-weight: bold; font-size: 14px;">${dailyGain}</span>`;
+                    }
+                    return '<span style="color: #999;">-</span>';
                 }},
                 {field: 'monitoring_data', title: '最后更新', minWidth: 160, templet: function(d) {
                     if (d.monitoring_data && d.monitoring_data.last_updated) {
-                        return new Date(d.monitoring_data.last_updated).toLocaleString('zh-CN');
+                        const updateTime = new Date(d.monitoring_data.last_updated);
+                        const now = new Date();
+                        const isToday = updateTime.toDateString() === now.toDateString();
+                        
+                        const timeStr = updateTime.toLocaleString('zh-CN', { 
+                            timeZone: 'Asia/Shanghai', 
+                            hour12: false 
+                        });
+                        
+                        if (isToday) {
+                            // 当天更新：正常显示
+                            return timeStr;
+                        } else {
+                            // 非当天更新：红色标记
+                            return `<span style="color: #ff5722; font-weight: bold;">${timeStr}</span>`;
+                        }
                     }
                     return '-';
                 }},
@@ -404,15 +499,16 @@
                                 
                                 // 处理编辑模式下的特殊逻辑
                                 if (account.id) {
-                                    form.verify({
-                                        password: function() { return true; }
-                                    });
                                     // 安全地设置readOnly属性
                                     const emailInput = layero.find('[name="email"]')[0];
                                     if (emailInput) {
                                         emailInput.readOnly = true;
                                     }
                                 }
+                                
+                                // 完全移除密码验证，密码字段不进行任何验证
+                                const passwordInput = layero.find('[name="password"]');
+                                passwordInput.removeAttr('lay-verify');
                                 
                                 form.render(null, 'accountForm');
                                 // 重新绑定表单事件
@@ -509,7 +605,12 @@
                                         layer.closeAll('loading');
                                         if (result.status === 'success') {
                                             layer.closeAll('page');
-                                            tableIns.reload();
+                                            // 强制清除缓存并重新加载数据
+                                            tableIns.reload({
+                                                url: '/web_api/bot_accounts?_t=' + Date.now(),
+                                                where: {}, // 清除筛选条件
+                                                page: { curr: 1 } // 回到第一页
+                                            });
                                             layer.msg('保存成功', {icon: 1});
                                             
                                             // 设置标志，通知监控面板刷新数据
@@ -557,7 +658,12 @@
                     layer.closeAll('loading');
                     if (result.status === 'success') {
                         layer.msg('删除成功', {icon: 1});
-                        tableIns.reload();
+                        // 强制清除缓存并重新加载数据
+                        tableIns.reload({
+                            url: '/web_api/bot_accounts?_t=' + Date.now(),
+                            where: {}, // 清除筛选条件
+                            page: { curr: 1 } // 回到第一页
+                        });
                     } else {
                         layer.alert('删除失败: ' + result.message, {icon: 2});
                     }
@@ -614,6 +720,10 @@
                 success: function(layero) {
                     // 重新绑定表单事件
                     const form = layui.form;
+                    
+                    // 完全移除密码验证，密码字段不进行任何验证
+                    const passwordInput = layero.find('[name="password"]');
+                    passwordInput.removeAttr('lay-verify');
                     
                     // 重新加载节点
                     // 先获取节点选择框并设置为加载中状态
@@ -705,7 +815,12 @@
                             layer.closeAll('loading');
                             if (result.status === 'success') {
                                 layer.closeAll('page');
-                                tableIns.reload();
+                                // 强制清除缓存并重新加载数据
+                                tableIns.reload({
+                                    url: '/web_api/bot_accounts?_t=' + Date.now(),
+                                    where: {}, // 清除筛选条件
+                                    page: { curr: 1 } // 回到第一页
+                                });
                                 layer.msg('保存成功', {icon: 1});
                             } else {
                                 layer.alert('操作失败: ' + result.message, {icon: 2});
@@ -753,7 +868,12 @@
                     layer.closeAll('loading');
                     if (result.status === 'success') {
                         layer.msg('删除成功', {icon: 1});
-                        tableIns.reload();
+                        // 强制清除缓存并重新加载数据
+                        tableIns.reload({
+                            url: '/web_api/bot_accounts?_t=' + Date.now(),
+                            where: {}, // 清除筛选条件
+                            page: { curr: 1 } // 回到第一页
+                        });
                     } else {
                         layer.alert('删除失败: ' + result.message, {icon: 2});
                     }

@@ -45,6 +45,7 @@ class BotAccount(db.Model):
     assigned_node_id = db.Column(db.Integer, db.ForeignKey('bot_nodes.id'))
     status = db.Column(db.Integer, default=1)
     is_enabled = db.Column(db.Boolean, default=True)  # 账户启用状态，默认为True
+    created_at = db.Column(db.DateTime, nullable=True, default=db.func.current_timestamp())  # 创建时间
     monitoring_data = db.relationship('Account', backref='bot_account', uselist=False, cascade="all, delete-orphan")
 
 class Account(db.Model):

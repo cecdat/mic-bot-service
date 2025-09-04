@@ -16,6 +16,65 @@ def log_with_time(message):
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     print(f"[{timestamp}] {message}")
 
+def split_sql_statements(sql_content):
+    """智能分割SQL语句，处理dollar-quoted strings"""
+    statements = []
+    current_statement = ""
+    in_dollar_quote = False
+    dollar_tag = ""
+    i = 0
+    
+    while i < len(sql_content):
+        char = sql_content[i]
+        
+        if not in_dollar_quote:
+            # 不在dollar-quoted string中
+            if char == '$':
+                # 检查是否是dollar-quoted string的开始
+                j = i + 1
+                tag = ""
+                while j < len(sql_content) and sql_content[j] != '$':
+                    tag += sql_content[j]
+                    j += 1
+                
+                if j < len(sql_content) and sql_content[j] == '$':
+                    # 找到完整的dollar tag
+                    dollar_tag = '$' + tag + '$'
+                    in_dollar_quote = True
+                    current_statement += sql_content[i:j+1]
+                    i = j + 1
+                    continue
+            
+            elif char == ';':
+                # 普通分号，结束语句
+                current_statement += char
+                statement = current_statement.strip()
+                # 过滤空语句和纯注释
+                if statement and not statement.startswith('--') and not statement.isspace():
+                    statements.append(statement)
+                current_statement = ""
+                i += 1
+                continue
+        
+        else:
+            # 在dollar-quoted string中
+            if sql_content[i:i+len(dollar_tag)] == dollar_tag:
+                # 找到dollar-quoted string的结束
+                in_dollar_quote = False
+                current_statement += dollar_tag
+                i += len(dollar_tag)
+                continue
+        
+        current_statement += char
+        i += 1
+    
+    # 添加最后一个语句
+    statement = current_statement.strip()
+    if statement and not statement.startswith('--') and not statement.isspace():
+        statements.append(statement)
+    
+    return statements
+
 def wait_for_database():
     """等待数据库服务就绪"""
     log_with_time("等待数据库服务就绪...")
@@ -79,11 +138,29 @@ def initialize_database():
             with open(base_sql_path, 'r', encoding='utf-8') as f:
                 sql_content = f.read()
             
-            # 分割SQL语句并执行
-            sql_statements = [stmt.strip() for stmt in sql_content.split(';') if stmt.strip()]
-            for statement in sql_statements:
-                if statement:
-                    cursor.execute(statement)
+            # 使用psycopg2的execute_values或直接执行整个脚本
+            try:
+                # 直接执行整个SQL脚本
+                cursor.execute(sql_content)
+                log_with_time("基础SQL脚本执行完成")
+            except Exception as e:
+                log_with_time(f"直接执行失败，尝试分割执行: {e}")
+                # 如果直接执行失败，则分割执行
+                sql_statements = split_sql_statements(sql_content)
+                log_with_time(f"分割得到 {len(sql_statements)} 条SQL语句")
+                
+                for i, statement in enumerate(sql_statements):
+                    statement = statement.strip()
+                    if statement:
+                        log_with_time(f"执行第 {i+1} 条SQL语句: {statement[:100]}...")
+                        try:
+                            cursor.execute(statement)
+                        except Exception as e:
+                            log_with_time(f"SQL语句执行失败: {e}")
+                            log_with_time(f"失败的语句: {statement}")
+                            raise
+                    else:
+                        log_with_time(f"跳过第 {i+1} 条空语句")
             
             conn.commit()
             log_with_time("基础SQL脚本执行完成")
@@ -190,11 +267,17 @@ def upgrade_database():
                 with open(script_path, 'r', encoding='utf-8') as f:
                     sql_content = f.read()
                 
-                # 分割SQL语句并执行
-                sql_statements = [stmt.strip() for stmt in sql_content.split(';') if stmt.strip()]
-                for statement in sql_statements:
-                    if statement:
-                        cursor.execute(statement)
+                # 尝试直接执行整个SQL脚本
+                try:
+                    cursor.execute(sql_content)
+                    log_with_time(f"升级脚本 {script_file} 执行完成")
+                except Exception as e:
+                    log_with_time(f"直接执行失败，尝试分割执行: {e}")
+                    # 如果直接执行失败，则分割执行
+                    sql_statements = split_sql_statements(sql_content)
+                    for statement in sql_statements:
+                        if statement.strip():
+                            cursor.execute(statement)
                 
                 conn.commit()
                 log_with_time(f"升级脚本 {script_file} 执行完成")

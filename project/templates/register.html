@@ -6,6 +6,21 @@
     <title>注册 - Mic-Bot Server</title>
     <link rel="stylesheet" href="{{ url_for('frontend.static', filename='layui/css/layui.css') }}">
     <link rel="stylesheet" href="{{ url_for('frontend.static', filename='styles.css') }}">
+    <style>
+    /* 确保页面铺满浏览器 */
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        height: 100% !important;
+        width: 100% !important;
+        overflow-x: hidden !important;
+    }
+    
+    /* 移除所有可能的空白 */
+    * {
+        box-sizing: border-box;
+    }
+    </style>
 </head>
 <body class="login-body">
 <div class="login-wrapper">

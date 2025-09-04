@@ -1,52 +1,56 @@
+version: '3.8'
+
 services:
   api:
-    build: .
-    container_name: api # 使用唯一的容器名
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: api
     restart: unless-stopped
     ports:
-      - "2003:5000" # 外部端口2002映射到容器内部5000端口
+      - "2003:5000"
     volumes:
-      # 确保脚本可执行
-      - ./run.py:/app/run.py
-      - ./project:/app/project
-      # 挂载init文件夹
-      - ./init:/app/init
-
-      # 将实例文件夹持久化
+      - ./run.py:/app/run.py:ro
+      - ./project:/app/project:ro
+      - ./init:/app/init:ro
       - ./instance:/app/instance
-      # SQL文件目录挂载
-      - ./sql:/app/sql
+      - ./sql:/app/sql:ro
     entrypoint: ["python", "/app/init/init.py"]
     environment:
-      - FLASK_APP=run
-      - FLASK_ENV=production
-      - TZ=Asia/Shanghai
-      # --- 数据库连接信息 ---
-      - DATABASE_URL=postgresql://user:password@db:5432/rewards_db
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=rewards_db
+      FLASK_APP: run
+      FLASK_ENV: production
+      TZ: Asia/Shanghai
+      DATABASE_URL: postgresql://user:password@db:5432/rewards_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: rewards_db
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - app-network
 
   db:
     image: postgres:16
-    container_name: postgres-db-service # 使用唯一的容器名
+    container_name: postgres-db-service
     restart: unless-stopped
     environment:
-      - POSTGRES_DB=rewards_db
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
-      - TZ=Asia/Shanghai
-      - POSTGRES_INITDB_ARGS=--encoding=UTF-8
-      - POSTGRES_ENCODING=UTF-8
+      POSTGRES_DB: rewards_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      TZ: Asia/Shanghai
+      POSTGRES_INITDB_ARGS: --encoding=UTF-8
+      POSTGRES_ENCODING: UTF-8
     volumes:
-      # 将 PostgreSQL 数据持久化到宿主机的 ./data 目录
       - ./data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d rewards_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - app-network
 
