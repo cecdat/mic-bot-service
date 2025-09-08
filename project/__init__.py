@@ -11,6 +11,16 @@ def create_app(test_config=None):
         SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'postgresql+psycopg2://user:password@db:5432/rewards_db?client_encoding=utf8'),
         SQLALCHEMY_TRACK_MODIFICATIONS=False
     )
+    
+    # 配置日志系统
+    import sys
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from config.logging_config import setup_logging, log_system_info, cleanup_old_logs
+    setup_logging(app)
+    log_system_info(app.logger)
+    
+    # 清理旧日志文件
+    cleanup_old_logs(os.path.join(app.instance_path, 'logs'))
 
     try:
         os.makedirs(app.instance_path)
@@ -33,6 +43,9 @@ def create_app(test_config=None):
     
     from . import api_user_agents
     app.register_blueprint(api_user_agents.bp)
+    
+    from . import api_push
+    app.register_blueprint(api_push.bp)
 
     from . import frontend
     app.register_blueprint(frontend.bp)
@@ -46,9 +59,5 @@ def create_app(test_config=None):
     
     # 确保在应用退出时关闭调度器
     atexit.register(scheduler.shutdown_scheduler)
-    
-    # 注册WebSocket事件处理器
-    from . import websocket_events
-    websocket_events.register_websocket_events(app.socketio)
     
     return app

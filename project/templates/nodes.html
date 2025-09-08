@@ -27,65 +27,66 @@
 
 
 <script type="text/html" id="node-config-form-template">
-    <div style="padding: 20px 30px 0 0;">
+    <div style="padding: 15px;">
         <form class="layui-form" lay-filter="nodeForm">
             <input type="hidden" name="id">
-            <div class="layui-form-item">
-                <label class="layui-form-label" style="width: 100px; white-space: nowrap;">节点名称</label>
-                <div class="layui-input-block" style="margin-left: 110px;">
-                    <input type="text" name="node_name" required lay-verify="required" autocomplete="off" class="layui-input">
+            
+            <!-- 节点名称 -->
+            <div class="layui-form-item" style="margin-bottom: 15px;">
+                <label class="layui-form-label" style="width: 80px; white-space: nowrap;">节点名称</label>
+                <div class="layui-input-block" style="margin-left: 90px;">
+                    <input type="text" name="node_name" required lay-verify="required" autocomplete="off" class="layui-input" placeholder="请输入节点名称">
                 </div>
             </div>
-            <hr>
-            <div class="layui-form-item">
-                <label class="layui-form-label" style="width: 100px; white-space: nowrap;">调度配置</label>
-                <div class="layui-input-block" style="margin-left: 110px;">
-                    <div class="layui-input-inline" style="width: 200px;">
-                        <input type="text" name="cron_schedule" placeholder="Cron表达式, e.g., 10 9,19 * * *" class="layui-input">
+            
+            <!-- 调度配置 -->
+            <div class="layui-form-item" style="margin-bottom: 15px;">
+                <label class="layui-form-label" style="width: 80px; white-space: nowrap;">调度配置</label>
+                <div class="layui-input-block" style="margin-left: 90px;">
+                    <div class="layui-input-inline" style="width: 150px;">
+                        <input type="text" name="cron_schedule" placeholder="Cron表达式" class="layui-input">
                     </div>
-                    <div class="layui-form-mid">随机延迟(分)</div>
-                    <div class="layui-input-inline" style="width: 100px;">
+                    <div class="layui-form-mid" style="margin: 0 3px; font-size: 12px;">随机延迟(分)</div>
+                    <div class="layui-input-inline" style="width: 60px;">
                         <input type="number" name="min_sleep_minutes" placeholder="最小" class="layui-input">
                     </div>
-                    <div class="layui-form-mid">-</div>
-                    <div class="layui-input-inline" style="width: 100px;">
+                    <div class="layui-form-mid" style="margin: 0 3px;">-</div>
+                    <div class="layui-input-inline" style="width: 60px;">
                         <input type="number" name="max_sleep_minutes" placeholder="最大" class="layui-input">
                     </div>
                 </div>
             </div>
-            <hr>
-            <div class="layui-form-item">
-                <label class="layui-form-label" style="width: 100px; white-space: nowrap;">并发账号数</label>
-                <div class="layui-input-block" style="margin-left: 110px;">
-                    <div class="layui-input-inline" style="width: 120px;">
+            
+            <!-- 并发和搜索配置 -->
+            <div class="layui-form-item" style="margin-bottom: 15px;">
+                <label class="layui-form-label" style="width: 80px; white-space: nowrap;">并发配置</label>
+                <div class="layui-input-block" style="margin-left: 90px;">
+                    <div class="layui-input-inline" style="width: 80px;">
                         <input type="number" name="clusters" placeholder="并发数" class="layui-input">
                     </div>
-                    <div class="layui-form-mid">搜索间隔</div>
-                    <div class="layui-input-inline" style="width: 120px;">
-                        <input type="text" name="search_delay_min" placeholder="最小, e.g., 30s" class="layui-input">
+                    <div class="layui-form-mid" style="margin: 0 3px; font-size: 12px;">搜索间隔</div>
+                    <div class="layui-input-inline" style="width: 80px;">
+                        <input type="text" name="search_delay_min" placeholder="最小" class="layui-input">
                     </div>
-                    <div class="layui-form-mid">-</div>
-                    <div class="layui-input-inline" style="width: 120px;">
-                        <input type="text" name="search_delay_max" placeholder="最大, e.g., 2min" class="layui-input">
+                    <div class="layui-form-mid" style="margin: 0 3px;">-</div>
+                    <div class="layui-input-inline" style="width: 80px;">
+                        <input type="text" name="search_delay_max" placeholder="最大" class="layui-input">
                     </div>
                 </div>
             </div>
-            <hr>
-            <div class="layui-form-item">
-                <label class="layui-form-label" style="width: 100px; white-space: nowrap;">日志推送</label>
-                <div class="layui-input-block" style="margin-left: 110px;">
-                    <input type="checkbox" name="log_push_enabled" lay-skin="primary" title="启用日志推送">
-                </div>
-            </div>
-            <div class="layui-form-item">
-                <label class="layui-form-label" style="width: 100px; white-space: nowrap;">推送间隔</label>
-                <div class="layui-input-block" style="margin-left: 110px;">
-                    <div class="layui-input-inline" style="width: 120px;">
+            
+            <!-- 日志推送配置 -->
+            <div class="layui-form-item" style="margin-bottom: 15px;">
+                <label class="layui-form-label" style="width: 80px; white-space: nowrap;">日志推送</label>
+                <div class="layui-input-block" style="margin-left: 90px;">
+                    <input type="checkbox" name="log_push_enabled" lay-skin="primary" title="启用日志推送" style="margin-right: 8px;">
+                    <div class="layui-input-inline" style="width: 80px; margin-left: 15px;">
                         <input type="number" name="log_push_interval" placeholder="30" value="30" class="layui-input">
                     </div>
-                    <div class="layui-form-mid">秒</div>
+                    <div class="layui-form-mid" style="margin-left: 3px; font-size: 12px;">秒</div>
                 </div>
             </div>
+            
             <button class="layui-btn" lay-submit lay-filter="saveNode" id="saveNodeSubmit" style="display: none;">提交</button>
         </form>
     </div>
@@ -310,9 +311,9 @@ layui.use(['table', 'form', 'layer'], function(){
     // 移除自动刷新功能
     let tableIns; // 表格实例变量
 
-    var table = window.table;
-    var form = window.form;
-    var layer = window.layer;
+    var table = layui.table;
+    var form = layui.form;
+    var layer = layui.layer;
 
     tableIns = table.render({
         elem: '#nodes-table',
@@ -390,7 +391,7 @@ layui.use(['table', 'form', 'layer'], function(){
         layer.open({
             type: 1,
             title: data ? `编辑节点: ${data.node_name}` : '新增节点',
-            area: ['700px', 'auto'],
+            area: ['600px', 'auto'],
             content: document.getElementById('node-config-form-template').innerHTML,
             btn: ['保存配置', '取消'],
             yes: function(index, layero){
@@ -411,7 +412,7 @@ layui.use(['table', 'form', 'layer'], function(){
                 });
                 // 允许编辑节点名字
                 layero.find('[name="node_name"]')[0].readOnly = false;
-                form.render(null, 'nodeForm');
+                form.render('nodeForm');
             }
         });
     }
@@ -457,7 +458,7 @@ layui.use(['table', 'form', 'layer'], function(){
                         type: 1,
                         title: false,  // 不显示标题栏
                         closeBtn: false,  // 不显示关闭按钮
-                        area: ['480px', 'auto'],
+                        area: ['80%', 'auto'],
                         content: tokenHtml,
                         btn: ['已复制保存'],
                         btnAlign: 'c',  // 按钮居中
@@ -630,7 +631,7 @@ layui.use(['table', 'form', 'layer'], function(){
                         layer.open({
                             type: 1,
                             title: '🔑 新的API Token已生成',
-                            area: ['500px', 'auto'],
+                            area: ['80%', 'auto'],
                             content: `
                                 <div style="padding: 20px;">
                                     <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 15px;">

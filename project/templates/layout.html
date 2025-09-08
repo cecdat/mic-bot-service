@@ -69,7 +69,7 @@
     <div class="layui-header">
         <div class="layui-logo layui-hide-xs layui-bg-black">Mic-Bot Server</div>
         <ul class="layui-nav layui-layout-right">
-            <li class="layui-nav-item layui-hide-xs"><a href="javascript:;">你好, {{ session.get('username', '管理员') }}</a></li>
+            <li class="layui-nav-item layui-hide-xs"><a href="javascript:;" id="current-time" style="color: #fff; font-weight: 500; font-family: 'Courier New', monospace; font-size: 14px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">--:--:--</a></li>
             <li class="layui-nav-item"><a href="{{ url_for('frontend.logout') }}">退出登录</a></li>
         </ul>
     </div>
@@ -86,8 +86,8 @@
                 <li class="layui-nav-item {% if request.path == url_for('frontend.nodes') %}layui-this{% endif %}">
                     <a href="{{ url_for('frontend.nodes') }}"><i class="layui-icon layui-icon-component"></i> 节点管理</a>
                 </li>
-                <li class="layui-nav-item {% if request.path == url_for('frontend.push') %}layui-this{% endif %}">
-                    <a href="{{ url_for('frontend.push') }}"><i class="layui-icon layui-icon-notice"></i> 推送配置</a>
+                <li class="layui-nav-item {% if request.path == url_for('frontend.push_config') %}layui-this{% endif %}">
+                    <a href="{{ url_for('frontend.push_config') }}"><i class="layui-icon layui-icon-notice"></i> 推送配置</a>
                 </li>
                 <li class="layui-nav-item {% if request.path == url_for('frontend.verification') %}layui-this{% endif %}">
                     <a href="{{ url_for('frontend.verification') }}"><i class="layui-icon layui-icon-vercode"></i> 验证码管理</a>
@@ -108,62 +108,88 @@
     </div>
 </div>
 
-<script src="{{ url_for('frontend.static', filename='layui/layui.js') }}"></script>
-<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-<script src="{{ url_for('frontend.static', filename='websocket-client.js') }}"></script>
-<script>
-// 初始化 LayUI 的核心模块
-layui.use(['element', 'layer', 'form', 'table'], function(){
-  window.element = layui.element;
-  window.layer = layui.layer;
-  window.form = layui.form;
-  window.table = layui.table;
-});
-
-// 全局的 fetch 封装，用于处理认证
-window.fetchWithAuth = async function(url, options = {}) {
-  console.log('[fetchWithAuth] 调用开始, URL:', url);
-  console.log('[fetchWithAuth] 请求选项:', options);
-
-  // 简化的headers设置
-  const headers = { 
-    'Content-Type': 'application/json',
-    ...options.headers
-  };
-  console.log('[fetchWithAuth] 请求头:', headers);
-
-  try {
-    // 使用fetch发送请求
-    console.log('[fetchWithAuth] 发送请求...');
-    const response = await fetch(url, { 
-      ...options, 
-      headers, 
-      credentials: 'same-origin'
+    <script src="{{ url_for('frontend.static', filename='layui/layui.js') }}"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="{{ url_for('frontend.static', filename='websocket-client.js') }}"></script>
+    <script>
+    // 等待Layui加载完成
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化 LayUI 的核心模块
+        layui.use(['element', 'layer', 'form', 'table'], function(){
+            window.element = layui.element;
+            window.layer = layui.layer;
+            window.form = layui.form;
+            window.table = layui.table;
+        });
     });
 
-    console.log('[fetchWithAuth] 响应状态:', response.status);
+    // 全局的 fetch 封装，用于处理认证
+    window.fetchWithAuth = async function(url, options = {}) {
+        console.log('[fetchWithAuth] 调用开始, URL:', url);
+        console.log('[fetchWithAuth] 请求选项:', options);
 
-    // 处理认证失败
-    if (response.status === 401) {
-      console.error('[fetchWithAuth] 认证失败，重定向到登录');
-      window.location.href = "{{ url_for('frontend.login') }}";
-      throw new Error('Authentication failed');
+        // 简化的headers设置
+        const headers = { 
+            'Content-Type': 'application/json',
+            ...options.headers
+        };
+        console.log('[fetchWithAuth] 请求头:', headers);
+
+        try {
+            // 使用fetch发送请求
+            console.log('[fetchWithAuth] 发送请求...');
+            const response = await fetch(url, { 
+                ...options, 
+                headers, 
+                credentials: 'same-origin'
+            });
+
+            console.log('[fetchWithAuth] 响应状态:', response.status);
+
+            // 处理认证失败
+            if (response.status === 401) {
+                console.error('[fetchWithAuth] 认证失败，重定向到登录');
+                window.location.href = "{{ url_for('frontend.login') }}";
+                throw new Error('Authentication failed');
+            }
+
+            // 处理非2xx响应
+            if (!response.ok) {
+                console.error('[fetchWithAuth] 请求失败，状态码:', response.status);
+                throw new Error(`Request failed with status ${response.status}`);
+            }
+
+            console.log('[fetchWithAuth] 请求成功');
+            return response;
+        } catch (error) {
+            console.error('[fetchWithAuth] 错误:', error);
+            throw error;
+        }
     }
 
-    // 处理非2xx响应
-    if (!response.ok) {
-      console.error('[fetchWithAuth] 请求失败，状态码:', response.status);
-      throw new Error(`Request failed with status ${response.status}`);
+    // 实时时间显示功能
+    function updateCurrentTime() {
+        const timeElement = document.getElementById('current-time');
+        if (timeElement) {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('zh-CN', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            timeElement.textContent = timeString;
+        }
     }
 
-    console.log('[fetchWithAuth] 请求成功');
-    return response;
-  } catch (error) {
-    console.error('[fetchWithAuth] 错误:', error);
-    throw error;
-  }
-}
-</script>
-{% block custom_js %}{% endblock %}
+    // 页面加载完成后启动时间更新
+    document.addEventListener('DOMContentLoaded', function() {
+        // 立即更新一次时间
+        updateCurrentTime();
+        // 每秒更新时间
+        setInterval(updateCurrentTime, 1000);
+    });
+    </script>
+    {% block custom_js %}{% endblock %}
 </body>
 </html>

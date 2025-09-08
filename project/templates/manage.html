@@ -98,42 +98,52 @@
         
         <!-- 配置表单模板 -->
         <script type="text/html" id="account-config-form-template">
-            <div style="padding: 20px 30px 0 0;">
+            <div style="padding: 15px;">
                 <form class="layui-form" lay-filter="accountForm">
                     <input type="hidden" name="id">
-                    <div class="layui-form-item">
-                        <label class="layui-form-label" style="width: 100px; white-space: nowrap;"><span class="layui-text-red">*</span> 邮箱</label>
-                        <div class="layui-input-block" style="margin-left: 110px;">
+                    
+                    <!-- 基本信息 -->
+                    <div class="layui-form-item" style="margin-bottom: 15px;">
+                        <label class="layui-form-label" style="width: 80px; white-space: nowrap;"><span class="layui-text-red">*</span> 邮箱</label>
+                        <div class="layui-input-block" style="margin-left: 90px;">
                             <input type="email" name="email" required lay-verify="required|email" autocomplete="off" class="layui-input">
                         </div>
                     </div>
-                    <div class="layui-form-item">
-                        <label class="layui-form-label" style="width: 100px; white-space: nowrap;">密码</label>
-                        <div class="layui-input-block" style="margin-left: 110px;">
+                    
+                    <div class="layui-form-item" style="margin-bottom: 15px;">
+                        <label class="layui-form-label" style="width: 80px; white-space: nowrap;">密码</label>
+                        <div class="layui-input-block" style="margin-left: 90px;">
                             <input type="password" name="password" autocomplete="off" class="layui-input" placeholder="密码（可选）">
                         </div>
                     </div>
-                    <div class="layui-form-item">
-                        <label class="layui-form-label" style="width: 100px; white-space: nowrap;">辅助邮箱</label>
-                        <div class="layui-input-block" style="margin-left: 110px;">
+                    
+                    <div class="layui-form-item" style="margin-bottom: 15px;">
+                        <label class="layui-form-label" style="width: 80px; white-space: nowrap;">辅助邮箱</label>
+                        <div class="layui-input-block" style="margin-left: 90px;">
                             <input type="email" name="auxiliary_email" autocomplete="off" class="layui-input" placeholder="用于接收验证码的辅助邮箱（可选）">
                         </div>
                     </div>
-                    <div class="layui-form-item">
-                        <label class="layui-form-label" style="width: 100px; white-space: nowrap;"><span class="layui-text-red">*</span> 分配节点</label>
-                        <div class="layui-input-block" style="margin-left: 110px;">
+                    
+                    <div class="layui-form-item" style="margin-bottom: 15px;">
+                        <label class="layui-form-label" style="width: 80px; white-space: nowrap;"><span class="layui-text-red">*</span> 分配节点</label>
+                        <div class="layui-input-block" style="margin-left: 90px;">
                             <select name="assigned_node_id" id="assigned_node_id_select" lay-verify="required">
                                 <option value="">正在加载节点...</option>
                             </select>
                         </div>
                     </div>
-                    <hr>
-                    <div class="layui-form-item">
-                        <label class="layui-form-label" style="width: 100px; white-space: nowrap;">代理配置</label>
-                        <div class="layui-input-block" style="margin-left: 110px;">
-                            <div class="layui-row layui-col-space10">
+                    
+                    <!-- 代理配置 -->
+                    <fieldset class="layui-elem-field layui-field-title" style="margin-top: 15px; margin-bottom: 10px;">
+                        <legend style="font-size: 14px;">代理配置</legend>
+                    </fieldset>
+                    
+                    <div class="layui-form-item" style="margin-bottom: 15px;">
+                        <label class="layui-form-label" style="width: 80px; white-space: nowrap;">代理地址</label>
+                        <div class="layui-input-block" style="margin-left: 90px;">
+                            <div class="layui-row layui-col-space5">
                                 <div class="layui-col-md8">
-                                    <input type="text" name="proxyUrl" placeholder="代理地址 (e.g., http://proxy.server)" class="layui-input">
+                                    <input type="text" name="proxyUrl" placeholder="代理地址" class="layui-input">
                                 </div>
                                 <div class="layui-col-md4">
                                     <input type="number" name="proxyPort" placeholder="端口" class="layui-input">
@@ -141,52 +151,57 @@
                             </div>
                         </div>
                     </div>
-                    <div class="layui-form-item">
-                        <label class="layui-form-label" style="width: 100px; white-space: nowrap;"></label>
-                        <div class="layui-input-block" style="margin-left: 110px;">
-                            <div class="layui-row layui-col-space10">
+                    
+                    <div class="layui-form-item" style="margin-bottom: 15px;">
+                        <label class="layui-form-label" style="width: 80px; white-space: nowrap;">代理认证</label>
+                        <div class="layui-input-block" style="margin-left: 90px;">
+                            <div class="layui-row layui-col-space5">
                                 <div class="layui-col-md6">
-                                    <input type="text" name="proxyUsername" placeholder="用户名 (选填)" class="layui-input">
+                                    <input type="text" name="proxyUsername" placeholder="用户名" class="layui-input">
                                 </div>
                                 <div class="layui-col-md6">
-                                    <input type="password" name="proxyPassword" placeholder="密码 (选填)" class="layui-input">
+                                    <input type="password" name="proxyPassword" placeholder="密码" class="layui-input">
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <hr>
-                    <div class="layui-form-item">
-                        <label class="layui-form-label" style="width: 100px; white-space: nowrap;">User Agents</label>
-                        <div class="layui-input-block" style="margin-left: 110px;">
-                            <div class="layui-row layui-col-space10">
-                                <div class="layui-col-md6">
+                    
+                    <!-- User Agents -->
+                    <div class="layui-form-item" style="margin-bottom: 15px;">
+                        <label class="layui-form-label" style="width: 80px; white-space: nowrap;">User Agents</label>
+                        <div class="layui-input-block" style="margin-left: 90px;">
+                            <div class="layui-row layui-col-space5">
+                                <div class="layui-col-md8">
                                     <select name="user_agent_id" id="user_agent_select" lay-filter="userAgentSelect">
                                         <option value="">选择预定义User-Agent</option>
                                         <option value="custom">自定义User-Agent</option>
                                     </select>
                                 </div>
-                                <div class="layui-col-md6">
-                                    <button type="button" class="layui-btn layui-btn-primary" onclick="refreshUserAgents()">
+                                <div class="layui-col-md4">
+                                    <button type="button" class="layui-btn layui-btn-primary layui-btn-sm" onclick="refreshUserAgents()">
                                         <i class="layui-icon layui-icon-refresh"></i> 刷新
                                     </button>
                                 </div>
                             </div>
                             <div class="layui-form-item" id="custom_user_agents_div" style="display: none; margin-top: 10px;">
                                 <div class="layui-input-block" style="margin-left: 0;">
-                                    <textarea name="userAgents" placeholder='{"desktop": "...", "mobile": "..."}' class="layui-textarea"></textarea>
+                                    <textarea name="userAgents" placeholder='{"desktop": "...", "mobile": "..."}' class="layui-textarea" style="height: 60px;"></textarea>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div class="layui-form-item layui-form-text">
-                        <label class="layui-form-label" style="width: 100px; white-space: nowrap;">热搜词端点</label>
-                        <div class="layui-input-block" style="margin-left: 110px;">
-                            <textarea name="hotSearchEndpoints" placeholder='["weibo", "toutiao"]' class="layui-textarea"></textarea>
-                            <div class="layui-form-mid layui-text-em">
+                    
+                    <!-- 热搜词端点 -->
+                    <div class="layui-form-item layui-form-text" style="margin-bottom: 15px;">
+                        <label class="layui-form-label" style="width: 80px; white-space: nowrap;">热搜词端点</label>
+                        <div class="layui-input-block" style="margin-left: 90px;">
+                            <textarea name="hotSearchEndpoints" placeholder='["weibo", "toutiao"]' class="layui-textarea" style="height: 60px;"></textarea>
+                            <div class="layui-form-mid layui-text-em" style="font-size: 12px;">
                                 请到 <a href="https://hots.237890.xyz/all" target="_blank" style="color: #FF5722;">热搜源列表</a> 中获取端点名称。
                             </div>
                         </div>
                     </div>
+                    
                     <button class="layui-btn" lay-submit lay-filter="saveAccount" id="saveAccountSubmit" style="display: none;">提交</button>
                 </form>
             </div>
@@ -366,18 +381,29 @@
                 }},
                 {field: 'monitoring_data', title: '今日总计', width: 100, templet: function(d) {
                     if (d.monitoring_data && d.monitoring_data.daily_gain !== undefined) {
-                        // 检查最后更新时间是否为当天
-                        let isToday = true;
-                        if (d.monitoring_data.last_updated) {
-                            const updateTime = new Date(d.monitoring_data.last_updated);
-                            const now = new Date();
-                            isToday = updateTime.toDateString() === now.toDateString();
+                        // 检查最后更新时间是否为今天
+                        const lastUpdated = d.monitoring_data.last_updated;
+                        let isToday = false;
+                        
+                        if (lastUpdated) {
+                            try {
+                                const updateDate = new Date(lastUpdated);
+                                const today = new Date();
+                                
+                                // 修复时区问题：比较日期部分，忽略时间
+                                const updateDateStr = updateDate.toISOString().split('T')[0];
+                                const todayStr = today.toISOString().split('T')[0];
+                                
+                                isToday = updateDateStr === todayStr;
+                            } catch (e) {
+                                isToday = false;
+                            }
                         }
                         
-                        // 如果不是当天更新，显示0
+                        // 如果不是今天的数据，显示0
                         const dailyGain = isToday ? (d.monitoring_data.daily_gain || 0) : 0;
                         
-                        // 今日总计为0时用黄色显示
+                        // 今日总计为0时用黄色显示，大于0时用绿色显示
                         const color = dailyGain === 0 ? '#FFB800' : '#5FB878';
                         return `<span style="color: ${color}; font-weight: bold; font-size: 14px;">${dailyGain}</span>`;
                     }
@@ -407,7 +433,7 @@
                 {fixed: 'right', title: '操作', minWidth: 250, toolbar: '#tableBar'}
             ]],
             page: true,
-            limit: 10,
+            limit: 20,
             limits: [10, 20, 30, 50],
             height: 'full-210',
             text: {

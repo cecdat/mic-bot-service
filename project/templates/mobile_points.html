@@ -3,496 +3,605 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>积分监控 - 移动端</title>
+    <title>积分监控 </title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
-    /* 确保页面铺满浏览器 */
-    html, body {
-        margin: 0 !important;
-        padding: 0 !important;
-        height: 100% !important;
-        width: 100% !important;
-        overflow-x: hidden !important;
-    }
-    
-    /* 移除所有可能的空白 */
-    * {
-        box-sizing: border-box;
-    }
-        /* 全局样式 */
+        /* Windows Phone Metro风格设计 */
         * {
             box-sizing: border-box;
         }
         
         body {
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background-color: #f0f2f5;
-            color: #333;
+            background: #000000;
+            color: #ffffff;
             margin: 0;
-            padding: 0.5rem;
+            padding: 0;
             min-height: 100vh;
-        }
-
-        /* 主容器 */
-        .container-main {
-            max-width: 100%;
-            margin: auto;
-        }
-
-        /* 头部样式 */
-        .mobile-header {
-            text-align: center;
-            margin-bottom: 1.5rem;
-            padding: 1.5rem 0;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(20px);
-            border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        }
-
-        .mobile-header h1 {
-            font-size: 1.8rem;
-            font-weight: 700;
-            color: #34495e;
-            margin: 0;
-        }
-
-        .mobile-header .subtitle {
-            font-size: 1rem;
-            color: #6c757d;
-            margin-top: 0.5rem;
-            font-weight: 400;
-        }
-
-        /* 毛玻璃卡片样式 */
-        .points-card {
-            background: rgba(255, 255, 255, 0.15);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 20px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            margin-bottom: 1.5rem;
-            overflow: hidden;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-        }
-
-        .points-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
-            pointer-events: none;
-        }
-
-        .points-card:hover {
-            transform: translateY(-8px) scale(1.02);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-            border-color: rgba(255, 255, 255, 0.3);
-        }
-
-        .card-header {
-            padding: 1.5rem;
-            color: white;
-            font-weight: 600;
-            position: relative;
-            cursor: pointer;
+            overflow-x: hidden;
+            /* 移动端优化 */
+            -webkit-text-size-adjust: 100%;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
             user-select: none;
-            background: linear-gradient(135deg, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.1) 100%);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        .card-header:hover {
-            background: linear-gradient(135deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.2) 100%);
+        /* Metro风格容器 */
+        .metro-container {
+            padding: 20px;
+            max-width: 100%;
         }
-
-        .card-header .account-email {
-            font-size: 1rem;
-            margin-bottom: 0.8rem;
+        
+        /* Metro风格标题 */
+        .metro-title {
+            font-size: 2.5rem;
+            font-weight: 300;
+            color: #ffffff;
+            margin-bottom: 10px;
+            text-align: center;
+            letter-spacing: -1px;
+        }
+        
+        .metro-subtitle {
+            font-size: 1.1rem;
+            color: #a0a0a0;
+            text-align: center;
+            margin-bottom: 30px;
+            font-weight: 300;
+        }
+        
+        /* Metro风格网格布局 */
+        .metro-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        /* Metro风格卡片 */
+        .metro-tile {
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            border: 1px solid #333333;
+            border-radius: 0;
+            padding: 0;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            position: relative;
+            min-height: 120px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .metro-tile:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border-color: #555555;
+        }
+        
+        /* Metro风格卡片头部 */
+        .metro-tile-header {
+            background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%);
+            color: white;
+            padding: 15px;
+            position: relative;
+            min-height: 60px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        .metro-tile-header.warning {
+            background: linear-gradient(135deg, #ff8c00 0%, #ff6b00 100%);
+        }
+        
+        .metro-tile-header.error {
+            background: linear-gradient(135deg, #d13438 0%, #b71c1c 100%);
+        }
+        
+        .metro-tile-header.success {
+            background: linear-gradient(135deg, #107c10 0%, #0e6b0e 100%);
+        }
+        
+        .metro-tile-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin: 0;
+            margin-left: 30px;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 6px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: calc(100% - 110px);
         }
-
-        .card-header .account-email i {
-            font-size: 1.2rem;
-            color: rgba(255, 255, 255, 0.9);
-        }
-
-        .card-header .node-name {
-            font-size: 0.85rem;
+        
+        .metro-tile-subtitle {
+            font-size: 0.7rem;
             opacity: 0.9;
-            position: absolute;
-            top: 1.5rem;
-            right: 4rem;
+            margin: 2px 0 0 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .metro-tile-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+            flex-wrap: nowrap;
+            min-width: 0;
+            flex-shrink: 1;
+            overflow: hidden;
+        }
+        
+        .metro-tile-email {
+            font-size: 0.75rem;
+            opacity: 0.9;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
+        
+        .metro-tile-node {
+            font-size: 0.7rem;
+            opacity: 0.8;
             background: rgba(255, 255, 255, 0.2);
-            padding: 0.4rem 0.8rem;
-            border-radius: 15px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 2px 6px;
+            border-radius: 8px;
+            white-space: nowrap;
+            flex-shrink: 1;
+            min-width: 0;
+            max-width: 100px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: inline-block;
         }
-
-        .card-header .expand-icon {
+        
+        .metro-tile-badge {
             position: absolute;
-            top: 1.5rem;
-            right: 1.5rem;
-            font-size: 1.3rem;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            color: rgba(255, 255, 255, 0.9);
+            top: 12px;
+            right: 40px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 3px 6px;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            font-weight: 500;
         }
-
-        .card-header.expanded .expand-icon {
-            transform: rotate(180deg);
+        
+        /* Metro风格内容区域 */
+        .metro-tile-content {
+            padding: 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
         }
-
-        .card-body {
-            padding: 1.5rem;
-            display: none;
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
-        }
-
-        .card-body.expanded {
-            display: block;
-            animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .points-row {
+        
+        /* Metro风格数据行 */
+        .metro-data-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0.8rem 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            transition: all 0.2s ease;
+            padding: 8px 0;
+            border-bottom: 1px solid #333333;
         }
-
-        .points-row:hover {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 10px;
-            padding-left: 0.5rem;
-            padding-right: 0.5rem;
-        }
-
-        .points-row:last-child {
+        
+        .metro-data-row:last-child {
             border-bottom: none;
         }
 
-        .points-label {
-            font-weight: 500;
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 0.95rem;
+        .metro-data-label {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 8px;
+            font-size: 0.9rem;
+            color: #cccccc;
         }
 
-        .points-value {
-            font-weight: 600;
-            font-size: 0.95rem;
-            color: white;
-        }
-
-        .points-value.total {
-            color: #4ade80;
-            font-size: 1.1rem;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-        }
-
-        .points-value.daily {
-            color: #60a5fa;
-        }
-
-        .points-value.value {
-            color: #fbbf24;
-        }
-
-        /* 状态徽章 */
-        .status-badge {
-            font-weight: bold;
-            padding: 0.4rem 0.8rem;
-            border-radius: 12px;
-            color: white;
-            font-size: 0.8rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.3rem;
-            margin-right: 0.4rem;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            transition: all 0.2s ease;
-        }
-
-        .status-badge:hover {
-            transform: scale(1.05);
-        }
-
-        .status-success { 
-            background: linear-gradient(135deg, #10b981, #059669);
-            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
-        }
-        .status-warning { 
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
-        }
-        .status-danger { 
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
-        }
-        .status-secondary { 
-            background: linear-gradient(135deg, #6b7280, #4b5563);
-            box-shadow: 0 2px 8px rgba(107, 114, 128, 0.3);
-        }
-
-        /* 设备状态徽章特殊样式 */
-        .status-badge i {
+        .metro-data-value {
             font-size: 1rem;
-        }
-
-        /* 徽章样式 */
-        .badge {
-            font-size: 0.75rem;
-            padding: 0.3rem 0.6rem;
-            border-radius: 10px;
-            margin-left: 0.4rem;
-            font-weight: 500;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            transition: all 0.2s ease;
-        }
-
-        .badge:hover {
-            transform: scale(1.05);
-        }
-
-        .badge-warning {
-            background: linear-gradient(135deg, #fbbf24, #f59e0b);
-            color: #1f2937;
-            box-shadow: 0 2px 8px rgba(251, 191, 36, 0.3);
-        }
-
-        .badge-danger {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            color: white;
-            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
-        }
-
-        .badge-info {
-            background: linear-gradient(135deg, #60a5fa, #3b82f6);
-            color: white;
-            box-shadow: 0 2px 8px rgba(96, 165, 250, 0.3);
-        }
-
-        .badge-success {
-            background: linear-gradient(135deg, #4ade80, #22c55e);
-            color: white;
-            box-shadow: 0 2px 8px rgba(74, 222, 128, 0.3);
-        }
-
-        .badge-secondary {
-            background: linear-gradient(135deg, #9ca3af, #6b7280);
-            color: white;
-            box-shadow: 0 2px 8px rgba(156, 163, 175, 0.3);
-        }
-
-        /* 节点分组样式 */
-        .node-group {
-            margin-bottom: 2rem;
-        }
-
-        .node-group-header {
-            background: #fff;
-            padding: 1rem 1.5rem;
-            border-radius: 10px;
-            margin-bottom: 1rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             font-weight: 600;
-            color: #495057;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+            color: #ffffff;
         }
-
-        .node-group-title {
-            display: flex;
-            align-items: center;
+        
+        .metro-data-value.primary {
+            color: #0078d4;
         }
-
-        .node-group-color {
-            width: 16px;
-            height: 16px;
+        
+        .metro-data-value.success {
+            color: #107c10;
+        }
+        
+        .metro-data-value.warning {
+            color: #ff8c00;
+        }
+        
+        .metro-data-value.error {
+            color: #d13438;
+        }
+        
+        /* Metro风格大数字显示 */
+        .metro-big-number {
+            font-size: 2.5rem;
+            font-weight: 300;
+            color: #ffffff;
+            text-align: center;
+            margin: 20px 0;
+            line-height: 1;
+        }
+        
+        /* 自动折叠功能 */
+        .metro-tile.collapsed .metro-tile-content {
+            display: none;
+        }
+        
+        .metro-tile.collapsed {
+            min-height: 60px;
+        }
+        
+        .metro-tile-header {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .metro-tile-header:hover {
+            opacity: 0.9;
+        }
+        
+        .metro-collapse-icon {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            font-size: 1rem;
+            transition: transform 0.3s ease;
+        }
+        
+        .metro-tile.collapsed .metro-collapse-icon {
+            transform: rotate(-90deg);
+        }
+        
+        .metro-big-number.primary {
+            color: #0078d4;
+        }
+        
+        .metro-big-number.success {
+            color: #107c10;
+        }
+        
+        .metro-big-number.warning {
+            color: #ff8c00;
+        }
+        
+        /* Metro风格状态指示器 */
+        .metro-status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            margin-right: 0.8rem;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            margin-right: 8px;
         }
-
-        .node-group-count {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            padding: 0.3rem 0.8rem;
-            border-radius: 15px;
-            font-size: 0.85rem;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.3);
+        
+        .metro-status-indicator.online {
+            background: #107c10;
         }
-
-        /* 加载状态 */
-        .loading {
-            text-align: center;
-            padding: 2rem;
-            color: #6c757d;
+        
+        .metro-status-indicator.offline {
+            background: #d13438;
         }
-
-        .loading .spinner-border {
-            width: 2rem;
-            height: 2rem;
+        
+        .metro-status-indicator.warning {
+            background: #ff8c00;
         }
-
-        /* 错误状态 */
-        .error-message {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 1rem;
-            border-radius: 8px;
-            margin: 1rem 0;
-            text-align: center;
-        }
-
-        /* 刷新按钮 */
-        .refresh-btn {
+        
+        /* Metro风格刷新按钮 */
+        .metro-refresh-btn {
             position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            width: 4rem;
-            height: 4rem;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-            color: white;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%);
             border: none;
-            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4);
-            z-index: 1000;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .refresh-btn:hover {
-            background: linear-gradient(135deg, #2563eb, #1e40af);
-            transform: scale(1.1) rotate(180deg);
-            box-shadow: 0 12px 32px rgba(59, 130, 246, 0.6);
-        }
-
-        .refresh-btn i {
+            border-radius: 50%;
+            color: white;
             font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(0, 120, 212, 0.4);
+            transition: all 0.3s ease;
+            z-index: 1000;
+            /* 移动端触摸优化 */
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            touch-action: manipulation;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-
-        /* 空状态 */
-        .empty-state {
+        
+        .metro-refresh-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 25px rgba(0, 120, 212, 0.6);
+        }
+        
+        .metro-refresh-btn:active {
+            transform: scale(0.95);
+        }
+        
+        /* Metro风格加载动画 */
+        .metro-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+            color: #cccccc;
+        }
+        
+        .metro-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #333333;
+            border-top: 3px solid #0078d4;
+            border-radius: 50%;
+            animation: metro-spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes metro-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Metro风格空状态 */
+        .metro-empty {
             text-align: center;
-            padding: 3rem 1rem;
-            color: #6c757d;
+            padding: 60px 20px;
+            color: #666666;
         }
-
-        .empty-state i {
-            font-size: 3rem;
-            margin-bottom: 1rem;
+        
+        .metro-empty i {
+            font-size: 4rem;
+            margin-bottom: 20px;
             opacity: 0.5;
         }
 
-        /* 时间显示 */
-        .last-updated {
+        /* Metro风格错误状态 */
+        .metro-error {
             text-align: center;
-            font-size: 0.8rem;
-            color: #6c757d;
-            margin: 1rem 0;
+            padding: 40px 20px;
+            color: #d13438;
         }
-
-        /* 响应式调整 */
-        @media (max-width: 576px) {
-            body {
-                padding: 0.25rem;
+        
+        .metro-error i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        
+        /* Metro风格最后更新时间 */
+        .metro-last-updated {
+            text-align: center;
+            color: #666666;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #1a1a1a;
+            border-radius: 4px;
+        }
+        
+        /* 响应式设计 - 移动端优化 */
+        @media (max-width: 768px) {
+            .metro-container {
+                padding: 10px;
+                margin: 0;
             }
             
-            .mobile-header {
-                padding: 1rem 0;
-                margin-bottom: 1rem;
+            .metro-title {
+                font-size: 1.8rem;
+                margin-bottom: 8px;
             }
             
-            .mobile-header h1 {
-                font-size: 1.5rem;
+            .metro-subtitle {
+                font-size: 1rem;
+                margin-bottom: 20px;
             }
             
-            .card-header {
-                padding: 1rem;
+            .metro-grid {
+                grid-template-columns: 1fr;
+                gap: 12px;
+                margin-bottom: 20px;
             }
             
-            .card-body {
-                padding: 1rem;
+            .metro-tile {
+                min-height: 160px;
+                margin-bottom: 0;
             }
             
-            .refresh-btn {
-                width: 3.5rem;
-                height: 3.5rem;
-                bottom: 1.5rem;
-                right: 1.5rem;
+            .metro-tile-header {
+                padding: 12px;
+                min-height: 50px;
+            }
+            
+            .metro-tile-title {
+                font-size: 0.9rem;
+                margin-left: 30px;
+                max-width: calc(100% - 90px);
+            }
+            
+            .metro-tile-subtitle {
+                font-size: 0.8rem;
+            }
+            
+            .metro-tile-email {
+                font-size: 0.8rem;
+            }
+            
+            .metro-tile-node {
+                font-size: 0.75rem;
+                padding: 3px 8px;
+            }
+            
+            .metro-tile-badge {
+                font-size: 0.7rem;
+                padding: 4px 8px;
+                right: 35px;
+                top: 8px;
+            }
+            
+            .metro-tile-content {
+                padding: 12px;
+            }
+            
+            .metro-data-row {
+                margin-bottom: 8px;
+            }
+            
+            .metro-data-label {
+                font-size: 0.75rem;
+            }
+            
+            .metro-data-value {
+                font-size: 0.9rem;
+            }
+            
+            .metro-refresh-btn {
+                bottom: 15px;
+                right: 15px;
+                width: 55px;
+                height: 55px;
+                font-size: 1.3rem;
+                box-shadow: 0 4px 15px rgba(0, 120, 212, 0.4);
+            }
+            
+            .metro-loading {
+                font-size: 1rem;
+            }
+            
+            .metro-error {
+                font-size: 0.9rem;
+                padding: 15px;
             }
         }
-
-        /* 滚动条美化 */
+        
+        /* 超小屏幕优化 */
+        @media (max-width: 480px) {
+            .metro-container {
+                padding: 8px;
+            }
+            
+            .metro-title {
+                font-size: 1.6rem;
+            }
+            
+            .metro-subtitle {
+                font-size: 0.9rem;
+            }
+            
+            .metro-tile {
+                min-height: 140px;
+            }
+            
+            .metro-tile-header {
+                padding: 10px;
+                min-height: 45px;
+            }
+            
+            .metro-tile-title {
+                font-size: 0.85rem;
+            }
+            
+            .metro-tile-subtitle {
+                font-size: 0.75rem;
+            }
+            
+            .metro-tile-content {
+                padding: 10px;
+            }
+            
+            .metro-data-label {
+                font-size: 0.7rem;
+            }
+            
+            .metro-data-value {
+                font-size: 0.85rem;
+            }
+            
+            .metro-refresh-btn {
+                width: 50px;
+                height: 50px;
+                font-size: 1.2rem;
+                bottom: 12px;
+                right: 12px;
+            }
+        }
+        
+        /* 横屏模式优化 */
+        @media (max-width: 768px) and (orientation: landscape) {
+            .metro-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+            }
+            
+            .metro-tile {
+                min-height: 120px;
+            }
+            
+            .metro-tile-header {
+                padding: 8px;
+                min-height: 40px;
+            }
+            
+            .metro-tile-content {
+                padding: 8px;
+            }
+        }
+        
+        /* Metro风格滚动条 */
         ::-webkit-scrollbar {
             width: 8px;
         }
 
         ::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 4px;
+            background: #1a1a1a;
         }
 
         ::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.3);
+            background: #333333;
             border-radius: 4px;
         }
 
         ::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.5);
+            background: #555555;
         }
     </style>
 </head>
 <body>
-    <div class="container-main">
-        <!-- 主界面 -->
-        <div id="main-section">
-            <!-- 头部 -->
-            <div class="mobile-header">
-                <h1>积分监控</h1>
-                <div class="subtitle">Microsoft Rewards 账户状态</div>
-            </div>
+    <div class="metro-container">
+        <!-- Metro风格标题 -->
+        <h1 class="metro-title">积分监控</h1>
+        <p class="metro-subtitle">Microsoft Rewards 账户状态</p>
 
             <!-- 最后更新时间 -->
-            <div id="last-updated" class="last-updated"></div>
+        <div id="last-updated" class="metro-last-updated"></div>
 
-            <!-- 积分卡片容器 -->
-            <div id="points-container"></div>
+        <!-- Metro风格网格容器 -->
+        <div id="metro-grid" class="metro-grid"></div>
 
-            <!-- 刷新按钮 -->
-            <button class="refresh-btn" onclick="fetchPoints()" title="刷新数据">
+        <!-- Metro风格操作按钮 -->
+        <div style="position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 1000;">
+            <button class="metro-refresh-btn" onclick="fetchPoints()" title="刷新数据">
                 <i class="bi bi-arrow-clockwise"></i>
+            </button>
+            <button class="metro-refresh-btn" onclick="toggleAllTiles()" title="展开/折叠全部">
+                <i class="bi bi-arrows-expand" id="toggle-all-icon"></i>
             </button>
         </div>
     </div>
@@ -500,19 +609,22 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const POINTS_PER_YUAN = 179.25;
-        const bgColors = [
-            'linear-gradient(135deg, #667eea, #764ba2)',
-            'linear-gradient(135deg, #f093fb, #f5576c)',
-            'linear-gradient(135deg, #4facfe, #00f2fe)',
-            'linear-gradient(135deg, #43e97b, #38f9d7)',
-            'linear-gradient(135deg, #fa7093, #fee140)',
-            'linear-gradient(135deg, #a8edea, #fed6e3)',
-            'linear-gradient(135deg, #ffecd2, #fcb69f)',
-            'linear-gradient(135deg, #ff9a9e, #fecfef)',
-            'linear-gradient(135deg, #a18cd1, #fbc2eb)',
-            'linear-gradient(135deg, #fad0c4, #ffd1ff)',
-            'linear-gradient(135deg, #ffecd2, #fcb69f)',
-            'linear-gradient(135deg, #ff9a9e, #fecfef)'
+        
+        // 移动端优化
+        let touchStartY = 0;
+        let touchStartTime = 0;
+        let isRefreshing = false;
+        
+        // Metro风格颜色主题
+        const metroColors = [
+            { primary: '#0078d4', secondary: '#106ebe' }, // 蓝色
+            { primary: '#107c10', secondary: '#0e6b0e' }, // 绿色
+            { primary: '#ff8c00', secondary: '#ff6b00' }, // 橙色
+            { primary: '#d13438', secondary: '#b71c1c' }, // 红色
+            { primary: '#8764b8', secondary: '#6b46a3' }, // 紫色
+            { primary: '#00bcf2', secondary: '#0099bc' }, // 青色
+            { primary: '#ffb900', secondary: '#ff8c00' }, // 黄色
+            { primary: '#5c2d91', secondary: '#4a1c6b' }, // 深紫
         ];
 
         // 计算积分价值
@@ -521,197 +633,190 @@
             return '¥ ' + (points / POINTS_PER_YUAN).toFixed(2);
         }
 
-        // 获取状态徽章
-        function getStatusBadge(status) {
-            let badgeClass = 'status-secondary';
-            
-            switch (status) {
-                case '正常':
-                    badgeClass = 'status-success';
-                    break;
-                case '需要验证':
-                case '已锁定':
-                    badgeClass = 'status-warning';
-                    break;
-                case '密码错误':
-                case '登录失败':
-                    badgeClass = 'status-danger';
-                    break;
-            }
-            return `<span class="status-badge ${badgeClass}">${status || '未知'}</span>`;
-        }
-
-        // 获取账号登录状态徽章
-        function getLoginStatusBadge(status) {
-            let badgeClass = 'status-secondary';
-            let icon = 'bi-question-circle';
-            let text = '未知';
-            
-            switch (status) {
-                case '正常':
-                    badgeClass = 'status-success';
-                    icon = 'bi-check-circle';
-                    text = '正常';
-                    break;
-                case '需要验证':
-                    badgeClass = 'status-warning';
-                    icon = 'bi-exclamation-triangle';
-                    text = '需要验证';
-                    break;
-                case '已锁定':
-                    badgeClass = 'status-warning';
-                    icon = 'bi-lock';
-                    text = '已锁定';
-                    break;
-                case '密码错误':
-                    badgeClass = 'status-danger';
-                    icon = 'bi-x-circle';
-                    text = '密码错误';
-                    break;
-                case '登录失败':
-                    badgeClass = 'status-danger';
-                    icon = 'bi-x-circle';
-                    text = '登录失败';
-                    break;
-                case '异常':
-                    badgeClass = 'status-danger';
-                    icon = 'bi-exclamation-triangle';
-                    text = '异常';
-                    break;
-                case '禁用':
-                    badgeClass = 'status-secondary';
-                    icon = 'bi-slash-circle';
-                    text = '禁用';
-                    break;
-                default:
-                    badgeClass = 'status-secondary';
-                    icon = 'bi-question-circle';
-                    text = status || '未知';
-            }
-            
-            return `<span class="status-badge ${badgeClass}">
-                <i class="bi ${icon}"></i>
-                ${text}
-            </span>`;
+        // 截断文本
+        function truncateText(text, maxLength) {
+            if (!text) return '';
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '...';
         }
         
-        // 获取桌面端状态徽章
-        function getDesktopStatusBadge(status) {
-            let badgeClass = 'status-secondary';
-            let icon = 'bi-question-circle';
+        // 根据节点名称获取颜色
+        function getNodeColor(nodeName) {
+            if (!nodeName) return metroColors[0];
             
-            switch (status) {
-                case '正常':
-                    badgeClass = 'status-success';
-                    icon = 'bi-check-circle';
-                    break;
-                case '需要验证':
-                    badgeClass = 'status-warning';
-                    icon = 'bi-exclamation-triangle';
-                    break;
-                case '已锁定':
-                    badgeClass = 'status-warning';
-                    icon = 'bi-lock';
-                    break;
-                case '密码错误':
-                case '登录失败':
-                case '异常':
-                    badgeClass = 'status-danger';
-                    icon = 'bi-x-circle';
-                    break;
-                case '禁用':
-                    badgeClass = 'status-secondary';
-                    icon = 'bi-slash-circle';
-                    break;
+            // 使用节点名称的哈希值来确保相同节点总是使用相同颜色
+            let hash = 0;
+            for (let i = 0; i < nodeName.length; i++) {
+                const char = nodeName.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash; // 转换为32位整数
             }
             
-            return `<span class="status-badge ${badgeClass}">
-                <i class="bi bi-laptop"></i>
-                <i class="bi ${icon}"></i>
-            </span>`;
+            const colorIndex = Math.abs(hash) % metroColors.length;
+            return metroColors[colorIndex];
         }
         
-        // 获取移动端状态徽章
-        function getMobileStatusBadge(status) {
-            let badgeClass = 'status-secondary';
-            let icon = 'bi-question-circle';
+        // 切换卡片折叠状态
+        function toggleTile(tile) {
+            tile.classList.toggle('collapsed');
+        }
+        
+        // 全展开/全折叠所有卡片
+        function toggleAllTiles() {
+            const tiles = document.querySelectorAll('.metro-tile');
+            const toggleIcon = document.getElementById('toggle-all-icon');
+            const allCollapsed = Array.from(tiles).every(tile => tile.classList.contains('collapsed'));
             
-            switch (status) {
-                case '正常':
-                    badgeClass = 'status-success';
-                    icon = 'bi-check-circle';
-                    break;
-                case '需要验证':
-                    badgeClass = 'status-warning';
-                    icon = 'bi-exclamation-triangle';
-                    break;
-                case '已锁定':
-                    badgeClass = 'status-warning';
-                    icon = 'bi-lock';
-                    break;
-                case '密码错误':
-                case '登录失败':
-                case '异常':
-                    badgeClass = 'status-danger';
-                    icon = 'bi-x-circle';
-                    break;
-                case '禁用':
-                    badgeClass = 'status-secondary';
-                    icon = 'bi-slash-circle';
-                    break;
+            tiles.forEach(tile => {
+                if (allCollapsed) {
+                    tile.classList.remove('collapsed');
+                } else {
+                    tile.classList.add('collapsed');
+                }
+            });
+            
+            // 更新图标
+            if (allCollapsed) {
+                toggleIcon.className = 'bi bi-arrows-collapse';
+            } else {
+                toggleIcon.className = 'bi bi-arrows-expand';
             }
+        }
+        
+        // 获取Metro风格状态
+        function getMetroStatus(account) {
+            const isStale = account.is_stale;
+            const isDisabled = account.desktop_status === '禁用' && account.mobile_status === '禁用';
+            const isWarning = (account.desktop_status === '需要验证' || account.desktop_status === '已锁定' || 
+                             account.mobile_status === '需要验证' || account.mobile_status === '已锁定');
+            const isError = (account.desktop_status === '密码错误' || account.desktop_status === '登录失败' || account.desktop_status === '异常' ||
+                           account.mobile_status === '密码错误' || account.mobile_status === '登录失败' || account.mobile_status === '异常');
             
-            return `<span class="status-badge ${badgeClass}">
-                <i class="bi bi-phone"></i>
-                <i class="bi ${icon}"></i>
-            </span>`;
+            if (isDisabled) return { type: 'error', text: '禁用' };
+            if (isError) return { type: 'error', text: '错误' };
+            if (isWarning) return { type: 'warning', text: '警告' };
+            if (isStale) return { type: 'warning', text: '未更新' };
+            return { type: 'success', text: '正常' };
+        }
+        
+        // 获取状态指示器
+        function getStatusIndicator(status) {
+            const indicatorClass = status === '正常' ? 'online' : 
+                                 status === '警告' || status === '未更新' ? 'warning' : 'offline';
+            return `<span class="metro-status-indicator ${indicatorClass}"></span>`;
         }
 
         // 格式化时间
-        function formatTime(timestamp) {
-            if (!timestamp) return 'N/A';
-            const date = new Date(timestamp);
+        function formatTime(dateString) {
+            if (!dateString) return '未知';
+            const date = new Date(dateString);
             return date.toLocaleString('zh-CN', { 
+                year: 'numeric',
                 month: '2-digit', 
                 day: '2-digit', 
                 hour: '2-digit', 
                 minute: '2-digit',
+                second: '2-digit',
                 hour12: false 
             });
         }
 
         // 显示加载状态
         function showLoading() {
-            const container = document.getElementById('points-container');
+            const container = document.getElementById('metro-grid');
             container.innerHTML = `
-                <div class="loading">
-                    <div class="spinner-border" role="status">
-                        <span class="visually-hidden">加载中...</span>
-                    </div>
-                    <div class="mt-3">正在加载数据...</div>
+                <div class="metro-loading">
+                    <div class="metro-spinner"></div>
+                    <div>正在加载数据...</div>
                 </div>
             `;
         }
 
         // 显示错误信息
         function showError(message) {
-            const container = document.getElementById('points-container');
+            const container = document.getElementById('metro-grid');
             container.innerHTML = `
-                <div class="error-message">
-                    <i class="bi bi-exclamation-triangle me-2"></i>
-                    ${message}
+                <div class="metro-error">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <div>${message}</div>
                 </div>
             `;
         }
 
         // 显示空状态
         function showEmpty() {
-            const container = document.getElementById('points-container');
+            const container = document.getElementById('metro-grid');
             container.innerHTML = `
-                <div class="empty-state">
+                <div class="metro-empty">
                     <i class="bi bi-inbox"></i>
                     <div>暂无账户数据</div>
-                    <div class="mt-3 text-muted">请检查令牌是否正确</div>
+                    <div style="margin-top: 10px; color: #888;">请检查令牌是否正确</div>
+                </div>
+            `;
+        }
+        
+        // 创建Metro风格卡片
+        function createMetroTile(account, colorIndex) {
+            const nodeColors = getNodeColor(account.node_name);
+            const status = getMetroStatus(account);
+            const totalValue = calculateValue(account.total_points);
+            const dailyValue = calculateValue(account.daily_gain);
+            
+            return `
+                <div class="metro-tile collapsed" onclick="toggleTile(this)">
+                    <div class="metro-tile-header ${status.type}" style="background: linear-gradient(135deg, ${nodeColors.primary} 0%, ${nodeColors.secondary} 100%);">
+                        <i class="bi bi-chevron-down metro-collapse-icon"></i>
+                        <div class="metro-tile-title">
+                            ${getStatusIndicator(status.text)}
+                            <i class="bi bi-person-circle"></i>
+                            <span title="${account.email}">${truncateText(account.email, 25)}</span>
+                        </div>
+                        <div class="metro-tile-info">
+                            <div class="metro-tile-node" title="${account.node_name || '未知节点'}">${truncateText(account.node_name || '未知节点', 30)}</div>
+                        </div>
+                        <div class="metro-tile-badge">${status.text}</div>
+                    </div>
+                    <div class="metro-tile-content">
+                        <div class="metro-data-row">
+                            <div class="metro-data-label">
+                                <i class="bi bi-star"></i>
+                                总积分
+                            </div>
+                            <div class="metro-data-value primary">${account.total_points || 0}</div>
+                        </div>
+                        
+                        <div class="metro-data-row">
+                            <div class="metro-data-label">
+                                <i class="bi bi-currency-yen"></i>
+                                总价值
+                            </div>
+                            <div class="metro-data-value primary">${totalValue}</div>
+                        </div>
+                        
+                        <div class="metro-data-row">
+                            <div class="metro-data-label">
+                                <i class="bi bi-graph-up"></i>
+                                今日收益
+                            </div>
+                            <div class="metro-data-value ${account.daily_gain > 0 ? 'success' : 'warning'}">${account.daily_gain || 0}</div>
+                        </div>
+                        
+                        <div class="metro-data-row">
+                            <div class="metro-data-label">
+                                <i class="bi bi-currency-yen"></i>
+                                今日价值
+                            </div>
+                            <div class="metro-data-value ${account.daily_gain > 0 ? 'success' : 'warning'}">${dailyValue}</div>
+                        </div>
+                        
+                        <div class="metro-data-row">
+                            <div class="metro-data-label">
+                                <i class="bi bi-clock"></i>
+                                最后更新
+                            </div>
+                            <div class="metro-data-value">${formatTime(account.last_updated)}</div>
+                        </div>
+                    </div>
                 </div>
             `;
         }
@@ -728,7 +833,7 @@
                 return response.json();
             })
             .then(data => {
-                const container = document.getElementById('points-container');
+                const container = document.getElementById('metro-grid');
                 container.innerHTML = '';
 
                 if (!Array.isArray(data) || data.length === 0) {
@@ -740,135 +845,10 @@
                 const lastUpdated = document.getElementById('last-updated');
                 lastUpdated.textContent = `最后更新: ${formatTime(new Date())}`;
 
-                // 按节点分组数据
-                const nodeGroups = {};
-                const nodeColorMap = {};
-                let colorIndex = 0;
-
+                // 创建Metro风格卡片
                 data.forEach((account, index) => {
-                    const nodeName = account.node_name || '未知节点';
-                    if (!nodeColorMap[nodeName]) {
-                        nodeColorMap[nodeName] = bgColors[colorIndex % bgColors.length];
-                        colorIndex++;
-                    }
-                    
-                    if (!nodeGroups[nodeName]) {
-                        nodeGroups[nodeName] = [];
-                    }
-                    nodeGroups[nodeName].push(account);
-                });
-
-                // 为每个节点组创建HTML
-                Object.keys(nodeGroups).forEach(nodeName => {
-                    const accounts = nodeGroups[nodeName];
-                    const cardColor = nodeColorMap[nodeName];
-                    
-                    // 创建该节点下的所有账户卡片
-                    accounts.forEach(account => {
-                        const totalValue = calculateValue(account.total_points);
-                        const dailyValue = calculateValue(account.daily_gain);
-                        const statusBadge = getStatusBadge(account.status);
-                        const lastUpdated = formatTime(account.last_updated);
-                        
-                        // 检查数据是否过期和状态
-                        const isStale = account.is_stale;
-                        const isDisabled = account.desktop_status === '禁用' && account.mobile_status === '禁用';
-                        const isWarning = (account.desktop_status === '需要验证' || account.desktop_status === '已锁定' || 
-                                         account.mobile_status === '需要验证' || account.mobile_status === '已锁定');
-                        const isError = (account.desktop_status === '密码错误' || account.desktop_status === '登录失败' || account.desktop_status === '异常' ||
-                                       account.mobile_status === '密码错误' || account.mobile_status === '登录失败' || account.mobile_status === '异常');
-                        
-                        // 创建徽章
-                        let badges = '';
-                        if (isStale) {
-                            badges += '<span class="badge badge-warning">未更新</span>';
-                        }
-                        if (isDisabled) {
-                            badges += '<span class="badge badge-secondary">禁用</span>';
-                        } else if (isError) {
-                            badges += '<span class="badge badge-danger">异常</span>';
-                        } else if (isWarning) {
-                            badges += '<span class="badge badge-warning">警告</span>';
-                        }
-
-                        // 获取桌面端和移动端状态徽章
-                        const desktopStatusBadge = getDesktopStatusBadge(account.desktop_status);
-                        const mobileStatusBadge = getMobileStatusBadge(account.mobile_status);
-                        
-                        const cardHtml = `
-                            <div class="points-card">
-                                <div class="card-header" style="background: ${cardColor};" onclick="toggleCard(this)">
-                                    <div class="account-email">
-                                        <i class="bi bi-person-circle"></i>
-                                        ${account.email}
-                                        ${badges}
-                                    </div>
-                                    <div class="node-name">${nodeName}</div>
-                                    <i class="bi bi-chevron-down expand-icon"></i>
-                                </div>
-                                <div class="card-body">
-                                    <div class="points-row">
-                                        <span class="points-label">
-                                            <i class="bi bi-shield-check"></i>
-                                            账户登录状态
-                                        </span>
-                                        <span class="points-value">${desktopStatusBadge}${mobileStatusBadge}</span>
-                                    </div>
-                                    <div class="points-row">
-                                        <span class="points-label">
-                                            <i class="bi bi-star-fill"></i>
-                                            总积分
-                                        </span>
-                                        <span class="points-value total">${account.total_points || 'N/A'}</span>
-                                    </div>
-                                    <div class="points-row">
-                                        <span class="points-label">
-                                            <i class="bi bi-currency-yen"></i>
-                                            总价值
-                                        </span>
-                                        <span class="points-value value">${totalValue}</span>
-                                    </div>
-                                    <div class="points-row">
-                                        <span class="points-label">
-                                            <i class="bi bi-graph-up"></i>
-                                            今日收益
-                                        </span>
-                                        <span class="points-value daily">${account.daily_gain || 'N/A'}</span>
-                                    </div>
-                                    <div class="points-row">
-                                        <span class="points-label">
-                                            <i class="bi bi-currency-yen"></i>
-                                            今日价值
-                                        </span>
-                                        <span class="points-value value">${dailyValue}</span>
-                                    </div>
-                                    <div class="points-row">
-                                        <span class="points-label">
-                                            <i class="bi bi-laptop"></i>
-                                            桌面端收益
-                                        </span>
-                                        <span class="points-value">${account.desktop_gain || 'N/A'}</span>
-                                    </div>
-                                    <div class="points-row">
-                                        <span class="points-label">
-                                            <i class="bi bi-phone"></i>
-                                            移动端收益
-                                        </span>
-                                        <span class="points-value">${account.mobile_gain || 'N/A'}</span>
-                                    </div>
-                                    <div class="points-row">
-                                        <span class="points-label">
-                                            <i class="bi bi-clock"></i>
-                                            最后更新
-                                        </span>
-                                        <span class="points-value">${lastUpdated}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                        
-                        container.innerHTML += cardHtml;
-                    });
+                    const tileHtml = createMetroTile(account, index);
+                    container.innerHTML += tileHtml;
                 });
             })
             .catch(error => {
@@ -877,25 +857,74 @@
             });
         }
 
-        // 折叠/展开卡片
-        function toggleCard(headerElement) {
-            const cardBody = headerElement.nextElementSibling;
-            const isExpanded = headerElement.classList.contains('expanded');
+        // 移动端下拉刷新
+        function initMobileRefresh() {
+            const container = document.querySelector('.metro-container');
             
-            if (isExpanded) {
-                // 折叠
-                headerElement.classList.remove('expanded');
-                cardBody.classList.remove('expanded');
-            } else {
-                // 展开
-                headerElement.classList.add('expanded');
-                cardBody.classList.add('expanded');
-            }
+            container.addEventListener('touchstart', function(e) {
+                if (window.scrollY === 0) {
+                    touchStartY = e.touches[0].clientY;
+                    touchStartTime = Date.now();
+                }
+            }, { passive: true });
+            
+            container.addEventListener('touchmove', function(e) {
+                if (window.scrollY === 0 && !isRefreshing) {
+                    const touchY = e.touches[0].clientY;
+                    const deltaY = touchY - touchStartY;
+                    
+                    if (deltaY > 50) {
+                        // 显示下拉刷新提示
+                        showRefreshHint();
+                    }
+                }
+            }, { passive: true });
+            
+            container.addEventListener('touchend', function(e) {
+                if (window.scrollY === 0 && !isRefreshing) {
+                    const touchY = e.changedTouches[0].clientY;
+                    const deltaY = touchY - touchStartY;
+                    const deltaTime = Date.now() - touchStartTime;
+                    
+                    if (deltaY > 80 && deltaTime < 500) {
+                        // 触发刷新
+                        fetchPoints();
+                    }
+                }
+            }, { passive: true });
         }
-
+        
+        // 显示刷新提示
+        function showRefreshHint() {
+            const hint = document.createElement('div');
+            hint.id = 'refresh-hint';
+            hint.style.cssText = `
+                position: fixed;
+                top: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(0, 120, 212, 0.9);
+                color: white;
+                padding: 10px 20px;
+                border-radius: 20px;
+                font-size: 14px;
+                z-index: 2000;
+                transition: all 0.3s ease;
+            `;
+            hint.textContent = '松开刷新数据';
+            document.body.appendChild(hint);
+            
+            setTimeout(() => {
+                if (hint.parentNode) {
+                    hint.parentNode.removeChild(hint);
+                }
+            }, 2000);
+        }
+        
         // 页面加载时直接获取数据
         window.onload = function() {
             fetchPoints();
+            initMobileRefresh();
             
             // 设置自动刷新（每5分钟）
             setInterval(fetchPoints, 300000);

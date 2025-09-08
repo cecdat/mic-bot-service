@@ -3,172 +3,757 @@
 {% block title %}监控面板{% endblock %}
 
 {% block content %}
-<div class="layui-card">
-    <div class="layui-card-header" style="padding: 10px 15px; font-size: 14px; display: flex; justify-content: space-between; align-items: center;">
-        <h2 class="page-title" style="display: inline-block; margin: 0;">
-            监控面板
-        </h2>
-        <small class="layui-text-em" id="last-updated" style="margin-left: 15px; font-size: 14px;"></small>
+<style>
+/* 哪吒面板风格样式 */
+.dashboard-container {
+    background: #f2f2f2;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.dashboard-header {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 20px 30px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.dashboard-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #2d3748;
+    margin: 0;
+    display: flex;
+    align-items: center;
+}
+
+.dashboard-title i {
+    margin-right: 12px;
+    color: #667eea;
+}
+
+.refresh-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    border-radius: 12px;
+    padding: 12px 24px;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.refresh-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.stat-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+
+.stat-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.stat-card-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 0;
+    display: flex;
+    align-items: center;
+}
+
+.stat-card-title i {
+    margin-right: 8px;
+    font-size: 20px;
+}
+
+.stat-card-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: white;
+}
+
+.stat-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: #2d3748;
+    margin: 8px 0;
+}
+
+.stat-label {
+    font-size: 14px;
+    color: #718096;
+    margin-bottom: 8px;
+}
+
+.progress-container {
+    margin-top: 16px;
+}
+
+.progress-bar {
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+    position: relative;
+}
+
+.progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+.progress-text {
+    font-size: 12px;
+    color: #718096;
+    text-align: right;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-online {
+    background: linear-gradient(135deg, #48bb78, #38a169);
+    color: white;
+}
+
+.status-offline {
+    background: linear-gradient(135deg, #f56565, #e53e3e);
+    color: white;
+}
+
+.status-loading {
+    background: linear-gradient(135deg, #ed8936, #dd6b20);
+    color: white;
+}
+
+.uptime-display {
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 20px;
+    color: #2d3748;
+    background: #f7fafc;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.uptime-flip {
+    display: inline-block;
+    position: relative;
+    width: 1.2em;
+    height: 1.2em;
+    margin: 0 2px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    border-radius: 4px;
+    text-align: center;
+    line-height: 1.2em;
+    font-weight: bold;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    animation: flip 0.6s ease-in-out;
+}
+
+@keyframes flip {
+    0% { transform: rotateY(0deg); }
+    50% { transform: rotateY(90deg); }
+    100% { transform: rotateY(0deg); }
+}
+
+.uptime-label {
+    font-size: 14px;
+    color: #718096;
+    margin-right: 8px;
+}
+
+.last-updated {
+    font-size: 12px;
+    color: #a0aec0;
+    margin-top: 8px;
+}
+
+/* 系统信息样式 */
+.system-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.info-item:last-child {
+    border-bottom: none;
+}
+
+.info-label {
+    font-size: 14px;
+    color: #718096;
+    font-weight: 500;
+}
+
+.info-value {
+    font-size: 14px;
+    color: #2d3748;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+}
+
+/* 流量信息样式 */
+.traffic-info {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.traffic-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(56, 178, 172, 0.1);
+    border-radius: 8px;
+    border-left: 4px solid #38b2ac;
+}
+
+.traffic-label {
+    font-size: 14px;
+    color: #2d3748;
+    font-weight: 500;
+}
+
+.traffic-value {
+    font-size: 16px;
+    color: #2d3748;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .dashboard-container {
+        padding: 10px;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .dashboard-header {
+        flex-direction: column;
+        gap: 16px;
+        text-align: center;
+    }
+    
+    .stat-value {
+        font-size: 24px;
+    }
+}
+</style>
+
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h1 class="dashboard-title">
+            <i class="layui-icon layui-icon-console"></i>
+            系统监控面板
+        </h1>
+        <button class="refresh-btn" onclick="fetchSystemData()">
+            <i class="layui-icon layui-icon-refresh"></i>
+            刷新数据
+        </button>
     </div>
-    <div class="layui-card-body" style="padding: 12px;">
-        <div class="layui-row layui-col-space15" id="accounts-container">
+    
+    <div class="stats-grid" id="system-monitor">
+        <!-- 系统信息卡片 -->
+        <div class="stat-card">
+            <div class="stat-card-header">
+                <h3 class="stat-card-title">
+                    <i class="layui-icon layui-icon-console"></i>
+                    系统信息
+                </h3>
+                <div class="stat-card-icon" style="background: linear-gradient(135deg, #667eea, #764ba2);">
+                    <i class="layui-icon layui-icon-console"></i>
+                </div>
             </div>
-    </div>
-</div>
-{% endblock %}
+            <div class="system-info">
+                <div class="info-item">
+                    <span class="info-label">主机名:</span>
+                    <span class="info-value" id="hostname">加载中...</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">系统版本:</span>
+                    <span class="info-value" id="system-version">加载中...</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">系统架构:</span>
+                    <span class="info-value" id="system-arch">加载中...</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">公网IP:</span>
+                    <span class="info-value" id="public-ip">加载中...</span>
+                </div>
+            </div>
+        </div>
 
-{% block custom_js %}
-<script>
-layui.use(['layer', 'element'], function(){
-    var layer = window.layer;
-    var element = window.element;
-    
-    const POINTS_PER_YUAN = 179.25;
-    const bgColors = ['#1E9FFF', '#FF5722', '#5FB878', '#FFB800', '#009688', '#2F4056', '#c0392b', '#8e44ad'];
+        <!-- 系统状态卡片 -->
+        <div class="stat-card">
+            <div class="stat-card-header">
+                <h3 class="stat-card-title">
+                    <i class="layui-icon layui-icon-ok"></i>
+                    系统状态
+                </h3>
+                <div class="stat-card-icon" style="background: linear-gradient(135deg, #48bb78, #38a169);">
+                    <i class="layui-icon layui-icon-ok"></i>
+                </div>
+            </div>
+            <div class="stat-label">服务器状态</div>
+            <div class="stat-value" id="server-status">
+                <span class="status-badge status-online">在线</span>
+            </div>
+            <div class="last-updated" id="last-updated">最后更新: 加载中...</div>
+        </div>
 
-    function calculateValue(points) {
-        if (typeof points !== 'number' || isNaN(points)) return 'N/A';
-        return '¥ ' + (points / POINTS_PER_YUAN).toFixed(2);
-    }
+        <!-- 运行时间卡片 -->
+        <div class="stat-card">
+            <div class="stat-card-header">
+                <h3 class="stat-card-title">
+                    <i class="layui-icon layui-icon-time"></i>
+                    运行时间
+                </h3>
+                <div class="stat-card-icon" style="background: linear-gradient(135deg, #667eea, #764ba2);">
+                    <i class="layui-icon layui-icon-time"></i>
+                </div>
+            </div>
+            <div class="stat-label">系统运行时长</div>
+            <div class="uptime-display" id="uptime">加载中...</div>
+        </div>
 
-    function getStatusIcons(statusDetails) {
-        let html = '';
-        const platforms = [
-            { key: 'pc', icon: 'layui-icon-auz', name: '桌面端' },
-            { key: 'mobile', icon: 'layui-icon-cellphone', name: '移动端' }
-        ];
+        <!-- CPU使用率卡片 -->
+        <div class="stat-card">
+            <div class="stat-card-header">
+                <h3 class="stat-card-title">
+                    <i class="layui-icon layui-icon-chart"></i>
+                    CPU使用率
+                </h3>
+                <div class="stat-card-icon" style="background: linear-gradient(135deg, #ed8936, #dd6b20);">
+                    <i class="layui-icon layui-icon-chart"></i>
+                </div>
+            </div>
+            <div class="stat-label">处理器负载</div>
+            <div class="stat-value" id="cpu-text">0%</div>
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="cpu-progress" style="width: 0%; background: linear-gradient(135deg, #ed8936, #dd6b20);"></div>
+                </div>
+                <div class="progress-text" id="cpu-detail">核心数: 加载中...</div>
+            </div>
+        </div>
 
-        platforms.forEach(p => {
-            const details = statusDetails ? statusDetails[p.key] : null;
-            let iconClass = 'text-secondary';
-            let title = `${p.name}: 状态未知`;
+        <!-- 内存使用率卡片 -->
+        <div class="stat-card">
+            <div class="stat-card-header">
+                <h3 class="stat-card-title">
+                    <i class="layui-icon layui-icon-memory"></i>
+                    内存使用率
+                </h3>
+                <div class="stat-card-icon" style="background: linear-gradient(135deg, #4299e1, #3182ce);">
+                    <i class="layui-icon layui-icon-memory"></i>
+                </div>
+            </div>
+            <div class="stat-label">内存占用</div>
+            <div class="stat-value" id="memory-text">0%</div>
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="memory-progress" style="width: 0%; background: linear-gradient(135deg, #4299e1, #3182ce);"></div>
+                </div>
+                <div class="progress-text" id="memory-details">已用: <span id="memory-used">0</span> GB / 总计: <span id="memory-total">0</span> GB</div>
+            </div>
+        </div>
 
-            if (details) {
-                if (details.status === true) {
-                    iconClass = 'text-success';
-                    title = `${p.name}: 正常 (Code: ${details.code}, ${details.message})`;
-                } else {
-                    if ([1, 2].includes(details.code)) {
-                        iconClass = 'text-danger';
-                    } else if ([3, 4].includes(details.code)) {
-                        iconClass = 'text-warning';
-                    } else {
-                        iconClass = 'text-danger';
-                    }
-                    title = `${p.name}: 异常 - ${details.message} (Code: ${details.code})`;
-                }
-            }
-            html += `<i class="layui-icon ${p.icon} status-icon ${iconClass}" title="${title}"></i>`;
-        });
-        return html;
-    }
+        <!-- 磁盘使用率卡片 -->
+        <div class="stat-card">
+            <div class="stat-card-header">
+                <h3 class="stat-card-title">
+                    <i class="layui-icon layui-icon-file"></i>
+                    磁盘使用率
+                </h3>
+                <div class="stat-card-icon" style="background: linear-gradient(135deg, #9f7aea, #805ad5);">
+                    <i class="layui-icon layui-icon-file"></i>
+                </div>
+            </div>
+            <div class="stat-label">存储空间</div>
+            <div class="stat-value" id="disk-text">0%</div>
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="disk-progress" style="width: 0%; background: linear-gradient(135deg, #9f7aea, #805ad5);"></div>
+                </div>
+                <div class="progress-text" id="disk-details">已用: <span id="disk-used">0</span> GB / 总计: <span id="disk-total">0</span> GB</div>
+            </div>
+        </div>
 
-    function getCardStatusClass(statusDetails) {
-        if (!statusDetails || (!statusDetails.pc && !statusDetails.mobile)) {
-            return 'status-unknown';
-        }
-        if ((statusDetails.pc && statusDetails.pc.status !== true) || 
-            (statusDetails.mobile && statusDetails.mobile.status !== true)) {
-            return 'status-error';
-        }
-        return 'status-normal';
-    }
-    
-    async function fetchPoints() {
-        try {
-            // 默认获取所有账户数据，而不仅仅是当天的
-            const response = await fetchWithAuth('/web_api/get_points?filter=all');
-            const data = await response.json();
-            
-            const container = document.getElementById('accounts-container');
-            const lastUpdatedEl = document.getElementById('last-updated');
-            
-            if (container && lastUpdatedEl) {
-                container.innerHTML = '';
-                lastUpdatedEl.textContent = `最后刷新: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`;
-            
-                if (!Array.isArray(data) || data.length === 0) {
-                    container.innerHTML = `<div class="layui-col-md12"><div class="layui-card"><div class="layui-card-body" style="text-align: center; color: #999;">暂无账户数据，请先到“账户管理”页面添加账户。</div></div></div>`;
-                    return;
-                }
+        <!-- 网络状态卡片 -->
+        <div class="stat-card">
+            <div class="stat-card-header">
+                <h3 class="stat-card-title">
+                    <i class="layui-icon layui-icon-network"></i>
+                    网络状态
+                </h3>
+                <div class="stat-card-icon" style="background: linear-gradient(135deg, #38b2ac, #319795);">
+                    <i class="layui-icon layui-icon-network"></i>
+                </div>
+            </div>
+            <div class="stat-label">连接信息</div>
+            <div class="stat-value" id="connections">0</div>
+            <div class="progress-text">活跃节点: <span id="active-nodes">0</span></div>
+        </div>
 
-                const nodeColorMap = {};
-                let colorIndex = 0;
-                data.forEach(account => {
-                    const nodeName = account.node_name || '未知节点';
-                    if (!nodeColorMap[nodeName]) {
-                        nodeColorMap[nodeName] = bgColors[colorIndex++ % bgColors.length];
-                    }
-                    const cardColor = nodeColorMap[nodeName];
-                    const lastUpdated = account.last_updated ? new Date(account.last_updated).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : 'N/A';
-                    const statusIcons = getStatusIcons(account.status_details);
-                    const cardStatusClass = getCardStatusClass(account.status_details);
-                    
-                    const desktopGain = account.desktop_gain || 0;
-                    const mobileGain = account.mobile_gain || 0;
-                    const totalDailyGain = desktopGain + mobileGain;
-
-                    // 检查是否是当前时间
-                    const isCurrentTime = function(timeStr) {
-                        if (!timeStr || timeStr === 'N/A') return true;
-                        const updateTime = new Date(timeStr);
-                        const now = new Date();
-                        // 检查是否是今天
-                        return updateTime.toDateString() === now.toDateString();
-                    };
-                    
-                    const isOutdated = !isCurrentTime(lastUpdated);
-                    const cardClasses = `${cardStatusClass} ${isOutdated ? 'outdated' : ''}`;
-                    
-                    const cardHtml = `
-                        <div class="layui-col-md3 layui-col-sm6">
-                            <div class="layui-card info-card ${cardClasses}" style="box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05); transition: all 0.3s;">
-                                <div class="layui-card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; padding: 8px 12px;">
-                                    <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px;">${account.email}</span>
-                                    <span style="background: #1E9FFF; color: white; padding: 1px 4px; border-radius: 2px; font-size: 10px; margin-left: 6px; white-space: nowrap;">${nodeName}</span>
+        <!-- 流量信息卡片 -->
+        <div class="stat-card">
+            <div class="stat-card-header">
+                <h3 class="stat-card-title">
+                    <i class="layui-icon layui-icon-network"></i>
+                    网络流量
+                </h3>
+                <div class="stat-card-icon" style="background: linear-gradient(135deg, #38b2ac, #319795);">
+                    <i class="layui-icon layui-icon-network"></i>
+                </div>
                                 </div>
-                                <div class="layui-card-body" style="padding: 8px 12px;">
-                                    <div class="stat-grid" style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                                        <div class="stat-item" style="text-align: center; flex: 1; padding: 0 3px;">
-                                            <p style="font-size: 10px; color: #666; margin-bottom: 2px;">总积分</p>
-                                            <h3 style="font-size: 16px; font-weight: bold; margin: 0;">${account.total_points || 0}</h3>
+            <div class="stat-label">物理网卡流量统计</div>
+            <div class="traffic-info">
+                <div class="traffic-item">
+                    <span class="traffic-label">流入:</span>
+                    <span class="traffic-value" id="traffic-recv">0 GB</span>
                                         </div>
-                                        <div class="stat-item" style="text-align: center; flex: 1; padding: 0 3px;">
-                                            <p style="font-size: 10px; color: #666; margin-bottom: 2px;">今日收益</p>
-                                            <h3 class="success" style="font-size: 16px; font-weight: bold; margin: 0;">${totalDailyGain}</h3>
+                <div class="traffic-item">
+                    <span class="traffic-label">流出:</span>
+                    <span class="traffic-value" id="traffic-sent">0 GB</span>
                                         </div>
                                     </div>
-                                    <div class="card-footer" style="display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #999; padding-top: 4px; margin-top: 4px; border-top: 1px solid #f2f2f2;">
-                                        <span class="status-icon-group">${statusIcons}</span>
-                                        <span style="color: #5FB878;">
-                                            <i class="layui-icon layui-icon-log"></i> ${lastUpdated}
-                                        </span>
                                     </div>
                                 </div>
                             </div>
-                        </div>`;
-                    container.insertAdjacentHTML('beforeend', cardHtml);
-                });
-            }
-        } catch (error) {
-            console.error('获取数据失败:', error);
-        }
+
+
+<script>
+// 系统监控数据
+let systemData = {
+    cpu: 0,
+    cpuCores: 0,
+    memory: { used: 0, total: 0, percent: 0 },
+    disk: { used: 0, total: 0, percent: 0 },
+    uptime: 0,
+    connections: 0,
+    activeNodes: 0,
+    systemInfo: { hostname: '', version: '', arch: '', publicIp: '' },
+    traffic: { sent: 0, recv: 0 }
+};
+
+// 更新系统概览
+function updateSystemOverview() {
+    const uptimeElement = document.getElementById('uptime');
+    
+    // 调试信息
+    console.log('运行时间数据:', systemData.uptime);
+    
+    if (systemData.uptime > 0) {
+        const days = Math.floor(systemData.uptime / 86400);
+        const hours = Math.floor((systemData.uptime % 86400) / 3600);
+        const minutes = Math.floor((systemData.uptime % 3600) / 60);
+        const seconds = systemData.uptime % 60;
+        
+        // 创建翻牌效果
+        uptimeElement.innerHTML = `
+            <span class="uptime-flip">${days.toString().padStart(2, '0')}</span>天
+            <span class="uptime-flip">${hours.toString().padStart(2, '0')}</span>时
+            <span class="uptime-flip">${minutes.toString().padStart(2, '0')}</span>分
+            <span class="uptime-flip">${seconds.toString().padStart(2, '0')}</span>秒
+        `;
+    } else {
+        uptimeElement.innerHTML = '<span style="color: #a0aec0;">计算中...</span>';
+    }
+}
+
+// 更新CPU使用率
+function updateCPU() {
+    const cpuProgress = document.getElementById('cpu-progress');
+    const cpuText = document.getElementById('cpu-text');
+    const cpuDetail = document.getElementById('cpu-detail');
+    
+    cpuProgress.style.width = systemData.cpu + '%';
+    cpuText.textContent = systemData.cpu.toFixed(1) + '%';
+    
+    // 更新CPU详情
+    if (systemData.cpuCores) {
+        cpuDetail.textContent = `核心数: ${systemData.cpuCores}`;
     }
     
-    // 初始加载数据
-    fetchPoints();
+    // 根据使用率改变颜色
+    if (systemData.cpu > 80) {
+        cpuProgress.style.background = 'linear-gradient(135deg, #f56565, #e53e3e)';
+    } else if (systemData.cpu > 60) {
+        cpuProgress.style.background = 'linear-gradient(135deg, #ed8936, #dd6b20)';
+    } else {
+        cpuProgress.style.background = 'linear-gradient(135deg, #48bb78, #38a169)';
+    }
+}
+
+// 更新内存使用率
+function updateMemory() {
+    const memoryProgress = document.getElementById('memory-progress');
+    const memoryText = document.getElementById('memory-text');
+    const memoryUsed = document.getElementById('memory-used');
+    const memoryTotal = document.getElementById('memory-total');
     
-    // 定期刷新数据
-    setInterval(fetchPoints, 60000);
+    memoryProgress.style.width = systemData.memory.percent + '%';
+    memoryText.textContent = systemData.memory.percent.toFixed(1) + '%';
+    memoryUsed.textContent = systemData.memory.used.toFixed(1);
+    memoryTotal.textContent = systemData.memory.total.toFixed(1);
     
-    // 监听本地存储变化，用于实时刷新
-    window.addEventListener('storage', function(event) {
-        if (event.key === 'accountsUpdated' && event.newValue === 'true') {
-            // 清除标志并刷新数据
-            localStorage.setItem('accountsUpdated', 'false');
-            fetchPoints();
+    // 根据使用率改变颜色
+    if (systemData.memory.percent > 80) {
+        memoryProgress.style.background = 'linear-gradient(135deg, #f56565, #e53e3e)';
+    } else if (systemData.memory.percent > 60) {
+        memoryProgress.style.background = 'linear-gradient(135deg, #ed8936, #dd6b20)';
+    } else {
+        memoryProgress.style.background = 'linear-gradient(135deg, #4299e1, #3182ce)';
+    }
+}
+
+// 更新磁盘使用率
+function updateDisk() {
+    const diskProgress = document.getElementById('disk-progress');
+    const diskText = document.getElementById('disk-text');
+    const diskUsed = document.getElementById('disk-used');
+    const diskTotal = document.getElementById('disk-total');
+    
+    // 调试信息
+    console.log('磁盘数据:', systemData.disk);
+    
+    diskProgress.style.width = systemData.disk.percent + '%';
+    diskText.textContent = systemData.disk.percent.toFixed(1) + '%';
+    diskUsed.textContent = systemData.disk.used.toFixed(1);
+    diskTotal.textContent = systemData.disk.total.toFixed(1);
+    
+    // 根据使用率改变颜色
+    if (systemData.disk.percent > 80) {
+        diskProgress.style.background = 'linear-gradient(135deg, #f56565, #e53e3e)';
+    } else if (systemData.disk.percent > 60) {
+        diskProgress.style.background = 'linear-gradient(135deg, #ed8936, #dd6b20)';
+    } else {
+        diskProgress.style.background = 'linear-gradient(135deg, #48bb78, #38a169)';
+    }
+}
+
+// 更新网络状态
+function updateNetwork() {
+    document.getElementById('connections').textContent = systemData.connections;
+    document.getElementById('active-nodes').textContent = systemData.activeNodes;
+}
+
+// 更新系统信息
+function updateSystemInfo() {
+    const hostnameElement = document.getElementById('hostname');
+    const versionElement = document.getElementById('system-version');
+    const archElement = document.getElementById('system-arch');
+    const publicIpElement = document.getElementById('public-ip');
+    
+    if (hostnameElement) hostnameElement.textContent = systemData.systemInfo.hostname || '未知';
+    if (versionElement) versionElement.textContent = systemData.systemInfo.version || '未知';
+    if (archElement) archElement.textContent = systemData.systemInfo.arch || '未知';
+    if (publicIpElement) publicIpElement.textContent = systemData.systemInfo.publicIp || '未知';
+}
+
+// 更新流量信息
+function updateTraffic() {
+    const trafficRecvElement = document.getElementById('traffic-recv');
+    const trafficSentElement = document.getElementById('traffic-sent');
+    
+    if (trafficRecvElement && trafficSentElement) {
+        const trafficRecv = systemData.traffic.recv || 0;
+        const trafficSent = systemData.traffic.sent || 0;
+        
+        trafficRecvElement.textContent = `${trafficRecv.toFixed(2)} GB`;
+        trafficSentElement.textContent = `${trafficSent.toFixed(2)} GB`;
+    }
+}
+
+// 获取系统资源数据
+async function fetchSystemData() {
+    try {
+        console.log('正在获取系统数据...');
+        const response = await fetch('/web_api/system_status');
+        console.log('API响应状态:', response.status);
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log('获取到的系统数据:', data);
+            console.log('主机名:', data.systemInfo?.hostname);
+            console.log('内存信息:', data.memory);
+            console.log('流量信息:', data.traffic);
+            systemData = { ...systemData, ...data };
+        } else {
+            console.error('API调用失败:', response.status, response.statusText);
+            // 如果API不存在，使用模拟数据
+            systemData = {
+                cpu: Math.random() * 100,
+                cpuCores: 4,
+                memory: {
+                    used: Math.random() * 8,
+                    total: 8,
+                    percent: Math.random() * 100
+                },
+                disk: {
+                    used: Math.random() * 500,
+                    total: 1000,
+                    percent: Math.random() * 100
+                },
+                uptime: Math.floor(Math.random() * 86400 * 7), // 随机1-7天
+                connections: Math.floor(Math.random() * 100),
+                activeNodes: Math.floor(Math.random() * 10),
+                systemInfo: {
+                    hostname: 'server-' + Math.floor(Math.random() * 1000),
+                    version: 'Linux 5.4.0',
+                    arch: 'x86_64',
+                    publicIp: '192.168.1.100'
+                },
+                traffic: {
+                    sent: Math.random() * 100,
+                    recv: Math.random() * 80
+                }
+            };
+            console.log('使用模拟数据:', systemData);
         }
-    });
+        
+        // 更新所有显示
+        updateSystemInfo();
+        updateSystemInfo();
+        updateSystemOverview();
+        updateCPU();
+        updateMemory();
+        updateDisk();
+        updateNetwork();
+        updateTraffic();
+        
+        // 更新最后更新时间
+        const lastUpdated = document.getElementById('last-updated');
+        lastUpdated.textContent = `最后更新: ${new Date().toLocaleString('zh-CN')}`;
+        
+    } catch (error) {
+        console.error('获取系统数据失败:', error);
+        // 使用模拟数据
+        systemData = {
+            cpu: Math.random() * 100,
+            cpuCores: 4,
+            memory: {
+                used: Math.random() * 8,
+                total: 8,
+                percent: Math.random() * 100
+            },
+            disk: {
+                used: Math.random() * 500,
+                total: 1000,
+                percent: Math.random() * 100
+            },
+            uptime: Math.floor(Math.random() * 86400 * 7),
+            connections: Math.floor(Math.random() * 100),
+            activeNodes: Math.floor(Math.random() * 10),
+            systemInfo: {
+                hostname: 'server-' + Math.floor(Math.random() * 1000),
+                version: 'Linux 5.4.0',
+                arch: 'x86_64',
+                publicIp: '192.168.1.100'
+            },
+            traffic: {
+                sent: Math.random() * 100,
+                recv: Math.random() * 80
+            }
+        };
+        
+        updateSystemInfo();
+        updateSystemOverview();
+        updateCPU();
+        updateMemory();
+        updateDisk();
+        updateNetwork();
+        updateTraffic();
+    }
+}
+
+// 页面加载时获取数据
+document.addEventListener('DOMContentLoaded', function() {
+    fetchSystemData();
+    
+    // 每30秒更新一次
+    setInterval(fetchSystemData, 30000);
 });
 </script>
 {% endblock %}

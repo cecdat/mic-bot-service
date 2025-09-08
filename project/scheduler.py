@@ -34,11 +34,11 @@ def init_scheduler(app):
     with app.app_context():
         load_all_node_tasks()
         
-        # 添加任务表扫描定时任务 (每分钟执行一次)
+        # 添加任务表扫描定时任务 (每5分钟执行一次，减少频率)
         scheduler.add_job(
             func=scan_task_table,
             trigger='interval',
-            minutes=1,
+            minutes=5,
             id='task_scanner',
             name='任务表扫描器',
             replace_existing=True
@@ -279,14 +279,50 @@ def scan_task_table():
                     db.session.commit()
                     continue
 
-                # 更新任务状态为已下发
-                task.status = 'issued'
-                # 修复：使用正确的UTC时间
-                task.started_at = datetime.now(timezone.utc)
-                db.session.commit()
+                # 使用数据库锁防止重复处理
+                # 先尝试更新任务状态，如果更新失败说明已被其他进程处理
+                try:
+                    # 使用原子更新操作，确保只有一个进程能成功更新
+                    updated_rows = Task.query.filter(
+                        Task.id == task.id,
+                        Task.status == 'pending'  # 只更新状态为pending的任务
+                    ).update({
+                        'status': 'issued',
+                        'started_at': datetime.now(timezone.utc)
+                    })
+                    
+                    if updated_rows == 0:
+                        logger.warning(f'任务 {task.id} 已被其他进程处理，跳过')
+                        continue
+                    
+                    db.session.commit()
+                    logger.info(f'任务 {task.id} 状态已更新为已下发')
+                except Exception as e:
+                    logger.error(f'更新任务 {task.id} 状态失败: {e}')
+                    db.session.rollback()
+                    continue
 
                 # 推送任务到节点
                 logger.info(f'任务 {task.id} 已下发到节点 {node.node_name}，执行时间: {execution_time}')
+                
+                # 发送任务开始推送通知
+                try:
+                    from .push import trigger_push_notification
+                    # 获取节点分配的账户信息
+                    from .models import BotAccount
+                    assigned_accounts = BotAccount.query.filter_by(assigned_node_id=node.id).all()
+                    account_emails = [acc.email for acc in assigned_accounts]
+                    
+                    if account_emails:
+                        content = f'节点 {node.node_name} 开始执行任务\n\n'
+                        content += f'分配账户 ({len(account_emails)}个):\n'
+                        content += '\n'.join(account_emails)
+                    else:
+                        content = f'节点 {node.node_name} 开始执行任务'
+                    
+                    trigger_push_notification('task_start', f'**节点开始执行任务**', content)
+                except Exception as push_error:
+                    logger.warning(f'发送任务开始推送失败: {push_error}')
                 
                 # 准备任务数据
                 task_data = {
@@ -296,11 +332,23 @@ def scan_task_table():
                 }
                 
                 # 将任务设置为节点命令
-                node.command = 'RUN_TASK'
+                node.command = 'RUN_TASKS'
                 node.command_status = 'pending'
                 node.command_data = json.dumps(task_data)
                 db.session.commit()
                 logger.info(f'已为节点 {node.node_name} 设置任务命令')
+                
+                # 通过WebSocket发送任务到节点
+                try:
+                    from . import websocket_events
+                    success = websocket_events.send_task_to_node(node.id, 'RUN_TASKS', task_data)
+                    if success:
+                        logger.debug(f'已通过WebSocket向节点 {node.node_name} 发送任务 {task.id}')
+                    else:
+                        logger.warning(f'WebSocket发送任务失败，节点 {node.node_name} 可能不在线')
+                except Exception as ws_error:
+                    logger.error(f'WebSocket发送任务时出错: {ws_error}')
+                    # 继续执行，不阻止任务处理
                 
         except Exception as e:
             logger.error(f'扫描任务表失败: {str(e)}')

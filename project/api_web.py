@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import secrets
 import os
+import time
 
 def get_inferred_status(node):
     """智能推断节点状态，误差不超过30秒"""
@@ -19,19 +20,37 @@ def get_inferred_status(node):
     
     # 如果状态更新时间在30秒内，直接返回当前状态
     if node.status_updated_at:
-        time_diff = (now - node.status_updated_at).total_seconds()
+        # 确保时间对象都是timezone-aware
+        status_time = node.status_updated_at
+        if status_time.tzinfo is None:
+            # 如果是naive datetime，假设为UTC
+            status_time = status_time.replace(tzinfo=timezone.utc)
+        
+        time_diff = (now - status_time).total_seconds()
         if time_diff <= 30:
             return node.activity_status
     
     # 如果最后心跳时间在30秒内，且状态为Running，保持Running
     if node.last_seen:
-        heartbeat_diff = (now - node.last_seen).total_seconds()
+        # 确保时间对象都是timezone-aware
+        last_seen = node.last_seen
+        if last_seen.tzinfo is None:
+            # 如果是naive datetime，假设为UTC
+            last_seen = last_seen.replace(tzinfo=timezone.utc)
+        
+        heartbeat_diff = (now - last_seen).total_seconds()
         if heartbeat_diff <= 30 and node.activity_status == 'Running':
             return 'Running'
     
     # 如果最后心跳时间超过30秒，推断为Idle
     if node.last_seen:
-        heartbeat_diff = (now - node.last_seen).total_seconds()
+        # 确保时间对象都是timezone-aware
+        last_seen = node.last_seen
+        if last_seen.tzinfo is None:
+            # 如果是naive datetime，假设为UTC
+            last_seen = last_seen.replace(tzinfo=timezone.utc)
+        
+        heartbeat_diff = (now - last_seen).total_seconds()
         if heartbeat_diff > 30:
             return 'Idle'
     
@@ -424,6 +443,8 @@ def trigger_node(node_id):
     if node.activity_status != 'Idle':
         return jsonify({"status": "error", "message": f"节点正忙 ({node.activity_status})，无法触发。"}), 409
     
+    # 注意：不在这里发送任务开始推送，因为任务会通过定时调度系统发送推送
+    # 这样可以避免重复推送
     # 尝试使用WebSocket发送任务
     try:
         from . import websocket_events
@@ -949,11 +970,20 @@ def manage_push_configs():
             db.session.add(config)
         
         config.url = url
+        
+        # 布尔值转换函数
+        def to_bool(value):
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, str):
+                return value.lower() in ('true', '1', 'on', 'yes')
+            return bool(value)
+        
         # 处理布尔值转换，确保正确转换为布尔类型
-        config.notify_on_node_online = bool(data.get('notify_on_node_online', False))
-        config.notify_on_node_offline = bool(data.get('notify_on_node_offline', False))
-        config.notify_on_account_error = bool(data.get('notify_on_account_error', False))
-        config.notify_on_verification_code = bool(data.get('notify_on_verification_code', False))
+        config.notify_on_node_online = to_bool(data.get('notify_on_node_online', False))
+        config.notify_on_node_offline = to_bool(data.get('notify_on_node_offline', False))
+        config.notify_on_account_error = to_bool(data.get('notify_on_account_error', False))
+        config.notify_on_verification_code = to_bool(data.get('notify_on_verification_code', False))
         
         db.session.commit()
         return jsonify({"status": "success"})
@@ -1153,6 +1183,346 @@ def mobile_get_points():
         })
     
     return jsonify(points_data)
+
+@bp.route('/system_status', methods=['GET'])
+@web_login_required
+def get_system_status():
+    """获取系统资源状态"""
+    import psutil
+    import os
+    import platform
+    import socket
+    import requests
+    from datetime import datetime, timedelta
+    
+    try:
+        # CPU使用率
+        cpu_percent = psutil.cpu_percent(interval=1)
+        cpu_cores = psutil.cpu_count()
+        
+        # 内存使用情况
+        memory_used_gb = 0
+        memory_total_gb = 0
+        memory_percent = 0
+        
+        try:
+            # 尝试从挂载的 /host/proc/meminfo 获取内存信息
+            if os.path.exists('/host/proc/meminfo'):
+                current_app.logger.info("从 /host/proc/meminfo 读取内存信息")
+                with open('/host/proc/meminfo', 'r') as f:
+                    meminfo = {}
+                    for line in f:
+                        if ':' in line:
+                            key, value = line.split(':', 1)
+                            meminfo[key.strip()] = value.strip()
+                    
+                    current_app.logger.info(f"内存信息键: {list(meminfo.keys())}")
+                    
+                    # 解析内存信息
+                    if 'MemTotal' in meminfo and 'MemAvailable' in meminfo:
+                        total_kb = int(meminfo['MemTotal'].split()[0])
+                        available_kb = int(meminfo['MemAvailable'].split()[0])
+                        used_kb = total_kb - available_kb
+                        
+                        memory_total_gb = total_kb / (1024 ** 2)  # KB to GB
+                        memory_used_gb = used_kb / (1024 ** 2)    # KB to GB
+                        memory_percent = (used_kb / total_kb) * 100 if total_kb > 0 else 0
+                        current_app.logger.info(f"内存统计: 总计 {memory_total_gb:.2f}GB, 已用 {memory_used_gb:.2f}GB, 使用率 {memory_percent:.1f}%")
+                    elif 'MemTotal' in meminfo and 'MemFree' in meminfo:
+                        total_kb = int(meminfo['MemTotal'].split()[0])
+                        free_kb = int(meminfo['MemFree'].split()[0])
+                        used_kb = total_kb - free_kb
+                        
+                        memory_total_gb = total_kb / (1024 ** 2)  # KB to GB
+                        memory_used_gb = used_kb / (1024 ** 2)    # KB to GB
+                        memory_percent = (used_kb / total_kb) * 100 if total_kb > 0 else 0
+                        current_app.logger.info(f"内存统计: 总计 {memory_total_gb:.2f}GB, 已用 {memory_used_gb:.2f}GB, 使用率 {memory_percent:.1f}%")
+                    else:
+                        current_app.logger.warning("内存信息文件中缺少必要的字段")
+                        # 尝试其他字段
+                        if 'MemTotal' in meminfo:
+                            total_kb = int(meminfo['MemTotal'].split()[0])
+                            # 尝试计算已用内存
+                            if 'Buffers' in meminfo and 'Cached' in meminfo:
+                                buffers_kb = int(meminfo['Buffers'].split()[0])
+                                cached_kb = int(meminfo['Cached'].split()[0])
+                                free_kb = int(meminfo.get('MemFree', '0').split()[0])
+                                used_kb = total_kb - free_kb - buffers_kb - cached_kb
+                            else:
+                                free_kb = int(meminfo.get('MemFree', '0').split()[0])
+                                used_kb = total_kb - free_kb
+                            
+                            memory_total_gb = total_kb / (1024 ** 2)
+                            memory_used_gb = used_kb / (1024 ** 2)
+                            memory_percent = (used_kb / total_kb) * 100 if total_kb > 0 else 0
+                            current_app.logger.info(f"备用内存统计: 总计 {memory_total_gb:.2f}GB, 已用 {memory_used_gb:.2f}GB, 使用率 {memory_percent:.1f}%")
+            else:
+                current_app.logger.warning("/host/proc/meminfo 文件不存在")
+        except Exception as e:
+            current_app.logger.warning(f"无法从宿主机 /proc/meminfo 读取内存信息: {e}")
+        
+        # 如果无法从挂载文件获取，则使用 psutil
+        if memory_total_gb == 0:
+            try:
+                memory = psutil.virtual_memory()
+                memory_used_gb = memory.used / (1024 ** 3)
+                memory_total_gb = memory.total / (1024 ** 3)
+                memory_percent = memory.percent
+            except Exception as e2:
+                current_app.logger.warning(f"psutil 内存统计也失败: {e2}")
+                memory_used_gb = 0
+                memory_total_gb = 0
+                memory_percent = 0
+        
+        # 磁盘使用情况
+        disk = psutil.disk_usage('/')
+        disk_used_gb = disk.used / (1024 ** 3)
+        disk_total_gb = disk.total / (1024 ** 3)
+        disk_percent = (disk.used / disk.total) * 100 if disk.total > 0 else 0
+        
+        # 系统运行时间
+        uptime_seconds = 0
+        try:
+            # 尝试从挂载的 /host/proc/uptime 获取系统运行时间
+            if os.path.exists('/host/proc/uptime'):
+                with open('/host/proc/uptime', 'r') as f:
+                    uptime_line = f.read().strip()
+                    uptime_seconds = int(float(uptime_line.split()[0]))
+            else:
+                # 回退到使用 psutil
+                uptime_seconds = int(time.time() - psutil.boot_time())
+        except Exception as e:
+            current_app.logger.warning(f"无法获取系统运行时间: {e}")
+            # 回退到使用 psutil
+            try:
+                uptime_seconds = int(time.time() - psutil.boot_time())
+            except:
+                uptime_seconds = 0
+        
+        # 网络连接数
+        connections = 0
+        try:
+            # 尝试从挂载的 /host/proc/net/sockstat 获取连接数
+            if os.path.exists('/host/proc/net/sockstat'):
+                with open('/host/proc/net/sockstat', 'r') as f:
+                    for line in f:
+                        if line.startswith('TCP:'):
+                            parts = line.split()
+                            if len(parts) >= 4:
+                                try:
+                                    connections = int(parts[2])  # established connections
+                                except (ValueError, IndexError):
+                                    pass
+                            break
+            else:
+                # 回退到使用 psutil
+                connections = len(psutil.net_connections())
+        except Exception as e:
+            current_app.logger.warning(f"无法获取网络连接数: {e}")
+            # 回退到使用 psutil
+            try:
+                connections = len(psutil.net_connections())
+            except:
+                connections = 0
+        
+        # 活跃节点数（从数据库查询）
+        active_nodes = BotNode.query.filter_by(status=1).count()
+        
+        # 账户数量
+        account_count = BotAccount.query.count()
+        
+        # 系统信息
+        # 优先从挂载的 /host/proc/sys/kernel/hostname 获取宿主机主机名
+        hostname = "unknown"
+        
+        try:
+            if os.path.exists('/host/proc/sys/kernel/hostname'):
+                with open('/host/proc/sys/kernel/hostname', 'r') as f:
+                    hostname = f.read().strip()
+                    current_app.logger.info(f"从 /host/proc/sys/kernel/hostname 获取主机名: {hostname}")
+            else:
+                current_app.logger.warning("/host/proc/sys/kernel/hostname 文件不存在")
+                
+            # 如果从文件获取失败，尝试环境变量
+            if not hostname or hostname == "unknown":
+                hostname = os.environ.get('HOST_HOSTNAME', '')
+                current_app.logger.info(f"从环境变量 HOST_HOSTNAME 获取主机名: {hostname}")
+                
+                if not hostname or hostname in ['$(hostname)', 'unknown', '']:
+                    # 最后回退到容器主机名
+                    hostname = socket.gethostname()
+                    current_app.logger.info(f"使用容器主机名: {hostname}")
+        except Exception as e:
+            current_app.logger.warning(f"无法获取宿主机主机名: {e}")
+            hostname = socket.gethostname()
+            current_app.logger.info(f"回退到容器主机名: {hostname}")
+        
+        # 尝试从挂载的宿主机文件获取系统信息
+        system_version = "未知"
+        system_arch = "未知"
+        
+        try:
+            # 从挂载的 /etc/host-os-release 文件读取系统信息
+            if os.path.exists('/etc/host-os-release'):
+                with open('/etc/host-os-release', 'r') as f:
+                    os_info = {}
+                    for line in f:
+                        if '=' in line:
+                            key, value = line.strip().split('=', 1)
+                            os_info[key] = value.strip('"')
+                    
+                    # 构建系统版本信息
+                    if 'PRETTY_NAME' in os_info:
+                        system_version = os_info['PRETTY_NAME']
+                    elif 'NAME' in os_info and 'VERSION' in os_info:
+                        system_version = f"{os_info['NAME']} {os_info['VERSION']}"
+                    elif 'ID' in os_info and 'VERSION_ID' in os_info:
+                        system_version = f"{os_info['ID']} {os_info['VERSION_ID']}"
+        except Exception as e:
+            current_app.logger.warning(f"无法读取宿主机系统信息: {e}")
+        
+        # 如果无法从挂载文件获取，则使用容器内信息
+        if system_version == "未知":
+            system_info = platform.uname()
+            system_version = f"{system_info.system} {system_info.release}"
+            system_arch = system_info.machine
+        else:
+            # 从挂载的 /proc 获取架构信息
+            try:
+                if os.path.exists('/host/proc/version'):
+                    with open('/host/proc/version', 'r') as f:
+                        version_info = f.read()
+                        # 提取架构信息
+                        if 'x86_64' in version_info:
+                            system_arch = 'x86_64'
+                        elif 'aarch64' in version_info or 'arm64' in version_info:
+                            system_arch = 'aarch64'
+                        elif 'arm' in version_info:
+                            system_arch = 'arm'
+                        else:
+                            system_arch = 'unknown'
+            except Exception as e:
+                current_app.logger.warning(f"无法读取宿主机架构信息: {e}")
+                system_arch = platform.machine()
+        
+        # 获取公网IP
+        public_ip = "未知"
+        try:
+            response = requests.get('https://api.ipify.org', timeout=5)
+            if response.status_code == 200:
+                public_ip = response.text.strip()
+        except:
+            try:
+                response = requests.get('https://ipinfo.io/ip', timeout=5)
+                if response.status_code == 200:
+                    public_ip = response.text.strip()
+            except:
+                pass
+        
+        # 网络流量统计（物理网卡）
+        total_bytes_sent = 0
+        total_bytes_recv = 0
+        
+        try:
+            # 尝试从挂载的 /host/proc 获取网络统计信息
+            if os.path.exists('/host/proc/net/dev'):
+                current_app.logger.info("从 /host/proc/net/dev 读取网络统计信息")
+                with open('/host/proc/net/dev', 'r') as f:
+                    lines = f.readlines()
+                    current_app.logger.info(f"网络接口文件行数: {len(lines)}")
+                    for line in lines[2:]:  # 跳过前两行标题
+                        parts = line.split(':')
+                        if len(parts) >= 2:
+                            interface = parts[0].strip()
+                            stats = parts[1].split()
+                            if len(stats) >= 10:
+                                # 排除虚拟接口和回环接口，但包含物理网卡
+                                if not interface.startswith(('lo', 'docker', 'veth', 'br-', 'virbr', 'tun', 'tap', 'wlan', 'wifi')):
+                                    try:
+                                        bytes_recv = int(stats[0])
+                                        bytes_sent = int(stats[8])
+                                        total_bytes_recv += bytes_recv
+                                        total_bytes_sent += bytes_sent
+                                        current_app.logger.info(f"接口 {interface}: 接收 {bytes_recv} 字节, 发送 {bytes_sent} 字节")
+                                    except (ValueError, IndexError) as e:
+                                        current_app.logger.warning(f"解析接口 {interface} 数据失败: {e}")
+                                        continue
+                                else:
+                                    current_app.logger.info(f"跳过虚拟接口: {interface}")
+                current_app.logger.info(f"总网络流量: 接收 {total_bytes_recv} 字节, 发送 {total_bytes_sent} 字节")
+            else:
+                current_app.logger.warning("/host/proc/net/dev 文件不存在")
+        except Exception as e:
+            current_app.logger.warning(f"无法从宿主机 /proc/net/dev 读取网络统计: {e}")
+        
+        # 如果无法从挂载文件获取或获取失败，则使用 psutil
+        if total_bytes_sent == 0 and total_bytes_recv == 0:
+            try:
+                current_app.logger.info("回退到使用 psutil 获取网络统计")
+                network_io = psutil.net_io_counters(pernic=True)
+                for interface, stats in network_io.items():
+                    # 更宽松的过滤条件，包含更多物理网卡
+                    if not interface.startswith(('lo', 'docker', 'veth', 'br-', 'virbr', 'tun', 'tap')):
+                        total_bytes_sent += stats.bytes_sent
+                        total_bytes_recv += stats.bytes_recv
+                        current_app.logger.info(f"psutil 接口 {interface}: 接收 {stats.bytes_recv} 字节, 发送 {stats.bytes_sent} 字节")
+            except Exception as e2:
+                current_app.logger.warning(f"psutil 网络统计也失败: {e2}")
+        
+        # 如果仍然没有数据，尝试获取所有接口的总计
+        if total_bytes_sent == 0 and total_bytes_recv == 0:
+            try:
+                current_app.logger.info("尝试获取所有网络接口的总计")
+                network_io = psutil.net_io_counters()
+                total_bytes_sent = network_io.bytes_sent
+                total_bytes_recv = network_io.bytes_recv
+                current_app.logger.info(f"总计网络流量: 接收 {total_bytes_recv} 字节, 发送 {total_bytes_sent} 字节")
+            except Exception as e3:
+                current_app.logger.warning(f"获取总计网络统计也失败: {e3}")
+        
+        # 转换为GB
+        traffic_sent_gb = total_bytes_sent / (1024 ** 3)
+        traffic_recv_gb = total_bytes_recv / (1024 ** 3)
+        
+        # 仅在调试模式下输出详细信息
+        if current_app.debug:
+            current_app.logger.debug(f"系统监控数据: 磁盘={disk_percent:.1f}%, 内存={memory_percent:.1f}%, CPU={cpu_percent:.1f}%, 运行时间={uptime_seconds/86400:.1f}天")
+        
+        return jsonify({
+            'cpu': round(cpu_percent, 1),
+            'cpuCores': cpu_cores,
+            'memory': {
+                'used': round(memory_used_gb, 2),
+                'total': round(memory_total_gb, 2),
+                'percent': round(memory_percent, 1)
+            },
+            'disk': {
+                'used': round(disk_used_gb, 1),
+                'total': round(disk_total_gb, 1),
+                'percent': round(disk_percent, 1)
+            },
+            'uptime': uptime_seconds,
+            'connections': connections,
+            'activeNodes': active_nodes,
+            'accountCount': account_count,
+            'systemInfo': {
+                'hostname': hostname,
+                'version': system_version,
+                'arch': system_arch,
+                'publicIp': public_ip
+            },
+            'traffic': {
+                'sent': round(traffic_sent_gb, 2),
+                'recv': round(traffic_recv_gb, 2)
+            }
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"获取系统状态失败: {e}")
+        return jsonify({
+            'error': '获取系统状态失败',
+            'message': str(e)
+        }), 500
 
 @bp.route('/wallpaper', methods=['GET'])
 def get_wallpaper():

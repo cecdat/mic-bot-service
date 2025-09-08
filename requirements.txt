@@ -9,3 +9,6 @@ Werkzeug
 requests
 APScheduler
 python-socketio==5.9.0
+gunicorn
+eventlet
+psutil

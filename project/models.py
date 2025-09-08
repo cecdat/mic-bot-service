@@ -66,12 +66,42 @@ class Account(db.Model):
 class PushConfig(db.Model):
     __tablename__ = 'push_configs'
     id = db.Column(db.Integer, primary_key=True)
-    url = db.Column(db.Text, nullable=False)
+    name = db.Column(db.String(100), nullable=False, comment='配置名称')
+    channel = db.Column(db.String(50), nullable=False, comment='推送渠道')
+    is_enabled = db.Column(db.Boolean, default=True, comment='是否启用')
+    config_data = db.Column(db.Text, comment='配置数据(JSON格式)')
     notify_on_node_online = db.Column(db.Boolean, default=False)
     notify_on_node_offline = db.Column(db.Boolean, default=False)
     notify_on_account_error = db.Column(db.Boolean, default=False)
-    notify_on_verification_code = db.Column(db.Boolean, default=False)  # 验证码提醒推送
+    notify_on_verification_code = db.Column(db.Boolean, default=False)
+    notify_on_task_completed = db.Column(db.Boolean, default=False)
+    notify_on_system_alert = db.Column(db.Boolean, default=False)
+    notify_on_task_start = db.Column(db.Boolean, default=False)
+    notify_on_task_finish = db.Column(db.Boolean, default=False)
     status = db.Column(db.Integer, default=1)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def to_dict(self):
+        import json
+        return {
+            'id': self.id,
+            'name': self.name,
+            'channel': self.channel,
+            'is_enabled': self.is_enabled,
+            'config_data': json.loads(self.config_data) if self.config_data else {},
+            'notify_on_node_online': self.notify_on_node_online,
+            'notify_on_node_offline': self.notify_on_node_offline,
+            'notify_on_account_error': self.notify_on_account_error,
+            'notify_on_verification_code': self.notify_on_verification_code,
+            'notify_on_task_completed': self.notify_on_task_completed,
+            'notify_on_system_alert': self.notify_on_system_alert,
+            'notify_on_task_start': self.notify_on_task_start,
+            'notify_on_task_finish': self.notify_on_task_finish,
+            'status': self.status,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
 
 
 class Task(db.Model):

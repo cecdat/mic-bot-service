@@ -42,8 +42,21 @@ def node_checkin():
         node.last_seen = timestamp
         node.ip_address = ip_address
         
-        # 处理bot_status参数
-        if 'bot_status' in data:
+        # 处理activity_status参数（统一字段名称）
+        if 'activity_status' in data:
+            activity_status = data.get('activity_status')
+            if activity_status in ['Running', 'Idle']:
+                # 检查是否从非Running状态变为Running状态
+                is_running = node.activity_status != 'Running' and activity_status == 'Running'
+                node.activity_status = activity_status
+                
+                # 如果变为Running状态，重置任务
+                if is_running:
+                    logger.info(f'节点 {node.node_name} 状态变为Running，重置任务')
+                    reset_node_tasks(node.id)
+        
+        # 兼容旧的bot_status字段
+        elif 'bot_status' in data:
             bot_status = data.get('bot_status')
             if bot_status in ['Running', 'Idle']:
                 # 检查是否从非Running状态变为Running状态
@@ -57,14 +70,28 @@ def node_checkin():
                 
         if 'heartbeat_timeout' in data:
             node.heartbeat_timeout = data.get('heartbeat_timeout')
+        
+        # 更新状态更新时间戳
+        if 'activity_status' in data or 'bot_status' in data:
+            node.status_updated_at = timestamp
+        
         db.session.commit()
         
         # 广播心跳更新到WebSocket客户端
         try:
             from . import websocket_events
             websocket_events.broadcast_node_heartbeat(node.id, node.last_seen)
+            
+            # 如果状态发生变化，也广播状态更新
+            if 'activity_status' in data or 'bot_status' in data:
+                websocket_events.broadcast_node_status_update(
+                    node.id, 
+                    node.activity_status, 
+                    node.status_updated_at, 
+                    node.last_seen
+                )
         except Exception as e:
-            logger.warning(f"WebSocket心跳广播失败: {e}")
+            logger.warning(f"WebSocket广播失败: {e}")
 
         if is_coming_online:
             trigger_push_notification('node_online', f"节点上线: {node.node_name}", f"IP: {ip_address}")

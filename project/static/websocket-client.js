@@ -7,12 +7,16 @@ class WebSocketManager {
         this.socket = null;
         this.isConnected = false;
         this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 5;
-        this.reconnectInterval = 5000; // 5秒
-        this.heartbeatInterval = 30000; // 30秒心跳
+        this.maxReconnectAttempts = 3; // 减少重连次数
+        this.reconnectInterval = 10000; // 增加重连间隔到10秒
+        this.heartbeatInterval = 120000; // 增加心跳间隔到2分钟
         this.heartbeatTimer = null;
         this.statusCallbacks = new Map();
         this.heartbeatCallbacks = new Map();
+        this.messageQueue = []; // 消息队列
+        this.maxQueueSize = 50; // 最大队列大小
+        this.isReconnecting = false;
+        this.queueProcessor = null; // 队列处理器定时器
     }
 
     /**
@@ -20,14 +24,90 @@ class WebSocketManager {
      */
     init() {
         try {
-            this.socket = io();
+            // 添加更严格的配置选项来防止数据包过多
+            this.socket = io({
+                transports: ['polling', 'websocket'],
+                upgrade: true,
+                rememberUpgrade: false,
+                timeout: 30000, // 增加超时时间
+                forceNew: true,
+                reconnection: true,
+                reconnectionAttempts: this.maxReconnectAttempts,
+                reconnectionDelay: this.reconnectInterval,
+                reconnectionDelayMax: 30000, // 最大重连延迟30秒
+                maxReconnectionAttempts: this.maxReconnectAttempts,
+                randomizationFactor: 0.5, // 重连随机化因子
+                autoConnect: true,
+                multiplex: false, // 禁用多路复用
+                forceBase64: false, // 不强制base64编码
+                timestampRequests: true, // 启用时间戳请求
+                timestampParam: 't',
+                policyPort: 843,
+                path: '/socket.io/'
+            });
             this.setupEventListeners();
             this.startHeartbeat();
+            this.startQueueProcessor();
             console.log('🔌 WebSocket客户端初始化完成');
         } catch (error) {
             console.error('❌ WebSocket初始化失败:', error);
             this.fallbackToPolling();
         }
+    }
+
+    /**
+     * 回退到轮询模式
+     */
+    fallbackToPolling() {
+        console.log('🔄 回退到轮询模式');
+        this.isConnected = false;
+        this.isReconnecting = false;
+        // 可以在这里实现轮询逻辑
+    }
+
+    /**
+     * 安全发送消息，带队列和限流
+     */
+    safeEmit(event, data) {
+        if (this.isConnected && this.socket) {
+            try {
+                this.socket.emit(event, data);
+            } catch (error) {
+                console.error('❌ 发送消息失败:', error);
+                this.addToQueue(event, data);
+            }
+        } else {
+            this.addToQueue(event, data);
+        }
+    }
+
+    /**
+     * 添加消息到队列
+     */
+    addToQueue(event, data) {
+        if (this.messageQueue.length >= this.maxQueueSize) {
+            // 队列满了，移除最旧的消息
+            this.messageQueue.shift();
+        }
+        this.messageQueue.push({ event, data, timestamp: Date.now() });
+    }
+
+    /**
+     * 处理队列中的消息
+     */
+    processQueue() {
+        if (this.messageQueue.length === 0 || !this.isConnected) {
+            return;
+        }
+
+        const messages = this.messageQueue.splice(0, 10); // 每次处理最多10条消息
+        messages.forEach(({ event, data }) => {
+            try {
+                this.socket.emit(event, data);
+            } catch (error) {
+                console.error('❌ 处理队列消息失败:', error);
+            }
+        });
     }
 
     /**
@@ -38,7 +118,10 @@ class WebSocketManager {
             console.log('✅ WebSocket连接成功');
             this.isConnected = true;
             this.reconnectAttempts = 0;
+            this.isReconnecting = false;
             this.joinAllNodesRoom();
+            // 处理队列中的消息
+            this.processQueue();
         });
 
         this.socket.on('disconnect', () => {
@@ -53,12 +136,12 @@ class WebSocketManager {
         });
 
         this.socket.on('node_status_update', (data) => {
-            console.log('📊 收到节点状态更新:', data);
+            // console.log('📊 收到节点状态更新:', data); // 减少日志输出
             this.handleStatusUpdate(data);
         });
 
         this.socket.on('node_heartbeat_update', (data) => {
-            console.log('💓 收到节点心跳更新:', data);
+            // console.log('💓 收到节点心跳更新:', data); // 减少日志输出
             this.handleHeartbeatUpdate(data);
         });
 
@@ -72,7 +155,7 @@ class WebSocketManager {
      */
     joinAllNodesRoom() {
         if (this.socket && this.isConnected) {
-            this.socket.emit('join_all_nodes_room');
+            this.safeEmit('join_all_nodes_room');
             console.log('🏠 已加入所有节点房间');
         }
     }
@@ -82,7 +165,7 @@ class WebSocketManager {
      */
     joinNodeRoom(nodeId) {
         if (this.socket && this.isConnected) {
-            this.socket.emit('join_node_room', { node_id: nodeId });
+            this.safeEmit('join_node_room', { node_id: nodeId });
             console.log(`🏠 已加入节点房间: ${nodeId}`);
         }
     }
@@ -92,7 +175,7 @@ class WebSocketManager {
      */
     leaveNodeRoom(nodeId) {
         if (this.socket && this.isConnected) {
-            this.socket.emit('leave_node_room', { node_id: nodeId });
+            this.safeEmit('leave_node_room', { node_id: nodeId });
             console.log(`🚪 已离开节点房间: ${nodeId}`);
         }
     }
@@ -149,7 +232,7 @@ class WebSocketManager {
                     page: { curr: window.tableIns.config.page.curr }
                 });
                 
-                console.log(`📊 已更新节点 ${nodeId} 状态为: ${activityStatus}`);
+                // console.log(`📊 已更新节点 ${nodeId} 状态为: ${activityStatus}`); // 减少日志输出
             }
         }
     }
@@ -173,7 +256,7 @@ class WebSocketManager {
                     page: { curr: window.tableIns.config.page.curr }
                 });
                 
-                console.log(`💓 已更新节点 ${nodeId} 心跳时间`);
+                // console.log(`💓 已更新节点 ${nodeId} 心跳时间`); // 减少日志输出
             }
         }
     }
@@ -198,7 +281,7 @@ class WebSocketManager {
     startHeartbeat() {
         this.heartbeatTimer = setInterval(() => {
             if (this.socket && this.isConnected) {
-                this.socket.emit('ping');
+                this.safeEmit('ping');
             }
         }, this.heartbeatInterval);
     }
@@ -214,16 +297,41 @@ class WebSocketManager {
     }
 
     /**
+     * 开始队列处理器
+     */
+    startQueueProcessor() {
+        this.queueProcessor = setInterval(() => {
+            this.processQueue();
+        }, 5000); // 每5秒处理一次队列
+    }
+
+    /**
+     * 停止队列处理器
+     */
+    stopQueueProcessor() {
+        if (this.queueProcessor) {
+            clearInterval(this.queueProcessor);
+            this.queueProcessor = null;
+        }
+    }
+
+    /**
      * 安排重连
      */
     scheduleReconnect() {
+        if (this.isReconnecting) {
+            return; // 防止重复重连
+        }
+        
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.isReconnecting = true;
             this.reconnectAttempts++;
             console.log(`🔄 尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
             
             setTimeout(() => {
+                this.isReconnecting = false;
                 this.init();
-            }, this.reconnectInterval);
+            }, this.reconnectInterval * this.reconnectAttempts); // 递增延迟
         } else {
             console.log('❌ 达到最大重连次数，切换到轮询模式');
             this.fallbackToPolling();
@@ -256,11 +364,16 @@ class WebSocketManager {
      */
     destroy() {
         this.stopHeartbeat();
+        this.stopQueueProcessor();
         if (this.socket) {
             this.socket.disconnect();
             this.socket = null;
         }
         this.isConnected = false;
+        this.isReconnecting = false;
+        this.messageQueue = [];
+        this.statusCallbacks.clear();
+        this.heartbeatCallbacks.clear();
         console.log('🔌 WebSocket连接已销毁');
     }
 }

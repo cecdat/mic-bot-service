@@ -13,9 +13,12 @@ services:
       - ./run.py:/app/run.py:ro
       - ./project:/app/project:ro
       - ./init:/app/init:ro
+      - ./config:/app/config:ro
       - ./instance:/app/instance
       - ./sql:/app/sql:ro
-    entrypoint: ["python", "/app/init/init.py"]
+      - /etc/os-release:/etc/host-os-release:ro
+      - /proc:/host/proc:ro
+    entrypoint: ["bash", "/app/init/init.sh"]
     environment:
       FLASK_APP: run
       FLASK_ENV: production
@@ -24,6 +27,11 @@ services:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
       POSTGRES_DB: rewards_db
+      ENABLE_WEBSOCKET: "true"   # 默认启用WebSocket支持
+      SOCKETIO_ASYNC_MODE: "eventlet"  # 设置Socket.IO为eventlet模式
+      LOG_LEVEL: "INFO"          # 日志级别：DEBUG, INFO, WARNING, ERROR
+      HOST_HOSTNAME: ${HOST_HOSTNAME:-$(hostname)}  # 宿主机主机名，默认使用当前主机名
+    pid: host  # 使用宿主机PID命名空间
     depends_on:
       db:
         condition: service_healthy

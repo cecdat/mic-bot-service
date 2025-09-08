@@ -132,3 +132,9 @@ def mobile_points():
 @bp.route('/m')
 def mobile_points_short():
     return render_template('mobile_points.html')
+
+# 推送配置页面
+@bp.route('/push_config')
+@web_login_required
+def push_config():
+    return render_template('push_config.html')

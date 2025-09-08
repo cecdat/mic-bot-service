@@ -1,0 +1,719 @@
+{% extends "layout.html" %}
+
+{% block title %}推送配置{% endblock %}
+
+{% block content %}
+<style>
+/* 覆盖Layui默认样式，修复参数名换行问题 */
+.layui-form-label {
+    padding: 9px 9px !important;
+}
+
+/* 优化Layer弹窗内容区域 */
+.layui-layer-content {
+    padding: 15px !important;
+    max-height: 70vh !important;
+    overflow-y: auto !important;
+}
+
+/* 优化表单间距 */
+.layui-form-item {
+    margin-bottom: 15px !important;
+}
+
+/* 优化配置参数区域 */
+#config-params {
+    margin-top: 10px;
+}
+
+/* 优化通知类型区域 */
+.layui-form-item .layui-input-block {
+    margin-left: 130px !important;
+}
+</style>
+<div class="layui-card">
+    <div class="layui-card-body" style="padding: 12px;">
+        <table id="push-config-table" lay-filter="push-config-table"></table>
+    </div>
+</div>
+
+<!-- 配置表单模板 -->
+<script type="text/html" id="config-form-template">
+    <div style="padding: 15px;">
+        <form class="layui-form">
+            <div class="layui-form-item">
+                <label class="layui-form-label">推送渠道</label>
+                <div class="layui-input-block">
+                    <select name="channel" lay-verify="required" lay-filter="channel-select">
+                        <option value="">请选择推送渠道</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="layui-form-item">
+                <label class="layui-form-label">状态</label>
+                <div class="layui-input-block">
+                    <input type="checkbox" name="is_enabled" lay-skin="switch" lay-text="启用|禁用" checked>
+                </div>
+            </div>
+            
+            <div class="layui-form-item">
+                <label class="layui-form-label">通知类型</label>
+                <div class="layui-input-block">
+                    <input type="checkbox" name="notify_on_node_online" title="节点上线">
+                    <input type="checkbox" name="notify_on_node_offline" title="节点下线">
+                    <input type="checkbox" name="notify_on_account_error" title="账号异常">
+                    <input type="checkbox" name="notify_on_verification_code" title="验证码">
+                    <input type="checkbox" name="notify_on_task_start" title="任务开始">
+                    <input type="checkbox" name="notify_on_task_finish" title="任务完成">
+                </div>
+            </div>
+            
+            <div id="config-params"></div>
+        </form>
+    </div>
+</script>
+
+<!-- 测试表单模板 -->
+<script type="text/html" id="test-form-template">
+    <div style="padding: 15px;">
+        <input type="hidden" id="test-config-id" value="">
+        <div id="test-config-info"></div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">测试标题</label>
+            <div class="layui-input-block">
+                <input type="text" id="test-title" placeholder="请输入测试标题" class="layui-input" value="推送测试">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">测试内容</label>
+            <div class="layui-input-block">
+                <textarea id="test-content" placeholder="请输入测试内容" class="layui-textarea">这是一条测试推送消息，用于验证推送配置是否正确。</textarea>
+            </div>
+        </div>
+    </div>
+</script>
+
+<!-- 工具栏模板 -->
+<script type="text/html" id="toolbar">
+    <div class="layui-btn-container">
+        <button class="layui-btn layui-btn-sm" lay-event="add">添加配置</button>
+        <button class="layui-btn layui-btn-sm layui-btn-danger" lay-event="delete">批量删除</button>
+    </div>
+</script>
+
+<script>
+// 等待Layui加载完成
+document.addEventListener('DOMContentLoaded', function() {
+    // 检查Layui是否已加载
+    if (typeof layui === 'undefined') {
+        console.error('Layui未加载，等待中...');
+        setTimeout(function() {
+            if (typeof layui !== 'undefined') {
+                initPushConfig();
+            } else {
+                console.error('Layui加载失败');
+            }
+        }, 1000);
+        return;
+    }
+    
+    initPushConfig();
+});
+
+function initPushConfig() {
+    layui.use(['table', 'form', 'layer'], function(){
+    var form = layui.form;
+    var layer = layui.layer;
+    var table = layui.table;
+    
+    // 推送渠道配置
+    var channels = [
+        {
+            value: 'bark',
+            label: 'Bark',
+            required_fields: ['bark_token'],
+            optional_fields: ['bark_push_url']
+        },
+        {
+            value: 'xiatuisha',
+            label: '虾推啥',
+            required_fields: ['xiatuisha_token']
+        },
+        {
+            value: 'server_chan',
+            label: 'Server酱',
+            required_fields: ['push_key']
+        },
+        {
+            value: 'telegram',
+            label: 'Telegram',
+            required_fields: ['tg_bot_token', 'tg_user_id'],
+            optional_fields: ['tg_api_host', 'tg_proxy_ip', 'tg_proxy_port']
+        },
+        {
+            value: 'dingding',
+            label: '钉钉',
+            required_fields: ['dd_bot_token', 'dd_bot_secret']
+        },
+        {
+            value: 'qq',
+            label: 'QQ',
+            required_fields: ['qq_skey', 'qq_mode']
+        },
+        {
+            value: 'pushplus',
+            label: 'PushPlus',
+            required_fields: ['pushplus_token']
+        },
+        {
+            value: 'wecom_app',
+            label: '企业微信应用',
+            required_fields: ['qywx_am']
+        },
+        {
+            value: 'wecom_key',
+            label: '企业微信机器人',
+            required_fields: ['wecom_key']
+        },
+        {
+            value: 'feishu',
+            label: '飞书',
+            required_fields: ['fs_key']
+        },
+        {
+            value: 'webhook',
+            label: '自定义Webhook',
+            required_fields: ['webhook_url'],
+            optional_fields: ['webhook_method', 'webhook_headers', 'webhook_template']
+        }
+    ];
+    
+    // 初始化表格
+    table.render({
+        elem: '#push-config-table',
+        url: '/web_api/push/configs',
+        toolbar: '#toolbar',
+        defaultToolbar: [],
+        cols: [[
+            {type: 'checkbox', fixed: 'left', width: 50},
+            {field: 'channel', title: '推送渠道', width: 150, templet: function(d){
+                var channelNames = {
+                    'bark': 'Bark',
+                    'xiatuisha': '虾推啥',
+                    'server_chan': 'Server酱',
+                    'telegram': 'Telegram',
+                    'dingding': '钉钉',
+                    'qq': 'QQ',
+                    'pushplus': 'PushPlus',
+                    'wecom_app': '企业微信应用',
+                    'wecom_key': '企业微信机器人',
+                    'feishu': '飞书',
+                    'webhook': '自定义Webhook'
+                };
+                return channelNames[d.channel] || d.channel;
+            }},
+            {field: 'is_enabled', title: '状态', width: 80, templet: function(d){
+                if (d.is_enabled) {
+                    return '<span style="color: #5FB878;" title="启用"><i class="layui-icon layui-icon-ok-circle"></i></span>';
+                } else {
+                    return '<span style="color: #FF5722;" title="禁用"><i class="layui-icon layui-icon-close-fill"></i></span>';
+                }
+            }},
+            {field: 'notify_on_node_online', title: '节点上线', width: 90, templet: function(d){
+                return d.notify_on_node_online ? '✓' : '✗';
+            }},
+            {field: 'notify_on_node_offline', title: '节点下线', width: 90, templet: function(d){
+                return d.notify_on_node_offline ? '✓' : '✗';
+            }},
+            {field: 'notify_on_account_error', title: '账号异常', width: 90, templet: function(d){
+                return d.notify_on_account_error ? '✓' : '✗';
+            }},
+            {field: 'notify_on_verification_code', title: '验证码', width: 80, templet: function(d){
+                return d.notify_on_verification_code ? '✓' : '✗';
+            }},
+            {field: 'notify_on_task_start', title: '任务开始', width: 90, templet: function(d){
+                return d.notify_on_task_start ? '✓' : '✗';
+            }},
+            {field: 'notify_on_task_finish', title: '任务完成', width: 90, templet: function(d){
+                return d.notify_on_task_finish ? '✓' : '✗';
+            }},
+            {field: 'created_at', title: '创建时间', width: 160, templet: function(d){
+                return d.created_at ? new Date(d.created_at).toLocaleString() : '';
+            }},
+            {fixed: 'right', title: '操作', width: 250, templet: function(d){
+                var toggleText = d.is_enabled ? '禁用' : '启用';
+                var toggleClass = d.is_enabled ? 'layui-btn-warm' : 'layui-btn-normal';
+                return '<a class="layui-btn layui-btn-xs layui-btn-primary" lay-event="edit">编辑</a> ' +
+                       '<a class="layui-btn layui-btn-xs layui-btn-warm" lay-event="test">测试</a> ' +
+                       '<a class="layui-btn layui-btn-xs ' + toggleClass + '" lay-event="toggle">' + toggleText + '</a> ' +
+                       '<a class="layui-btn layui-btn-xs layui-btn-danger" lay-event="del">删除</a>';
+            }}
+        ]],
+        page: true,
+        limit: 20,
+        limits: [10, 20, 50, 100]
+    });
+    
+    // 更新渠道选择器
+    function updateChannelSelect(container) {
+        var select = container ? container.querySelector('select[name="channel"]') : document.querySelector('select[name="channel"]');
+        if (!select) return;
+        
+        select.innerHTML = '<option value="">请选择推送渠道</option>';
+        channels.forEach(function(channel) {
+            var option = document.createElement('option');
+            option.value = channel.value;
+            option.textContent = channel.label;
+            select.appendChild(option);
+        });
+        layui.form.render('select');
+    }
+    
+    // 生成配置参数表单
+    function generateConfigParams(channel) {
+        var channelInfo = channels.find(function(c) { return c.value === channel; });
+        if (!channelInfo) return;
+        
+        var container = document.getElementById('config-params');
+        container.innerHTML = '';
+        
+        // 必填字段
+        channelInfo.required_fields.forEach(function(field) {
+            var formItem = document.createElement('div');
+            formItem.className = 'layui-form-item';
+            formItem.innerHTML = '<label class="layui-form-label" style="width: 120px; white-space: nowrap; padding: 9px 9px !important;">' + getFieldLabel(field) + '</label>' +
+                                '<div class="layui-input-block" style="margin-left: 130px;">' +
+                                    '<input type="text" name="config_data.' + field + '" placeholder="请输入' + getFieldLabel(field) + '" class="layui-input" lay-verify="required">' +
+                                '</div>';
+            container.appendChild(formItem);
+        });
+        
+        // 可选字段
+        if (channelInfo.optional_fields) {
+            channelInfo.optional_fields.forEach(function(field) {
+                var formItem = document.createElement('div');
+                formItem.className = 'layui-form-item';
+                formItem.innerHTML = '<label class="layui-form-label" style="width: 120px; white-space: nowrap; padding: 9px 9px !important;">' + getFieldLabel(field) + '</label>' +
+                                    '<div class="layui-input-block" style="margin-left: 130px;">' +
+                                        '<input type="text" name="config_data.' + field + '" placeholder="请输入' + getFieldLabel(field) + '（可选）" class="layui-input">' +
+                                    '</div>';
+                container.appendChild(formItem);
+            });
+        }
+        
+        layui.form.render();
+    }
+    
+    // 获取字段标签
+    function getFieldLabel(field) {
+        var labels = {
+            'bark_token': 'Token',
+            'bark_push_url': '自建服务器',
+            'push_key': 'Push Key',
+            'tg_bot_token': 'Bot Token',
+            'tg_user_id': 'User ID',
+            'tg_api_host': 'API Host',
+            'tg_proxy_ip': '代理IP',
+            'tg_proxy_port': '代理端口',
+            'dd_bot_token': 'Bot Token',
+            'dd_bot_secret': 'Bot Secret',
+            'qq_skey': 'SKey',
+            'qq_mode': 'Mode',
+            'pushplus_token': 'Token',
+            'qywx_am': '应用参数',
+            'wecom_key': '机器人Key',
+            'fs_key': '机器人Key',
+            'webhook_url': 'Webhook URL',
+            'webhook_method': '请求方法',
+            'webhook_headers': '请求头',
+            'webhook_template': '消息模板',
+            'xiatuisha_token': 'Token'
+        };
+        return labels[field] || field;
+    }
+    
+    // 渠道选择变化
+    layui.form.on('select(channel-select)', function(data){
+        generateConfigParams(data.value);
+    });
+    
+    // 工具栏事件
+    table.on('toolbar(push-config-table)', function(obj){
+        switch(obj.event){
+            case 'add':
+                showConfigForm();
+                break;
+            case 'delete':
+                layer.confirm('确定删除选中的配置吗？', function(index){
+                    var checkStatus = table.checkStatus('push-config-table');
+                    var data = checkStatus.data;
+                    if (data.length === 0) {
+                        layer.msg('请选择要删除的配置');
+                        return;
+                    }
+                    
+                    var ids = data.map(function(item) { return item.id; });
+                    deleteConfigs(ids);
+                    layer.close(index);
+                });
+                break;
+        }
+    });
+    
+    // 行工具事件
+    table.on('tool(push-config-table)', function(obj){
+        var data = obj.data;
+        switch(obj.event){
+            case 'edit':
+                showConfigForm(data);
+                break;
+            case 'test':
+                showTestForm(data.id);
+                break;
+            case 'toggle':
+                var isEnabled = obj.data.is_enabled;
+                toggleConfigStatus(data.id, !isEnabled);
+                break;
+            case 'del':
+                layer.confirm('确定删除该配置吗？', function(index){
+                    deleteConfig(data.id);
+                    layer.close(index);
+                });
+                break;
+        }
+    });
+    
+    // 显示配置表单
+    function showConfigForm(data) {
+        var formData = data ? {
+            id: data.id,
+            channel: data.channel,
+            is_enabled: data.is_enabled,
+            notify_on_node_online: data.notify_on_node_online || false,
+            notify_on_node_offline: data.notify_on_node_offline || false,
+            notify_on_account_error: data.notify_on_account_error || false,
+            notify_on_verification_code: data.notify_on_verification_code || false,
+            notify_on_task_start: data.notify_on_task_start || false,
+            notify_on_task_finish: data.notify_on_task_finish || false,
+            config_data: data.config_data || {}
+        } : {
+            id: '',
+            name: '',
+            channel: '',
+            is_enabled: true,
+            notify_on_node_online: false,
+            notify_on_node_offline: false,
+            notify_on_account_error: false,
+            notify_on_verification_code: false,
+            notify_on_task_start: false,
+            notify_on_task_finish: false,
+            config_data: {}
+        };
+        
+        var formHtml = document.getElementById('config-form-template').innerHTML;
+        
+        // 如果是编辑模式，添加隐藏的ID字段
+        if (data && data.id) {
+            formHtml = formHtml.replace('<form class="layui-form">', 
+                '<form class="layui-form"><input type="hidden" name="id" value="' + data.id + '">');
+        }
+        
+        layer.open({
+            type: 1,
+            title: data ? '编辑配置' : '添加配置',
+            content: formHtml,
+            area: ['600px', 'auto'],
+            maxHeight: '80%',
+            maxmin: true,
+            offset: '10px',
+            btn: ['保存', '取消'],
+            yes: function(index, layero) {
+                var form = layero.find('form')[0];
+                var formData = new FormData(form);
+                var data = {};
+                
+                for (var pair of formData.entries()) {
+                    data[pair[0]] = pair[1];
+                }
+                
+                var checkboxes = form.querySelectorAll('input[type="checkbox"]');
+                checkboxes.forEach(function(checkbox) {
+                    if (checkbox.checked) {
+                        data[checkbox.name] = checkbox.value || 'on';
+                    }
+                });
+                
+                handleFormSubmit(data);
+            },
+            success: function(layero, index) {
+                updateChannelSelect(layero[0]);
+                
+                // 设置渠道选择器的值
+                if (formData.channel) {
+                    var channelSelect = layero.find('select[name="channel"]')[0];
+                    if (channelSelect) {
+                        channelSelect.value = formData.channel;
+                    }
+                    generateConfigParamsInLayer(layero, formData.channel, formData.config_data);
+                }
+                
+                // 手动设置表单值
+                var form = layero.find('form')[0];
+                if (form) {
+                    // 设置渠道选择器
+                    var channelSelect = layero.find('select[name="channel"]')[0];
+                    if (channelSelect && formData.channel) {
+                        channelSelect.value = formData.channel;
+                    }
+                    
+                    // 设置通知类型复选框
+                    var checkboxes = layero.find('input[type="checkbox"]');
+                    checkboxes.each(function() {
+                        var checkbox = this;
+                        var name = checkbox.name;
+                        if (formData[name] !== undefined) {
+                            checkbox.checked = formData[name];
+                            // 更新开关样式
+                            if (name === 'is_enabled') {
+                                var switchElement = checkbox.nextElementSibling;
+                                if (switchElement && switchElement.classList) {
+                                    if (formData[name]) {
+                                        switchElement.classList.add('layui-form-onswitch');
+                                    } else {
+                                        switchElement.classList.remove('layui-form-onswitch');
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+                
+                layui.form.render();
+                
+                layui.form.on('select(channel-select)', function(data){
+                    generateConfigParamsInLayer(layero, data.value, null);
+                });
+            }
+        });
+    }
+    
+    // 显示测试表单
+    function showTestForm(configId) {
+        fetch('/web_api/push/configs/' + configId)
+        .then(function(response) { 
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+            return response.json(); 
+        })
+        .then(function(result) {
+            if (result.code !== 0) {
+                layer.msg('获取配置信息失败: ' + result.msg, {icon: 2});
+                return;
+            }
+            
+            var config = result.data;
+            layer.open({
+                type: 1,
+                title: '测试推送 - ' + (config.name || config.channel),
+                content: document.getElementById('test-form-template').innerHTML,
+                area: ['500px', 'auto'],
+                offset: '10px',
+                success: function(layero, index) {
+                    layero.find('#test-config-id')[0].value = configId;
+                    // 移除配置信息显示
+                },
+                btn: ['发送测试', '取消'],
+                yes: function(index, layero) {
+                    var title = layero.find('#test-title')[0].value;
+                    var content = layero.find('#test-content')[0].value;
+                    
+                    if (!title || !content) {
+                        layer.msg('请输入测试标题和内容');
+                        return;
+                    }
+                    
+                    fetch('/web_api/push/test', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            config_id: configId,
+                            channel: config.channel,
+                            config_data: config.config_data || {},
+                            title: title,
+                            content: content
+                        })
+                    })
+                    .then(function(response) { return response.json(); })
+                    .then(function(result) {
+                        if (result.code === 0) {
+                            layer.msg('测试发送成功', {icon: 1});
+                            layer.close(index);
+                        } else {
+                            layer.msg(result.msg, {icon: 2});
+                        }
+                    })
+        .catch(function(error) {
+            console.error('获取配置信息失败:', error);
+            layer.msg('获取配置信息失败: ' + error.message, {icon: 2});
+        });
+                }
+            });
+        });
+    }
+    
+    // 在弹窗中生成配置参数表单
+    function generateConfigParamsInLayer(layero, channel, existingData) {
+        var channelInfo = channels.find(function(c) { return c.value === channel; });
+        if (!channelInfo) return;
+        
+        var container = layero.find('#config-params')[0];
+        container.innerHTML = '';
+        
+        var titleDiv = document.createElement('div');
+        titleDiv.innerHTML = '<fieldset class="layui-elem-field layui-field-title" style="margin-top: 20px;"><legend>配置参数</legend></fieldset>';
+        container.appendChild(titleDiv);
+        
+        channelInfo.required_fields.forEach(function(field) {
+            var formItem = document.createElement('div');
+            formItem.className = 'layui-form-item';
+            var value = existingData && existingData[field] ? existingData[field] : '';
+            formItem.innerHTML = '<label class="layui-form-label" style="width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 9px 9px !important;" title="' + getFieldLabel(field) + '">' + getFieldLabel(field) + '</label>' +
+                                '<div class="layui-input-block" style="margin-left: 150px;">' +
+                                    '<input type="text" name="config_data.' + field + '" placeholder="请输入' + getFieldLabel(field) + '" class="layui-input" lay-verify="required" value="' + value + '">' +
+                                '</div>';
+            container.appendChild(formItem);
+        });
+        
+        if (channelInfo.optional_fields) {
+            channelInfo.optional_fields.forEach(function(field) {
+                var formItem = document.createElement('div');
+                formItem.className = 'layui-form-item';
+                var value = existingData && existingData[field] ? existingData[field] : '';
+                formItem.innerHTML = '<label class="layui-form-label" style="width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 9px 9px !important;" title="' + getFieldLabel(field) + '">' + getFieldLabel(field) + '</label>' +
+                                    '<div class="layui-input-block" style="margin-left: 150px;">' +
+                                        '<input type="text" name="config_data.' + field + '" placeholder="请输入' + getFieldLabel(field) + '（可选）" class="layui-input" value="' + value + '">' +
+                                    '</div>';
+                container.appendChild(formItem);
+            });
+        }
+        
+        layui.form.render();
+    }
+    
+    // 处理表单提交
+    function handleFormSubmit(formData) {
+        var configData = {};
+        
+        Object.keys(formData).forEach(function(key) {
+            if (key.startsWith('config_data.')) {
+                var field = key.replace('config_data.', '');
+                configData[field] = formData[key];
+                delete formData[key];
+            }
+        });
+        
+        formData.config_data = configData;
+        
+        var channelInfo = channels.find(function(c) { return c.value === formData.channel; });
+        if (channelInfo) {
+            formData.name = channelInfo.label;
+        }
+        
+        var url = formData.id ? '/web_api/push/configs/' + formData.id : '/web_api/push/configs';
+        var method = formData.id ? 'PUT' : 'POST';
+        
+        fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(result) {
+            if (result.code === 0) {
+                layer.msg('保存成功', {icon: 1});
+                layer.closeAll();
+                table.reload('push-config-table', {
+                    page: {curr: 1}
+                });
+            } else {
+                layer.msg(result.msg, {icon: 2});
+            }
+        })
+        .catch(function(error) {
+            layer.msg('保存失败', {icon: 2});
+        });
+    }
+    
+    // 删除配置
+    function deleteConfig(id) {
+        fetch('/web_api/push/configs/' + id, {
+            method: 'DELETE'
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(result) {
+            if (result.code === 0) {
+                layer.msg('删除成功', {icon: 1});
+                table.reload('push-config-table', {
+                    page: {curr: 1}
+                });
+            } else {
+                layer.msg(result.msg, {icon: 2});
+            }
+        })
+        .catch(function(error) {
+            layer.msg('删除失败', {icon: 2});
+        });
+    }
+    
+    // 批量删除配置
+    function deleteConfigs(ids) {
+        Promise.all(ids.map(function(id) {
+            return fetch('/web_api/push/configs/' + id, {method: 'DELETE'})
+                .then(function(response) { return response.json(); });
+        }))
+        .then(function(results) {
+            var successCount = results.filter(function(r) { return r.code === 0; }).length;
+            layer.msg('删除成功 ' + successCount + '/' + ids.length + ' 个配置', {icon: 1});
+            table.reload('push-config-table', {
+                page: {curr: 1}
+            });
+        })
+        .catch(function(error) {
+            layer.msg('删除失败', {icon: 2});
+        });
+    }
+    
+    // 切换配置状态
+    function toggleConfigStatus(id, enabled) {
+        fetch('/web_api/push/configs/' + id, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                is_enabled: enabled
+            })
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(result) {
+            if (result.code === 0) {
+                layer.msg(enabled ? '启用成功' : '禁用成功', {icon: 1});
+                table.reload('push-config-table');
+            } else {
+                layer.msg(result.msg, {icon: 2});
+            }
+        })
+        .catch(function(error) {
+            layer.msg(enabled ? '启用失败' : '禁用失败', {icon: 2});
+        });
+    }
+    });
+}
+</script>
+{% endblock %}
