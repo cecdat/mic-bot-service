@@ -1,6 +1,11 @@
 -- 数据库基础结构脚本
--- 版本: v2.5
--- 日期: 2025-09-04
+-- 版本: v2.10
+-- 日期: 2025-01-27
+-- 适配 Supabase 和 Hugging Face
+
+-- 0. 创建 mic_bot 模式
+CREATE SCHEMA IF NOT EXISTS mic_bot;
+SET search_path TO mic_bot, public;
 
 -- 1. 创建版本表
 CREATE TABLE IF NOT EXISTS db_version (
@@ -12,7 +17,7 @@ CREATE TABLE IF NOT EXISTS db_version (
 
 -- 插入初始版本记录（如果不存在）
 INSERT INTO db_version (version, description)
-SELECT '2.5', '数据库基础结构v2.5，包含所有最新功能'
+SELECT '2.10', '数据库基础结构v2.10，包含所有最新功能'
 WHERE NOT EXISTS (SELECT 1 FROM db_version);
 
 -- 2. 核心表结构 (使用IF NOT EXISTS避免删除现有数据)
@@ -94,15 +99,31 @@ CREATE TABLE IF NOT EXISTS accounts (
 -- Table for global push notification configurations
 CREATE TABLE IF NOT EXISTS push_configs (
     id SERIAL PRIMARY KEY,
-    url TEXT NOT NULL,
+    name VARCHAR(100) NOT NULL DEFAULT '未命名配置',
+    channel VARCHAR(50) NOT NULL DEFAULT 'webhook',
+    is_enabled BOOLEAN DEFAULT TRUE,
+    config_data TEXT,
     notify_on_node_online BOOLEAN DEFAULT FALSE,
     notify_on_node_offline BOOLEAN DEFAULT FALSE,
     notify_on_account_error BOOLEAN DEFAULT FALSE,
     notify_on_verification_code BOOLEAN DEFAULT FALSE,
-    status INT DEFAULT 1
+    notify_on_task_completed BOOLEAN DEFAULT FALSE,
+    notify_on_system_alert BOOLEAN DEFAULT FALSE,
+    notify_on_task_start BOOLEAN DEFAULT FALSE,
+    notify_on_task_finish BOOLEAN DEFAULT FALSE,
+    status INTEGER DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-COMMENT ON COLUMN push_configs.url IS 'Bark URL';
+COMMENT ON TABLE push_configs IS '推送配置表，支持多种推送渠道';
+COMMENT ON COLUMN push_configs.name IS '配置名称';
+COMMENT ON COLUMN push_configs.channel IS '推送渠道类型';
+COMMENT ON COLUMN push_configs.is_enabled IS '是否启用';
+COMMENT ON COLUMN push_configs.config_data IS '渠道配置数据(JSON格式)';
 COMMENT ON COLUMN push_configs.notify_on_verification_code IS '是否启用验证码提醒推送';
+COMMENT ON COLUMN push_configs.notify_on_task_completed IS '是否启用任务完成推送';
+COMMENT ON COLUMN push_configs.notify_on_task_start IS '是否启用任务开始推送';
+COMMENT ON COLUMN push_configs.notify_on_task_finish IS '是否启用任务完成推送';
 
 -- 3. 创建tasks表
 CREATE TABLE IF NOT EXISTS tasks (
@@ -191,6 +212,27 @@ COMMENT ON COLUMN user_agents.mobile_ua IS '移动端User-Agent';
 COMMENT ON COLUMN user_agents.is_used IS '是否已被使用';
 COMMENT ON COLUMN user_agents.used_by_account_id IS '被哪个账户使用';
 
+-- Table for account points history (v2.10)
+CREATE TABLE IF NOT EXISTS account_points_history (
+    id SERIAL PRIMARY KEY,
+    bot_account_id INTEGER NOT NULL,
+    total_points INTEGER NOT NULL,
+    daily_gain INTEGER NOT NULL,
+    desktop_gain INTEGER DEFAULT 0,
+    mobile_gain INTEGER DEFAULT 0,
+    node_name VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (bot_account_id) REFERENCES bot_accounts(id) ON DELETE CASCADE
+);
+COMMENT ON TABLE account_points_history IS '账户积分历史记录表，用于存储历史积分数据';
+COMMENT ON COLUMN account_points_history.bot_account_id IS '关联的机器人账户ID';
+COMMENT ON COLUMN account_points_history.total_points IS '总积分';
+COMMENT ON COLUMN account_points_history.daily_gain IS '每日获得积分';
+COMMENT ON COLUMN account_points_history.desktop_gain IS '桌面端获得积分';
+COMMENT ON COLUMN account_points_history.mobile_gain IS '移动端获得积分';
+COMMENT ON COLUMN account_points_history.node_name IS '执行节点名称';
+COMMENT ON COLUMN account_points_history.created_at IS '记录创建时间';
+
 -- 创建日志清理函数 (v2.2)
 CREATE OR REPLACE FUNCTION cleanup_old_logs()
 RETURNS INTEGER AS $$
@@ -221,6 +263,50 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- 创建积分历史清理函数 (v2.10)
+CREATE OR REPLACE FUNCTION cleanup_old_points_history()
+RETURNS INTEGER AS $$
+DECLARE
+    deleted_count INTEGER;
+BEGIN
+    -- 删除7天前的历史数据
+    DELETE FROM account_points_history 
+    WHERE created_at < NOW() - INTERVAL '7 days';
+    
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 创建获取积分历史数据的函数 (v2.10)
+CREATE OR REPLACE FUNCTION get_points_history(
+    p_bot_account_id INTEGER,
+    p_days INTEGER DEFAULT 7
+)
+RETURNS TABLE(
+    total_points INTEGER,
+    daily_gain INTEGER,
+    desktop_gain INTEGER,
+    mobile_gain INTEGER,
+    node_name VARCHAR(255),
+    created_at TIMESTAMP
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        aph.total_points,
+        aph.daily_gain,
+        aph.desktop_gain,
+        aph.mobile_gain,
+        aph.node_name,
+        aph.created_at
+    FROM account_points_history aph
+    WHERE aph.bot_account_id = p_bot_account_id 
+    AND aph.created_at >= NOW() - INTERVAL '1 day' * p_days
+    ORDER BY aph.created_at DESC;
+END;
+$$ LANGUAGE plpgsql;
+
 -- 添加性能优化索引
 CREATE INDEX IF NOT EXISTS idx_accounts_bot_account_id ON accounts (bot_account_id);
 CREATE INDEX IF NOT EXISTS idx_accounts_last_updated ON accounts (last_updated);
@@ -231,4 +317,30 @@ CREATE INDEX IF NOT EXISTS idx_verification_codes_account_created ON verificatio
 CREATE INDEX IF NOT EXISTS idx_bot_nodes_activity_status ON bot_nodes (activity_status);
 CREATE INDEX IF NOT EXISTS idx_bot_accounts_created_at ON bot_accounts (created_at);
 
--- 数据库基础结构v2.5完成
+-- 积分历史记录表索引
+CREATE INDEX IF NOT EXISTS idx_account_points_history_bot_account_id ON account_points_history(bot_account_id);
+CREATE INDEX IF NOT EXISTS idx_account_points_history_created_at ON account_points_history(created_at);
+CREATE INDEX IF NOT EXISTS idx_account_points_history_bot_account_created ON account_points_history(bot_account_id, created_at);
+
+-- 推送配置表索引
+CREATE INDEX IF NOT EXISTS idx_push_configs_channel ON push_configs(channel);
+CREATE INDEX IF NOT EXISTS idx_push_configs_is_enabled ON push_configs(is_enabled);
+CREATE INDEX IF NOT EXISTS idx_push_configs_status ON push_configs(status);
+
+-- 创建更新时间触发器函数
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- 创建推送配置表更新时间触发器
+DROP TRIGGER IF EXISTS update_push_configs_updated_at ON push_configs;
+CREATE TRIGGER update_push_configs_updated_at 
+    BEFORE UPDATE ON push_configs 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- 数据库基础结构v2.10完成

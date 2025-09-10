@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}积分历史 - Microsoft Rewards Bot{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="bi bi-graph-up"></i>
+                        积分历史记录
+                    </h3>
+                    <div class="card-tools">
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadHistory(7)">最近7天</button>
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadHistory(14)">最近14天</button>
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadHistory(30)">最近30天</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="accountSelect" class="form-label">选择账户：</label>
+                            <select class="form-select" id="accountSelect" onchange="loadAccountHistory()">
+                                <option value="">请选择账户</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="daysSelect" class="form-label">查询天数：</label>
+                            <select class="form-select" id="daysSelect" onchange="loadAccountHistory()">
+                                <option value="7">最近7天</option>
+                                <option value="14">最近14天</option>
+                                <option value="30">最近30天</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="historyChart" style="height: 400px; margin-bottom: 20px;"></div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" id="historyTable">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>总积分</th>
+                                    <th>今日收益</th>
+                                    <th>桌面端收益</th>
+                                    <th>移动端收益</th>
+                                    <th>总价值</th>
+                                    <th>今日价值</th>
+                                    <th>节点</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="8" class="text-center text-muted">请选择账户查看历史数据</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script>
+let historyChart = null;
+
+// 初始化图表
+function initChart() {
+    historyChart = echarts.init(document.getElementById('historyChart'));
+    
+    const option = {
+        title: {
+            text: '积分变化趋势',
+            left: 'center'
+        },
+        tooltip: {
+            trigger: 'axis',
+            formatter: function(params) {
+                let result = params[0].name + '<br/>';
+                params.forEach(function(item) {
+                    result += item.seriesName + ': ' + item.value + '<br/>';
+                });
+                return result;
+            }
+        },
+        legend: {
+            data: ['总积分', '今日收益'],
+            top: 30
+        },
+        xAxis: {
+            type: 'category',
+            data: []
+        },
+        yAxis: [
+            {
+                type: 'value',
+                name: '积分',
+                position: 'left'
+            },
+            {
+                type: 'value',
+                name: '价值($)',
+                position: 'right'
+            }
+        ],
+        series: [
+            {
+                name: '总积分',
+                type: 'line',
+                data: [],
+                smooth: true,
+                itemStyle: { color: '#1E9FFF' }
+            },
+            {
+                name: '今日收益',
+                type: 'bar',
+                data: [],
+                itemStyle: { color: '#52c41a' }
+            }
+        ]
+    };
+    
+    historyChart.setOption(option);
+}
+
+// 加载账户列表
+function loadAccounts() {
+    fetch('/web_api/get_points')
+        .then(response => response.json())
+        .then(data => {
+            const select = document.getElementById('accountSelect');
+            select.innerHTML = '<option value="">请选择账户</option>';
+            
+            data.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.id;
+                option.textContent = item.email;
+                select.appendChild(option);
+            });
+        })
+        .catch(error => {
+            console.error('加载账户列表失败:', error);
+            layer.msg('加载账户列表失败', {icon: 2});
+        });
+}
+
+// 加载账户历史数据
+function loadAccountHistory() {
+    const accountId = document.getElementById('accountSelect').value;
+    const days = document.getElementById('daysSelect').value;
+    
+    if (!accountId) {
+        return;
+    }
+    
+    fetch(`/web_api/points_history/${accountId}?days=${days}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                updateHistoryTable(data.data.history);
+                updateHistoryChart(data.data.history);
+            } else {
+                layer.msg(data.message || '加载历史数据失败', {icon: 2});
+            }
+        })
+        .catch(error => {
+            console.error('加载历史数据失败:', error);
+            layer.msg('加载历史数据失败', {icon: 2});
+        });
+}
+
+// 更新历史数据表格
+function updateHistoryTable(history) {
+    const tbody = document.querySelector('#historyTable tbody');
+    tbody.innerHTML = '';
+    
+    if (history.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">暂无历史数据</td></tr>';
+        return;
+    }
+    
+    history.forEach(record => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${new Date(record.created_at).toLocaleString()}</td>
+            <td><span class="badge bg-primary">${record.total_points || 0}</span></td>
+            <td><span class="badge ${record.daily_gain > 0 ? 'bg-success' : 'bg-warning'}">${record.daily_gain || 0}</span></td>
+            <td>${record.desktop_gain || 0}</td>
+            <td>${record.mobile_gain || 0}</td>
+            <td>$${record.total_value || 0}</td>
+            <td>$${record.daily_value || 0}</td>
+            <td>${record.node_name || '-'}</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// 更新历史数据图表
+function updateHistoryChart(history) {
+    if (!historyChart) {
+        initChart();
+    }
+    
+    const dates = history.map(record => new Date(record.created_at).toLocaleDateString()).reverse();
+    const totalPoints = history.map(record => record.total_points || 0).reverse();
+    const dailyGains = history.map(record => record.daily_gain || 0).reverse();
+    
+    const option = {
+        xAxis: {
+            data: dates
+        },
+        series: [
+            {
+                data: totalPoints
+            },
+            {
+                data: dailyGains
+            }
+        ]
+    };
+    
+    historyChart.setOption(option);
+}
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    initChart();
+    loadAccounts();
+    
+    // 监听窗口大小变化
+    window.addEventListener('resize', function() {
+        if (historyChart) {
+            historyChart.resize();
+        }
+    });
+});
+</script>
+{% endblock %}

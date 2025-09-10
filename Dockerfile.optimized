@@ -1,0 +1,55 @@
+# 使用官方 Python 镜像
+FROM docker.1ms.run/python:3.9-slim
+
+# 设置工作目录
+WORKDIR /app
+
+# 先安装系统依赖，这些变化较少
+RUN apt-get update && \
+    apt-get install -y postgresql-client && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# 升级 pip 并设置镜像源
+RUN pip install --upgrade pip && \
+    pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple/ && \
+    pip config set global.extra-index-url "https://pypi.org/simple/ https://mirrors.aliyun.com/pypi/simple/"
+
+# 复制依赖文件
+COPY requirements.txt .
+
+# 分步安装依赖，利用 Docker 缓存
+# 先安装基础包
+RUN pip install --no-cache-dir --timeout=600 --retries=5 \
+    Flask click Flask-HTTPAuth Flask-SQLAlchemy Werkzeug requests
+
+# 安装可能有网络问题的包
+RUN pip install --no-cache-dir --timeout=600 --retries=5 \
+    psycopg2-binary cryptography
+
+# 安装其他依赖
+RUN pip install --no-cache-dir --timeout=600 --retries=5 \
+    Flask-SocketIO==5.3.6 python-socketio==5.9.0 gunicorn eventlet psutil APScheduler
+
+# 复制项目代码（放在最后，这样代码变化时不会重新安装依赖）
+COPY ./project ./project
+COPY run.py .
+COPY ./config ./config
+COPY ./init ./init
+COPY ./sql ./sql
+
+# 修复换行符格式
+RUN sed -i 's/\r$//' init/init.sh
+
+# 暴露端口
+EXPOSE 5000
+
+# 设置环境变量
+ENV FLASK_APP=run
+ENV FLASK_ENV=production
+
+# 给启动脚本执行权限
+RUN chmod +x init/init.sh
+
+# 使用bash直接执行脚本，避免文件权限问题
+CMD ["bash", "./init/init.sh"]

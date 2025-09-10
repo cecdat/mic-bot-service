@@ -160,6 +160,8 @@ def register_websocket_events(socketio_instance):
         task_id = data.get('task_id')
         status = data.get('status')
         node_name = data.get('node_name')
+        result = data.get('result')
+        error_message = data.get('error_message')
         
         if not all([task_id, status, node_name]):
             emit('error', {'message': '任务ID、状态和节点名称不能为空'})
@@ -180,6 +182,36 @@ def register_websocket_events(socketio_instance):
         
         logger.info(f'任务 {task_id} 状态更新为 {status} (节点: {node_name})')
         
+        # 如果任务完成，发送推送通知
+        if status == 'completed' and result:
+            try:
+                from .push import trigger_push_notification
+                # 获取执行的账户数量和积分信息
+                account_count = result.get('account_count', 0)
+                total_points = result.get('total_points', 0)
+                accounts = result.get('accounts', [])
+                
+                # 构建账户列表信息
+                account_list = []
+                for account in accounts:
+                    email = account.get('email', '')
+                    points_gained = account.get('points_gained', 0)
+                    final_points = account.get('final_points', 0)
+                    account_list.append(f"{email}(+{points_gained}积分)")
+                
+                # 构建推送内容
+                if account_count > 0:
+                    content = f'节点 {node_name} 任务执行完成\n\n'
+                    content += f'共执行 {account_count} 个账户\n'
+                    content += f'总获得积分: {total_points}\n\n'
+                    content += '账户详情:\n' + '\n'.join(account_list)
+                else:
+                    content = f'节点 {node_name} 任务执行完成，共执行{account_count}个账户'
+                
+                trigger_push_notification('task_completed', f'**节点任务执行完成**', content)
+            except Exception as push_error:
+                logger.warning(f'发送任务完成推送失败: {push_error}')
+        
         # 广播任务状态更新
         socketio.emit('task_status_broadcast', {
             'task_id': task_id,
@@ -191,7 +223,7 @@ def register_websocket_events(socketio_instance):
     
     @socketio_instance.on('task_completed')
     def handle_task_completed(data):
-        """处理任务完成通知"""
+        """处理任务完成通知（已弃用，推送逻辑已移至 task_status_update）"""
         task_id = data.get('task_id')
         node_name = data.get('node_name')
         result = data.get('result', {})
@@ -214,36 +246,7 @@ def register_websocket_events(socketio_instance):
         node.status_updated_at = datetime.utcnow()
         db.session.commit()
         
-        logger.info(f'任务 {task_id} 已完成 (节点: {node_name})')
-        
-        # 发送任务完成推送通知
-        try:
-            from .push import trigger_push_notification
-            # 获取执行的账户数量和积分信息
-            account_count = result.get('account_count', 0)
-            total_points = result.get('total_points', 0)
-            accounts = result.get('accounts', [])
-            
-            # 构建账户列表信息
-            account_list = []
-            for account in accounts:
-                email = account.get('email', '')
-                points_gained = account.get('points_gained', 0)
-                final_points = account.get('final_points', 0)
-                account_list.append(f"{email}(+{points_gained}积分)")
-            
-            # 构建推送内容
-            if account_count > 0:
-                content = f'节点 {node_name} 任务执行完成\n\n'
-                content += f'共执行 {account_count} 个账户\n'
-                content += f'总获得积分: {total_points}\n\n'
-                content += '账户详情:\n' + '\n'.join(account_list)
-            else:
-                content = f'节点 {node_name} 任务执行完成，共执行{account_count}个账户'
-            
-            trigger_push_notification('task_finish', f'**节点任务执行完成**', content)
-        except Exception as push_error:
-            logger.warning(f'发送任务完成推送失败: {push_error}')
+        logger.info(f'任务 {task_id} 已完成 (节点: {node_name}) - 推送逻辑已移至 task_status_update')
         
         # 广播任务完成
         socketio.emit('task_completed_broadcast', {

@@ -113,9 +113,9 @@ class PushService:
             'account_error': config.notify_on_account_error,
             'verification_code': config.notify_on_verification_code,
             'task_completed': config.notify_on_task_completed,
+            'task_finish': config.notify_on_task_completed,  # 统一使用 task_completed 字段
             'system_alert': config.notify_on_system_alert,
-            'task_start': config.notify_on_task_start,
-            'task_finish': config.notify_on_task_finish
+            'task_start': config.notify_on_task_start
         }
         return event_mapping.get(event_type, False)
     
