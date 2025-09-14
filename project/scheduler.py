@@ -64,6 +64,17 @@ def init_scheduler(app):
             replace_existing=True
         )
         logger.info('已添加每日任务重建定时任务')
+        
+        # 添加节点离线检测定时任务 (每2分钟执行一次)
+        scheduler.add_job(
+            func=check_node_offline_status,
+            trigger='interval',
+            minutes=2,
+            id='node_offline_checker',
+            name='节点离线检测器',
+            replace_existing=True
+        )
+        logger.info('已添加节点离线检测定时任务')
     
     # 启动调度器
     scheduler.start()
@@ -229,6 +240,109 @@ def trigger_node_job(node_id):
 
 
 
+# 用于跟踪已发送离线推送的节点，避免重复推送
+offline_notification_sent = set()
+
+def check_node_offline_status():
+    """检查节点离线状态并触发推送"""
+    global app_instance, offline_notification_sent
+    with app_instance.app_context():
+        try:
+            from .models import BotNode
+            from .push import trigger_push_notification
+            from datetime import datetime, timezone
+            
+            now = datetime.now(timezone.utc)
+            offline_nodes = []
+            
+            # 查询所有在线状态的节点
+            online_nodes = BotNode.query.filter_by(status=1).all()
+            
+            for node in online_nodes:
+                if not node.last_seen:
+                    # 如果节点从未签到过，跳过
+                    continue
+                
+                # 计算心跳超时时间
+                timeout_seconds = node.heartbeat_timeout or 600  # 默认10分钟
+                
+                # 确保时间对象都是timezone-aware
+                last_seen = node.last_seen
+                if last_seen.tzinfo is None:
+                    last_seen = last_seen.replace(tzinfo=timezone.utc)
+                
+                # 计算时间差
+                time_diff = (now - last_seen).total_seconds()
+                
+                # 如果超过心跳超时时间，标记为离线
+                if time_diff > timeout_seconds:
+                    logger.info(f'节点 {node.node_name} 心跳超时，标记为离线 (超时: {time_diff:.0f}秒)')
+                    
+                    # 更新节点状态为离线
+                    node.status = 0
+                    node.activity_status = 'Offline'
+                    node.status_updated_at = now
+                    
+                    offline_nodes.append({
+                        'node_name': node.node_name,
+                        'ip_address': node.ip_address,
+                        'timeout_seconds': timeout_seconds,
+                        'last_seen': last_seen
+                    })
+            
+            # 提交数据库更改
+            if offline_nodes:
+                db.session.commit()
+                logger.info(f'检测到 {len(offline_nodes)} 个节点离线')
+                
+                # 为每个离线节点发送推送通知（避免重复推送）
+                for node_info in offline_nodes:
+                    node_key = f"offline_{node_info['node_name']}"
+                    
+                    # 检查是否已经发送过离线推送
+                    if node_key not in offline_notification_sent:
+                        try:
+                            push_title = f"🔴 {node_info['node_name']} 节点离线"
+                            push_content = f"📱 节点: {node_info['node_name']}\n"
+                            push_content += f"🌐 IP地址: {node_info['ip_address'] or '未知'}\n"
+                            push_content += f"💓 最后心跳: {node_info['last_seen'].strftime('%Y-%m-%d %H:%M:%S')}\n"
+                            push_content += f"⏱️ 超时时间: {node_info['timeout_seconds']}秒\n"
+                            push_content += f"❌ 状态: 离线"
+                            
+                            trigger_push_notification('node_offline', push_title, push_content)
+                            offline_notification_sent.add(node_key)
+                            logger.info(f'已发送节点离线推送: {node_info["node_name"]}')
+                        except Exception as push_error:
+                            logger.error(f'发送节点离线推送失败: {push_error}')
+                    else:
+                        logger.debug(f'节点 {node_info["node_name"]} 离线推送已发送过，跳过')
+            else:
+                logger.debug('所有节点都在线')
+                
+            # 清理已重新上线的节点的离线推送记录
+            # 查询所有离线状态的节点
+            offline_nodes_in_db = BotNode.query.filter_by(status=0).all()
+            for node in offline_nodes_in_db:
+                node_key = f"offline_{node.node_name}"
+                if node_key in offline_notification_sent:
+                    # 如果节点重新上线，移除离线推送记录
+                    if node.last_seen:
+                        last_seen = node.last_seen
+                        if last_seen.tzinfo is None:
+                            last_seen = last_seen.replace(tzinfo=timezone.utc)
+                        
+                        time_diff = (now - last_seen).total_seconds()
+                        timeout_seconds = node.heartbeat_timeout or 600
+                        
+                        # 如果节点在超时时间内有新的心跳，说明重新上线了
+                        if time_diff <= timeout_seconds:
+                            offline_notification_sent.discard(node_key)
+                            logger.info(f'节点 {node.node_name} 重新上线，清除离线推送记录')
+                
+        except Exception as e:
+            logger.error(f'检查节点离线状态时出错: {e}')
+            db.session.rollback()
+
 def shutdown_scheduler():
     """关闭调度器"""
     global scheduler
@@ -305,24 +419,8 @@ def scan_task_table():
                 # 推送任务到节点
                 logger.info(f'任务 {task.id} 已下发到节点 {node.node_name}，执行时间: {execution_time}')
                 
-                # 发送任务开始推送通知
-                try:
-                    from .push import trigger_push_notification
-                    # 获取节点分配的账户信息
-                    from .models import BotAccount
-                    assigned_accounts = BotAccount.query.filter_by(assigned_node_id=node.id).all()
-                    account_emails = [acc.email for acc in assigned_accounts]
-                    
-                    if account_emails:
-                        content = f'节点 {node.node_name} 开始执行任务\n\n'
-                        content += f'分配账户 ({len(account_emails)}个):\n'
-                        content += '\n'.join(account_emails)
-                    else:
-                        content = f'节点 {node.node_name} 开始执行任务'
-                    
-                    trigger_push_notification('task_start', f'**节点开始执行任务**', content)
-                except Exception as push_error:
-                    logger.warning(f'发送任务开始推送失败: {push_error}')
+                # 注意：任务开始推送已移至websocket_events.py的task_status_update中
+                # 当节点上报status='executing'时才发送推送，避免下发就推送的问题
                 
                 # 准备任务数据
                 task_data = {

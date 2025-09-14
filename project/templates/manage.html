@@ -409,6 +409,22 @@
                     }
                     return '<span style="color: #999;">-</span>';
                 }},
+                {field: 'monitoring_data', title: '桌面端收益', width: 100, templet: function(d) {
+                    if (d.monitoring_data && d.monitoring_data.desktop_gain !== undefined) {
+                        const desktopGain = d.monitoring_data.desktop_gain || 0;
+                        const color = desktopGain === 0 ? '#FFB800' : '#5FB878';
+                        return `<span style="color: ${color}; font-weight: bold; font-size: 14px;">${desktopGain}</span>`;
+                    }
+                    return '<span style="color: #999;">-</span>';
+                }},
+                {field: 'monitoring_data', title: '移动端收益', width: 100, templet: function(d) {
+                    if (d.monitoring_data && d.monitoring_data.mobile_gain !== undefined) {
+                        const mobileGain = d.monitoring_data.mobile_gain || 0;
+                        const color = mobileGain === 0 ? '#FFB800' : '#5FB878';
+                        return `<span style="color: ${color}; font-weight: bold; font-size: 14px;">${mobileGain}</span>`;
+                    }
+                    return '<span style="color: #999;">-</span>';
+                }},
                 {field: 'monitoring_data', title: '最后更新', minWidth: 160, templet: function(d) {
                     if (d.monitoring_data && d.monitoring_data.last_updated) {
                         const updateTime = new Date(d.monitoring_data.last_updated);

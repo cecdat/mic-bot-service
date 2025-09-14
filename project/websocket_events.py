@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 # 全局socketio实例
 socketio = None
 
+# 用于跟踪已处理的任务完成通知，避免重复推送
+processed_task_completions = set()
+
 def register_websocket_events(socketio_instance):
     """注册WebSocket事件处理器"""
     global socketio
@@ -45,24 +48,40 @@ def register_websocket_events(socketio_instance):
     def handle_join_node_room(data):
         """加入节点房间，接收特定节点的状态更新"""
         node_id = data.get('node_id')
-        if not node_id:
-            emit('error', {'message': '节点ID不能为空'})
+        node_name = data.get('node_name')
+        
+        if not node_id and not node_name:
+            emit('error', {'message': '节点ID或节点名称不能为空'})
+            logger.warning(f'客户端 {request.sid} 尝试加入房间但未提供节点ID或名称')
             return
         
-        # 验证节点是否存在
-        node = BotNode.query.get(node_id)
+        # 根据node_id或node_name查找节点
+        if node_id:
+            node = BotNode.query.get(node_id)
+        else:
+            node = BotNode.query.filter_by(node_name=node_name).first()
+        
         if not node:
             emit('error', {'message': '节点不存在'})
+            logger.warning(f'客户端 {request.sid} 尝试加入不存在的节点房间: node_id={node_id}, node_name={node_name}')
             return
         
         # 加入房间
-        room_name = f'node_{node_id}'
+        room_name = f'node_{node.id}'
         join_room(room_name)
-        logger.info(f'客户端 {request.sid} 加入节点房间: {room_name}')
+        logger.info(f'客户端 {request.sid} 加入节点房间: {room_name} (节点: {node.node_name})')
+        
+        # 发送确认消息
+        emit('node_ready_confirmed', {
+            'node_id': node.id,
+            'node_name': node.node_name,
+            'room_name': room_name,
+            'message': '节点房间加入成功'
+        })
         
         # 发送当前节点状态
         emit('node_status_update', {
-            'node_id': node_id,
+            'node_id': node.id,
             'activity_status': node.activity_status,
             'status_updated_at': node.status_updated_at.isoformat() if node.status_updated_at else None,
             'last_seen': node.last_seen.isoformat() if node.last_seen else None
@@ -103,17 +122,25 @@ def register_websocket_events(socketio_instance):
     def handle_request_node_status(data):
         """请求特定节点的状态"""
         node_id = data.get('node_id')
-        if not node_id:
-            emit('error', {'message': '节点ID不能为空'})
+        node_name = data.get('node_name')
+        
+        if not node_id and not node_name:
+            emit('error', {'message': '节点ID或节点名称不能为空'})
             return
         
-        node = BotNode.query.get(node_id)
+        # 根据node_id或node_name查找节点
+        if node_id:
+            node = BotNode.query.get(node_id)
+        else:
+            node = BotNode.query.filter_by(node_name=node_name).first()
+        
         if not node:
             emit('error', {'message': '节点不存在'})
             return
         
         emit('node_status_response', {
-            'node_id': node_id,
+            'node_id': node.id,
+            'node_name': node.node_name,
             'activity_status': node.activity_status,
             'status_updated_at': node.status_updated_at.isoformat() if node.status_updated_at else None,
             'last_seen': node.last_seen.isoformat() if node.last_seen else None
@@ -180,6 +207,26 @@ def register_websocket_events(socketio_instance):
         
         logger.info(f'任务 {task_id} 状态更新为 {status} (节点: {node_name})')
         
+        # 如果任务开始执行，发送任务开始推送通知
+        if status == 'executing':
+            try:
+                from .push import trigger_push_notification
+                # 获取节点分配的账户信息
+                from .models import BotAccount
+                assigned_accounts = BotAccount.query.filter_by(assigned_node_id=node.id).all()
+                account_emails = [acc.email for acc in assigned_accounts]
+                
+                if account_emails:
+                    content = f'节点 {node_name} 开始执行任务\n\n'
+                    content += f'分配账户 ({len(account_emails)}个):\n'
+                    content += '\n'.join(account_emails)
+                else:
+                    content = f'节点 {node_name} 开始执行任务'
+                
+                trigger_push_notification('task_start', f'🚀 {node_name} 开始执行任务', content)
+            except Exception as push_error:
+                logger.warning(f'发送任务开始推送失败: {push_error}')
+        
         # 广播任务状态更新
         socketio.emit('task_status_broadcast', {
             'task_id': task_id,
@@ -199,6 +246,22 @@ def register_websocket_events(socketio_instance):
         if not all([task_id, node_name]):
             emit('error', {'message': '任务ID和节点名称不能为空'})
             return
+        
+        # 检查是否已经处理过这个任务完成通知
+        completion_key = f"{task_id}_{node_name}"
+        if completion_key in processed_task_completions:
+            logger.info(f'任务 {task_id} 完成通知已处理过，跳过重复推送 (节点: {node_name})')
+            return
+        
+        # 标记为已处理
+        processed_task_completions.add(completion_key)
+        
+        # 清理过期的记录（保留最近1000条）
+        if len(processed_task_completions) > 1000:
+            # 转换为列表，删除前500条
+            completion_list = list(processed_task_completions)
+            processed_task_completions.clear()
+            processed_task_completions.update(completion_list[500:])
         
         # 查找节点
         node = BotNode.query.filter_by(node_name=node_name).first()
@@ -230,18 +293,21 @@ def register_websocket_events(socketio_instance):
                 email = account.get('email', '')
                 points_gained = account.get('points_gained', 0)
                 final_points = account.get('final_points', 0)
-                account_list.append(f"{email}(+{points_gained}积分)")
+                desktop_gain = account.get('desktop_gain', 0)
+                mobile_gain = account.get('mobile_gain', 0)
+                account_list.append(f"👤 {email}\n   💰 总积分: {final_points} (+{points_gained})\n   🖥️ 桌面端: +{desktop_gain}  📱 移动端: +{mobile_gain}")
             
             # 构建推送内容
             if account_count > 0:
-                content = f'节点 {node_name} 任务执行完成\n\n'
-                content += f'共执行 {account_count} 个账户\n'
-                content += f'总获得积分: {total_points}\n\n'
-                content += '账户详情:\n' + '\n'.join(account_list)
+                content = f'🎯 节点: {node_name}\n'
+                content += f'✅ 任务状态: 执行完成\n\n'
+                content += f'👥 执行账户: {account_count} 个\n'
+                content += f'💰 总获得积分: {total_points}\n\n'
+                content += '📊 账户详情:\n' + '\n'.join(account_list)
             else:
-                content = f'节点 {node_name} 任务执行完成，共执行{account_count}个账户'
+                content = f'🎯 节点: {node_name}\n✅ 任务状态: 执行完成\n👥 执行账户: {account_count} 个'
             
-            trigger_push_notification('task_finish', f'**节点任务执行完成**', content)
+            trigger_push_notification('task_finish', f'🎉 {node_name} 任务执行完成', content)
         except Exception as push_error:
             logger.warning(f'发送任务完成推送失败: {push_error}')
         
@@ -360,13 +426,15 @@ def send_task_to_node(node_id, command, command_data=None):
         db.session.commit()
         
         # 发送任务到节点
-        socketio.emit('new_task', task_data, room=f'node_{node_id}')
+        room_name = f'node_{node_id}'
+        socketio.emit('new_task', task_data, room=room_name)
         
-        # 更新任务状态为已发送
-        node.command_status = 'sent'
-        db.session.commit()
+        # 注意：不立即设置为 'sent'，保持 'pending' 状态
+        # 这样 HTTP 轮询也能收到命令
+        # 只有当节点确认收到命令时才设置为 'sent'
         
-        logger.info(f'已向节点 {node.node_name} 发送任务: {command}')
+        logger.info(f'已向节点 {node.node_name} 发送任务: {command} (房间: {room_name})')
+        logger.info(f'任务数据: {json.dumps(task_data, ensure_ascii=False)}')
         return True
     except Exception as e:
         logger.warning(f'发送任务到节点失败: {e}')

@@ -56,10 +56,15 @@ END;
 $$ language 'plpgsql';
 
 -- 创建更新时间触发器
-CREATE TRIGGER update_push_configs_updated_at 
-    BEFORE UPDATE ON push_configs 
-    FOR EACH ROW 
-    EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_push_configs_updated_at') THEN
+        CREATE TRIGGER update_push_configs_updated_at 
+            BEFORE UPDATE ON push_configs 
+            FOR EACH ROW 
+            EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END $$;
 
 -- 插入示例配置数据
 INSERT INTO push_configs (name, channel, is_enabled, config_data, notify_on_node_online, notify_on_node_offline, notify_on_account_error, notify_on_verification_code, notify_on_system_alert) VALUES
@@ -73,9 +78,9 @@ INSERT INTO push_configs (name, channel, is_enabled, config_data, notify_on_node
 ('示例自定义Webhook配置', 'webhook', FALSE, '{"url": "your_webhook_url_here", "method": "POST", "headers": {"Content-Type": "application/json"}}', TRUE, TRUE, TRUE, TRUE, TRUE);
 
 -- 创建索引以提高查询性能
-CREATE INDEX idx_push_configs_channel ON push_configs(channel);
-CREATE INDEX idx_push_configs_is_enabled ON push_configs(is_enabled);
-CREATE INDEX idx_push_configs_status ON push_configs(status);
+CREATE INDEX IF NOT EXISTS idx_push_configs_channel ON push_configs(channel);
+CREATE INDEX IF NOT EXISTS idx_push_configs_is_enabled ON push_configs(is_enabled);
+CREATE INDEX IF NOT EXISTS idx_push_configs_status ON push_configs(status);
 
 -- 更新数据库版本
 INSERT INTO db_version (version, description, applied_at) 

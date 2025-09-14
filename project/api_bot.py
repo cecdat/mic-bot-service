@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, g
 from .db import db
 # [CORE FIX] Import the 'BotNode' model along with the others
-from .models import Account, BotAccount, BotNode, Task
+from .models import Account, BotAccount, BotNode, Task, AccountPointsHistory
 from .auth import bot_api_required
 from .push import trigger_push_notification
 from .scheduler import reset_node_tasks
@@ -94,7 +94,7 @@ def node_checkin():
             logger.warning(f"WebSocket广播失败: {e}")
 
         if is_coming_online:
-            trigger_push_notification('node_online', f"节点上线: {node.node_name}", f"IP: {ip_address}")
+            trigger_push_notification('node_online', f"🟢 {node.node_name} 节点上线", f"🌐 IP地址: {ip_address}\n⏰ 上线时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n✅ 节点状态: 在线")
 
         return jsonify({"status": "success", "message": f"Node {node.node_name} checked in."})
     except Exception as e:
@@ -138,7 +138,7 @@ def update_task_status():
         return jsonify({'success': False, 'message': f'服务器内部错误: {str(e)}'}), 500
 
         if is_coming_online:
-            trigger_push_notification('node_online', f"节点上线: {node.node_name}", f"IP: {ip_address}")
+            trigger_push_notification('node_online', f"🟢 {node.node_name} 节点上线", f"🌐 IP地址: {ip_address}\n⏰ 上线时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n✅ 节点状态: 在线")
 
         return jsonify({"status": "success", "message": f"Node {node.node_name} checked in."})
     except Exception as e:
@@ -330,8 +330,8 @@ def update_login_status():
         if data.get('status') is False:
             trigger_push_notification(
                 'account_error', 
-                f"账户异常: {email}", 
-                f"节点: {g.node.node_name}, 平台: {data.get('type')}, 详情: {data.get('message')}"
+                f"⚠️ {g.node.node_name} 账户异常", 
+                f"👤 账户: {email}\n📱 平台: {data.get('type')}\n❌ 详情: {data.get('message')}\n⏰ 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
 
         return jsonify({"status": "success", "message": "Login status updated."})
@@ -355,13 +355,57 @@ def update_points():
             account = Account(bot_account_id=bot_account.id)
             db.session.add(account)
 
-        account.total_points = data.get('total_points')
+        # 保存历史积分记录（在更新前）
+        today = datetime.now(timezone.utc).date()
+        
+        # 检查今天是否已经有记录
+        existing_history = AccountPointsHistory.query.filter_by(
+            bot_account_id=bot_account.id,
+            record_date=today
+        ).first()
+        
+        if not existing_history:
+            # 创建新的历史记录
+            history_record = AccountPointsHistory(
+                bot_account_id=bot_account.id,
+                total_points=data.get('total_points', 0),
+                daily_gain=data.get('daily_gain', 0),
+                desktop_gain=data.get('desktop_gain', 0),
+                mobile_gain=data.get('mobile_gain', 0),
+                record_date=today
+            )
+            db.session.add(history_record)
+        else:
+            # 更新现有记录
+            existing_history.total_points = data.get('total_points', 0)
+            existing_history.daily_gain = data.get('daily_gain', 0)
+            existing_history.desktop_gain = data.get('desktop_gain', 0)
+            existing_history.mobile_gain = data.get('mobile_gain', 0)
+
+        # 获取更新前的积分用于比较
+        old_total_points = account.total_points if account.total_points else 0
+        new_total_points = data.get('total_points', 0)
+        
+        # 更新当前积分数据
+        account.total_points = new_total_points
         account.daily_gain = data.get('daily_gain')
         account.desktop_gain = data.get('desktop_gain', 0)
         account.mobile_gain = data.get('mobile_gain', 0)
         # 修复时间戳处理：使用正确的datetime.now()和timezone.utc语法
         account.last_updated = datetime.now(timezone.utc).isoformat()
         account.node_name = g.node.node_name
+
+        # 检查是否达到兑换购物卡的积分阈值（17925积分）
+        if new_total_points >= 17925 and old_total_points < 17925:
+            # 触发兑换购物卡推送通知
+            push_title = "🎉 可以兑换购物卡啦！"
+            push_content = f"🎯 账户: {email}\n💰 当前积分: {new_total_points}\n🎁 可以兑换购物卡了！\n📱 节点: {g.node.node_name}\n⏰ 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            
+            try:
+                trigger_push_notification('redeem_available', push_title, push_content)
+                logger.info(f"触发兑换购物卡推送通知: {email}, 积分: {new_total_points}")
+            except Exception as push_error:
+                logger.error(f"推送通知发送失败: {push_error}")
 
         db.session.commit()
         return jsonify({"status": "success", "message": "Points updated."})

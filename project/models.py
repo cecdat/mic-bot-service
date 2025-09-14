@@ -63,6 +63,20 @@ class Account(db.Model):
     node_name = db.Column(db.String(255))
     status_details = db.Column(db.Text)
 
+class AccountPointsHistory(db.Model):
+    __tablename__ = 'account_points_history'
+    id = db.Column(db.Integer, primary_key=True)
+    bot_account_id = db.Column(db.Integer, db.ForeignKey('bot_accounts.id'), nullable=False)
+    total_points = db.Column(db.Integer, nullable=False)
+    daily_gain = db.Column(db.Integer, default=0)
+    desktop_gain = db.Column(db.Integer, default=0)
+    mobile_gain = db.Column(db.Integer, default=0)
+    record_date = db.Column(db.Date, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # 关联关系
+    bot_account = db.relationship('BotAccount', backref='points_history')
+
 class PushConfig(db.Model):
     __tablename__ = 'push_configs'
     id = db.Column(db.Integer, primary_key=True)

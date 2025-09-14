@@ -44,8 +44,8 @@ def request_verification_code():
         
         # 发送验证码提醒推送通知
         try:
-            title = f"验证码请求 - {node.node_name}"
-            body = f"主账户: {main_account_email}\n辅助邮箱: {auxiliary_email}\n节点: {node.node_name}\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n请及时处理验证码"
+            title = f"🔐 {node.node_name} 验证码请求"
+            body = f"👤 主账户: {main_account_email}\n📧 辅助邮箱: {auxiliary_email}\n📱 节点: {node.node_name}\n⏰ 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n🚨 请及时处理验证码"
             
             trigger_push_notification('verification_code', title, body)
         except Exception as e:

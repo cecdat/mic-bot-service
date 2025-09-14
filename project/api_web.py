@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, session, current_app
 from .db import db
-from .models import Account, BotAccount, BotNode, PushConfig, WebUser
+from .models import Account, BotAccount, BotNode, PushConfig, WebUser, AccountPointsHistory
 from .auth import web_login_required
 from . import scheduler
 from .bing_wallpaper import bing_wallpaper
@@ -1419,9 +1419,7 @@ def get_system_status():
             except:
                 pass
         
-        # 网络流量统计（物理网卡）
-        total_bytes_sent = 0
-        total_bytes_recv = 0
+        # 注意：已移除网络流量统计功能，专注于积分分析
         
         try:
             # 尝试从挂载的 /host/proc 获取网络统计信息
@@ -1511,10 +1509,6 @@ def get_system_status():
                 'arch': system_arch,
                 'publicIp': public_ip
             },
-            'traffic': {
-                'sent': round(traffic_sent_gb, 2),
-                'recv': round(traffic_recv_gb, 2)
-            }
         })
         
     except Exception as e:
@@ -1537,4 +1531,178 @@ def get_wallpaper():
         return jsonify({
             "success": False,
             "message": f"获取壁纸失败: {str(e)}"
+        }), 500
+
+@bp.route('/points_history', methods=['GET'])
+@web_login_required
+def get_points_history():
+    """获取积分历史记录"""
+    try:
+        # 获取查询参数
+        days = int(request.args.get('days', 7))  # 默认查询7天
+        account_id = request.args.get('account_id')  # 可选：指定账户ID
+        
+        # 计算查询日期范围
+        end_date = datetime.now(timezone.utc).date()
+        start_date = end_date - timedelta(days=days-1)
+        
+        # 构建查询
+        query = db.session.query(
+            AccountPointsHistory,
+            BotAccount.email,
+            BotNode.node_name
+        ).join(
+            BotAccount, AccountPointsHistory.bot_account_id == BotAccount.id
+        ).outerjoin(
+            BotNode, BotAccount.assigned_node_id == BotNode.id
+        ).filter(
+            AccountPointsHistory.record_date >= start_date,
+            AccountPointsHistory.record_date <= end_date
+        ).order_by(
+            AccountPointsHistory.record_date.desc(),
+            BotAccount.email
+        )
+        
+        # 如果指定了账户ID，则过滤
+        if account_id:
+            query = query.filter(AccountPointsHistory.bot_account_id == account_id)
+        
+        results = query.all()
+        
+        # 组织数据
+        history_data = []
+        for history, email, node_name in results:
+            history_data.append({
+                'id': history.id,
+                'account_id': history.bot_account_id,
+                'email': email,
+                'node_name': node_name,
+                'total_points': history.total_points,
+                'daily_gain': history.daily_gain,
+                'desktop_gain': history.desktop_gain,
+                'mobile_gain': history.mobile_gain,
+                'record_date': history.record_date.isoformat(),
+                'created_at': history.created_at.isoformat() if history.created_at else None
+            })
+        
+        return jsonify({
+            'status': 'success',
+            'data': history_data,
+            'total': len(history_data),
+            'date_range': {
+                'start_date': start_date.isoformat(),
+                'end_date': end_date.isoformat(),
+                'days': days
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'获取积分历史失败: {str(e)}'
+        }), 500
+
+@bp.route('/points_analysis', methods=['GET'])
+@web_login_required
+def get_points_analysis():
+    """获取积分分析数据，用于图表显示"""
+    try:
+        # 获取查询参数
+        days = int(request.args.get('days', 7))  # 默认查询7天
+        
+        # 计算查询日期范围
+        end_date = datetime.now(timezone.utc).date()
+        start_date = end_date - timedelta(days=days-1)
+        
+        # 获取所有账户的历史数据
+        results = db.session.query(
+            AccountPointsHistory,
+            BotAccount.email,
+            BotNode.node_name
+        ).join(
+            BotAccount, AccountPointsHistory.bot_account_id == BotAccount.id
+        ).outerjoin(
+            BotNode, BotAccount.assigned_node_id == BotNode.id
+        ).filter(
+            AccountPointsHistory.record_date >= start_date,
+            AccountPointsHistory.record_date <= end_date
+        ).order_by(
+            AccountPointsHistory.record_date,
+            BotAccount.email
+        ).all()
+        
+        # 按日期组织数据
+        daily_data = {}
+        account_summary = {}
+        
+        for history, email, node_name in results:
+            date_str = history.record_date.isoformat()
+            
+            if date_str not in daily_data:
+                daily_data[date_str] = {
+                    'date': date_str,
+                    'total_points': 0,
+                    'total_daily_gain': 0,
+                    'total_desktop_gain': 0,
+                    'total_mobile_gain': 0,
+                    'account_count': 0
+                }
+            
+            # 累计数据
+            daily_data[date_str]['total_points'] += history.total_points or 0
+            daily_data[date_str]['total_daily_gain'] += history.daily_gain or 0
+            daily_data[date_str]['total_desktop_gain'] += history.desktop_gain or 0
+            daily_data[date_str]['total_mobile_gain'] += history.mobile_gain or 0
+            daily_data[date_str]['account_count'] += 1
+            
+            # 账户汇总
+            if email not in account_summary:
+                account_summary[email] = {
+                    'email': email,
+                    'node_name': node_name,
+                    'total_points': 0,
+                    'total_daily_gain': 0,
+                    'total_desktop_gain': 0,
+                    'total_mobile_gain': 0,
+                    'days_active': 0
+                }
+            
+            account_summary[email]['total_points'] = max(account_summary[email]['total_points'], history.total_points or 0)
+            account_summary[email]['total_daily_gain'] += history.daily_gain or 0
+            account_summary[email]['total_desktop_gain'] += history.desktop_gain or 0
+            account_summary[email]['total_mobile_gain'] += history.mobile_gain or 0
+            account_summary[email]['days_active'] += 1
+        
+        # 转换为列表格式
+        daily_chart_data = list(daily_data.values())
+        account_chart_data = list(account_summary.values())
+        
+        # 计算总体统计
+        total_stats = {
+            'total_accounts': len(account_summary),
+            'total_points': sum(item['total_points'] for item in account_chart_data),
+            'total_daily_gain': sum(item['total_daily_gain'] for item in account_chart_data),
+            'total_desktop_gain': sum(item['total_desktop_gain'] for item in account_chart_data),
+            'total_mobile_gain': sum(item['total_mobile_gain'] for item in account_chart_data),
+            'avg_daily_gain': sum(item['total_daily_gain'] for item in account_chart_data) / max(len(account_chart_data), 1),
+            'date_range': {
+                'start_date': start_date.isoformat(),
+                'end_date': end_date.isoformat(),
+                'days': days
+            }
+        }
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'daily_chart': daily_chart_data,
+                'account_summary': account_chart_data,
+                'total_stats': total_stats
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'获取积分分析失败: {str(e)}'
         }), 500

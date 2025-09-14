@@ -268,34 +268,44 @@
     font-family: 'Courier New', monospace;
 }
 
-/* 流量信息样式 */
-.traffic-info {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+/* 积分分析图样式 */
+.points-chart-container {
+    margin: 15px 0;
+    text-align: center;
 }
 
-.traffic-item {
+.points-chart-container canvas {
+    max-width: 100%;
+    height: auto;
+}
+
+.points-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.summary-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 12px;
-    background: rgba(56, 178, 172, 0.1);
-    border-radius: 8px;
-    border-left: 4px solid #38b2ac;
+    padding: 6px 10px;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 4px;
+    border-left: 3px solid #667eea;
 }
 
-.traffic-label {
-    font-size: 14px;
-    color: #2d3748;
+.summary-label {
+    font-size: 13px;
+    color: #4a5568;
     font-weight: 500;
 }
 
-.traffic-value {
-    font-size: 16px;
+.summary-value {
+    font-size: 14px;
     color: #2d3748;
     font-weight: 700;
-    font-family: 'Courier New', monospace;
 }
 
 /* 响应式设计 */
@@ -480,29 +490,33 @@
         <div class="stat-card">
             <div class="stat-card-header">
                 <h3 class="stat-card-title">
-                    <i class="layui-icon layui-icon-network"></i>
-                    网络流量
+                    <i class="layui-icon layui-icon-chart"></i>
+                    积分分析
                 </h3>
-                <div class="stat-card-icon" style="background: linear-gradient(135deg, #38b2ac, #319795);">
-                    <i class="layui-icon layui-icon-network"></i>
+                <div class="stat-card-icon" style="background: linear-gradient(135deg, #667eea, #764ba2);">
+                    <i class="layui-icon layui-icon-chart"></i>
                 </div>
-                                </div>
-            <div class="stat-label">物理网卡流量统计</div>
-            <div class="traffic-info">
-                <div class="traffic-item">
-                    <span class="traffic-label">流入:</span>
-                    <span class="traffic-value" id="traffic-recv">0 GB</span>
-                                        </div>
-                <div class="traffic-item">
-                    <span class="traffic-label">流出:</span>
-                    <span class="traffic-value" id="traffic-sent">0 GB</span>
-                                        </div>
-                                    </div>
-                                    </div>
+            </div>
+            <div class="stat-label">最近7天积分趋势</div>
+            <div class="points-chart-container">
+                <canvas id="pointsChart" width="300" height="200"></canvas>
+            </div>
+            <div class="points-summary">
+                <div class="summary-item">
+                    <span class="summary-label">总积分:</span>
+                    <span class="summary-value" id="total-points">0</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">日均收益:</span>
+                    <span class="summary-value" id="avg-daily-gain">0</span>
+                </div>
+            </div>
+        </div>
                                 </div>
                             </div>
 
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 // 系统监控数据
 let systemData = {
@@ -513,8 +527,7 @@ let systemData = {
     uptime: 0,
     connections: 0,
     activeNodes: 0,
-    systemInfo: { hostname: '', version: '', arch: '', publicIp: '' },
-    traffic: { sent: 0, recv: 0 }
+    systemInfo: { hostname: '', version: '', arch: '', publicIp: '' }
 };
 
 // 更新系统概览
@@ -632,18 +645,124 @@ function updateSystemInfo() {
     if (publicIpElement) publicIpElement.textContent = systemData.systemInfo.publicIp || '未知';
 }
 
-// 更新流量信息
-function updateTraffic() {
-    const trafficRecvElement = document.getElementById('traffic-recv');
-    const trafficSentElement = document.getElementById('traffic-sent');
+// 积分分析图
+let pointsChart = null;
+
+// 初始化积分分析图
+function initPointsChart() {
+    const ctx = document.getElementById('pointsChart');
+    if (!ctx) return;
     
-    if (trafficRecvElement && trafficSentElement) {
-        const trafficRecv = systemData.traffic.recv || 0;
-        const trafficSent = systemData.traffic.sent || 0;
-        
-        trafficRecvElement.textContent = `${trafficRecv.toFixed(2)} GB`;
-        trafficSentElement.textContent = `${trafficSent.toFixed(2)} GB`;
-    }
+    pointsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: '总积分',
+                data: [],
+                borderColor: '#667eea',
+                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                tension: 0.4,
+                fill: true
+            }, {
+                label: '每日收益',
+                data: [],
+                borderColor: '#764ba2',
+                backgroundColor: 'rgba(118, 75, 162, 0.1)',
+                tension: 0.4,
+                fill: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 10,
+                        font: {
+                            size: 10
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: '日期',
+                        font: {
+                            size: 10
+                        }
+                    },
+                    ticks: {
+                        font: {
+                            size: 9
+                        }
+                    }
+                },
+                y: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: '积分',
+                        font: {
+                            size: 10
+                        }
+                    },
+                    ticks: {
+                        font: {
+                            size: 9
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// 更新积分分析图
+function updatePointsChart() {
+    fetchWithAuth('/web_api/points_analysis?days=7')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success' && pointsChart) {
+                const chartData = data.data.daily_chart;
+                const totalStats = data.data.total_stats;
+                
+                // 更新图表数据
+                const labels = chartData.map(item => {
+                    const date = new Date(item.date);
+                    return `${date.getMonth() + 1}/${date.getDate()}`;
+                });
+                
+                const totalPoints = chartData.map(item => item.total_points);
+                const dailyGains = chartData.map(item => item.total_daily_gain);
+                
+                pointsChart.data.labels = labels;
+                pointsChart.data.datasets[0].data = totalPoints;
+                pointsChart.data.datasets[1].data = dailyGains;
+                pointsChart.update();
+                
+                // 更新汇总信息
+                const totalPointsElement = document.getElementById('total-points');
+                const avgDailyGainElement = document.getElementById('avg-daily-gain');
+                
+                if (totalPointsElement) {
+                    totalPointsElement.textContent = totalStats.total_points.toLocaleString();
+                }
+                if (avgDailyGainElement) {
+                    avgDailyGainElement.textContent = Math.round(totalStats.avg_daily_gain).toLocaleString();
+                }
+            }
+        })
+        .catch(error => {
+            console.error('获取积分分析数据失败:', error);
+        });
 }
 
 // 获取系统资源数据
@@ -658,7 +777,6 @@ async function fetchSystemData() {
             console.log('获取到的系统数据:', data);
             console.log('主机名:', data.systemInfo?.hostname);
             console.log('内存信息:', data.memory);
-            console.log('流量信息:', data.traffic);
             systemData = { ...systemData, ...data };
         } else {
             console.error('API调用失败:', response.status, response.statusText);
@@ -684,10 +802,6 @@ async function fetchSystemData() {
                     version: 'Linux 5.4.0',
                     arch: 'x86_64',
                     publicIp: '192.168.1.100'
-                },
-                traffic: {
-                    sent: Math.random() * 100,
-                    recv: Math.random() * 80
                 }
             };
             console.log('使用模拟数据:', systemData);
@@ -695,13 +809,12 @@ async function fetchSystemData() {
         
         // 更新所有显示
         updateSystemInfo();
-        updateSystemInfo();
         updateSystemOverview();
         updateCPU();
         updateMemory();
         updateDisk();
         updateNetwork();
-        updateTraffic();
+        updatePointsChart();
         
         // 更新最后更新时间
         const lastUpdated = document.getElementById('last-updated');
@@ -744,12 +857,15 @@ async function fetchSystemData() {
         updateMemory();
         updateDisk();
         updateNetwork();
-        updateTraffic();
+        updatePointsChart();
     }
 }
 
 // 页面加载时获取数据
 document.addEventListener('DOMContentLoaded', function() {
+    // 初始化积分分析图
+    initPointsChart();
+    
     fetchSystemData();
     
     // 每30秒更新一次

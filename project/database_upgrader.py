@@ -147,20 +147,34 @@ class DatabaseUpgrader:
     def execute_sql_file(self, file_path: str) -> bool:
         """执行SQL文件"""
         try:
+            logger.info(f"开始执行SQL文件: {file_path}")
+            
             with open(file_path, 'r', encoding='utf-8') as f:
                 sql_content = f.read()
             
             # 分割SQL语句
             statements = self.split_sql_statements(sql_content)
+            logger.info(f"SQL文件包含 {len(statements)} 条语句")
             
-            for statement in statements:
+            # 执行每条语句
+            for i, statement in enumerate(statements):
                 if statement.strip():
-                    self.cursor.execute(statement)
+                    try:
+                        logger.debug(f"执行SQL语句 {i+1}: {statement[:100]}...")
+                        self.cursor.execute(statement)
+                        logger.debug(f"SQL语句 {i+1} 执行成功")
+                    except Exception as e:
+                        logger.error(f"SQL语句 {i+1} 执行失败: {e}")
+                        logger.error(f"失败的语句: {statement}")
+                        self.conn.rollback()
+                        return False
             
+            # 提交事务
             self.conn.commit()
+            logger.info(f"SQL文件执行成功，事务已提交: {file_path}")
             return True
         except Exception as e:
-            print(f"执行SQL文件失败: {e}")
+            logger.error(f"执行SQL文件失败: {e}")
             self.conn.rollback()
             return False
     

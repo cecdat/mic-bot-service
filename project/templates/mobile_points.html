@@ -811,6 +811,22 @@
                         
                         <div class="metro-data-row">
                             <div class="metro-data-label">
+                                <i class="bi bi-laptop"></i>
+                                桌面端收益
+                            </div>
+                            <div class="metro-data-value ${account.desktop_gain > 0 ? 'success' : 'warning'}">${account.desktop_gain || 0}</div>
+                        </div>
+                        
+                        <div class="metro-data-row">
+                            <div class="metro-data-label">
+                                <i class="bi bi-phone"></i>
+                                移动端收益
+                            </div>
+                            <div class="metro-data-value ${account.mobile_gain > 0 ? 'success' : 'warning'}">${account.mobile_gain || 0}</div>
+                        </div>
+                        
+                        <div class="metro-data-row">
+                            <div class="metro-data-label">
                                 <i class="bi bi-clock"></i>
                                 最后更新
                             </div>

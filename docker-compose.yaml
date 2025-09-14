@@ -39,7 +39,7 @@ services:
       - app-network
 
   db:
-    image: postgres:16
+    image: docker.1ms.run/postgres:16
     container_name: postgres-db-service
     restart: unless-stopped
     environment:

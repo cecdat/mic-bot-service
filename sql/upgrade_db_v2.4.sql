@@ -72,10 +72,15 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
-CREATE TRIGGER update_push_configs_updated_at 
-    BEFORE UPDATE ON push_configs 
-    FOR EACH ROW 
-    EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_push_configs_updated_at') THEN
+        CREATE TRIGGER update_push_configs_updated_at 
+            BEFORE UPDATE ON push_configs 
+            FOR EACH ROW 
+            EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END $$;
 
 -- 插入一些示例配置（可选）
 INSERT INTO push_configs (name, channel, is_enabled, config_data, notify_on_node_online, notify_on_node_offline, notify_on_account_error, notify_on_verification_code, notify_on_system_alert) VALUES
