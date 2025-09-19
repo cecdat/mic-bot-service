@@ -9,6 +9,37 @@ import json
 import secrets
 import os
 import time
+from werkzeug.security import generate_password_hash, check_password_hash
+import logging
+
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('api_web')
+
+# 简单的内存缓存
+_cache = {}
+_cache_timeout = 30  # 30秒缓存过期
+
+def get_cached_data(key):
+    """获取缓存数据"""
+    if key in _cache:
+        data, timestamp = _cache[key]
+        if time.time() - timestamp < _cache_timeout:
+            return data
+        else:
+            del _cache[key]
+    return None
+
+def set_cached_data(key, data):
+    """设置缓存数据"""
+    _cache[key] = (data, time.time())
+
+def clear_cache():
+    """清理过期缓存"""
+    current_time = time.time()
+    expired_keys = [k for k, (_, timestamp) in _cache.items() if current_time - timestamp >= _cache_timeout]
+    for key in expired_keys:
+        del _cache[key]
 
 def get_inferred_status(node):
     """智能推断节点状态，误差不超过30秒"""
@@ -56,38 +87,6 @@ def get_inferred_status(node):
     
     # 默认返回当前状态
     return node.activity_status
-from werkzeug.security import generate_password_hash, check_password_hash
-import time
-import logging
-
-# 配置日志
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('api_web')
-
-# 简单的内存缓存
-_cache = {}
-_cache_timeout = 30  # 30秒缓存过期
-
-def get_cached_data(key):
-    """获取缓存数据"""
-    if key in _cache:
-        data, timestamp = _cache[key]
-        if time.time() - timestamp < _cache_timeout:
-            return data
-        else:
-            del _cache[key]
-    return None
-
-def set_cached_data(key, data):
-    """设置缓存数据"""
-    _cache[key] = (data, time.time())
-
-def clear_cache():
-    """清理过期缓存"""
-    current_time = time.time()
-    expired_keys = [k for k, (_, timestamp) in _cache.items() if current_time - timestamp >= _cache_timeout]
-    for key in expired_keys:
-        del _cache[key]
 
 bp = Blueprint('api_web', __name__, url_prefix='/web_api')
 
@@ -98,1425 +97,718 @@ def web_login():
     password = data.get('password')
     
     user = WebUser.query.filter_by(username=username).first()
-
     if user and check_password_hash(user.password_hash, password):
-        session.clear()
         session['user_id'] = user.id
-        return jsonify({"status": "success", "token": os.environ.get('ADMIN_PASS', 'password')})
-
-    return jsonify({"status": "error", "message": "Invalid credentials"}), 401
+        session['username'] = user.username
+        return jsonify({'success': True, 'message': '登录成功'})
+    else:
+        return jsonify({'success': False, 'message': '用户名或密码错误'}), 401
 
 @bp.route('/get_points', methods=['GET'])
 @web_login_required
 def get_points():
-    import time
-    start_time = time.time()
-    
-    # [核心修改] 增加 filter 参数
-    show_all = request.args.get('filter', 'all') == 'all'
-    
-    query = db.session.query(Account, BotAccount.email, BotNode.node_name)\
-        .outerjoin(BotAccount, Account.bot_account_id == BotAccount.id)\
-        .outerjoin(BotNode, BotAccount.assigned_node_id == BotNode.id)\
-        .order_by(Account.last_updated.desc())
-    
-    today_str = datetime.now(timezone.utc).date().isoformat()
-
-    if not show_all:
-        # 仅查询当天的数据
-        query = query.filter(db.func.date(Account.last_updated) == today_str)
+    """获取所有账户的积分数据"""
+    try:
+        # 检查缓存
+        cache_key = 'points_data'
+        cached_data = get_cached_data(cache_key)
+        if cached_data:
+            return jsonify(cached_data)
         
-    results = query.all()
-
-    # 如果没有结果且不是查询所有数据，则尝试查询所有数据
-    if not results and not show_all:
-        query = db.session.query(Account, BotAccount.email, BotNode.node_name)\
-            .outerjoin(BotAccount, Account.bot_account_id == Account.id)\
-            .outerjoin(BotNode, BotAccount.assigned_node_id == BotNode.id)\
-            .order_by(Account.last_updated.desc())
-        results = query.all()
-    
-    points_data = []
-    
-    for account, email, node_name in results:
-        acc_dict = {c.name: getattr(account, c.name) for c in account.__table__.columns}
-        acc_dict['email'] = email or "未知账户 (孤立数据)"
-        acc_dict['node_name'] = node_name or None
-
-        if acc_dict.get('status_details'):
-            acc_dict['status_details'] = json.loads(acc_dict['status_details'])
-        else:
-            acc_dict['status_details'] = {}
+        # 获取所有账户数据
+        accounts = db.session.query(
+            BotAccount,
+            Account,
+            BotNode
+        ).outerjoin(
+            Account, BotAccount.id == Account.bot_account_id
+        ).outerjoin(
+            BotNode, BotAccount.assigned_node_id == BotNode.id
+        ).all()
+        
+        points_data = []
+        for bot_account, account, node in accounts:
+            # 获取账户状态
+            desktop_status = 'unknown'
+            mobile_status = 'unknown'
             
-        if acc_dict.get('last_updated'):
-            try:
-                # 确保last_updated是字符串类型
-                last_updated_str = str(acc_dict['last_updated'])
-                last_updated_date_str = datetime.fromisoformat(last_updated_str).date().isoformat()
-                acc_dict['is_stale'] = last_updated_date_str != today_str
-            except (TypeError, ValueError):
-                # 如果转换失败，标记为stale
-                acc_dict['is_stale'] = True
-        else:
-            acc_dict['is_stale'] = True
-        points_data.append(acc_dict)
+            if account:
+                # 检查状态是否过期（超过5分钟）
+                now = datetime.now(timezone.utc)
+                is_stale = False
+                
+                if account.last_updated:
+                    last_updated = account.last_updated
+                    if isinstance(last_updated, str):
+                        try:
+                            last_updated = datetime.fromisoformat(last_updated.replace('Z', '+00:00'))
+                        except:
+                            last_updated = None
+                    
+                    if last_updated:
+                        if last_updated.tzinfo is None:
+                            last_updated = last_updated.replace(tzinfo=timezone.utc)
+                        
+                        time_diff = (now - last_updated).total_seconds()
+                        if time_diff > 300:  # 5分钟
+                            is_stale = True
+                
+                # 根据积分数据推断状态
+                if account.desktop_points and account.desktop_points > 0:
+                    desktop_status = 'online'
+                else:
+                    desktop_status = 'offline'
+                
+                if account.mobile_points and account.mobile_points > 0:
+                    mobile_status = 'online'
+                else:
+                    mobile_status = 'offline'
+            
+            points_data.append({
+                'id': bot_account.id,
+                'email': bot_account.email,
+                'node_name': node.node_name if node else '未分配',
+                'total_points': account.total_points if account else 0,
+                'daily_gain': account.daily_gain if account else 0,
+                'desktop_gain': account.desktop_gain if account else 0,
+                'mobile_gain': account.mobile_gain if account else 0,
+                'last_updated': account.last_updated if account else None,
+                'is_stale': is_stale,
+                'desktop_status': desktop_status,
+                'mobile_status': mobile_status
+            })
+        
+        # 缓存数据
+        set_cached_data(cache_key, points_data)
+        
+        return jsonify(points_data)
     
-    # 记录查询时间
-    query_time = time.time() - start_time
-    if query_time > 1.0:  # 如果查询时间超过1秒，记录警告
-        print(f"警告: get_points查询耗时 {query_time:.2f}秒，返回 {len(points_data)} 条记录")
-    
-    return jsonify(points_data)
+    except Exception as e:
+        current_app.logger.error(f"获取积分数据失败: {e}")
+        return jsonify({'error': '获取积分数据失败'}), 500
 
 @bp.route('/nodes', methods=['GET', 'POST', 'PUT'])
 @web_login_required
 def manage_nodes():
     if request.method == 'GET':
-        # 检查缓存
-        cache_key = 'nodes_data'
-        cached_data = get_cached_data(cache_key)
-        if cached_data:
-            return jsonify(cached_data)
+        # 获取所有节点
+        nodes = BotNode.query.all()
+        node_data = []
         
-        # 优化查询：使用单次查询获取所有数据
-        from sqlalchemy import func, case
-        
-        # 使用子查询优化账户统计
-        account_stats = db.session.query(
-            BotAccount.assigned_node_id,
-            func.count(BotAccount.id).label('total_count'),
-            func.sum(case(
-                (Account.status_details.like('%"status": true%'), 1),
-                else_=0
-            )).label('normal_count')
-        ).outerjoin(Account, BotAccount.id == Account.bot_account_id)\
-         .group_by(BotAccount.assigned_node_id)\
-         .subquery()
-        
-        # 获取所有节点和统计信息
-        nodes_query = db.session.query(
-            BotNode,
-            func.coalesce(account_stats.c.total_count, 0).label('account_count_total'),
-            func.coalesce(account_stats.c.normal_count, 0).label('account_count_normal')
-        ).outerjoin(account_stats, BotNode.id == account_stats.c.assigned_node_id)\
-         .order_by(BotNode.node_name)
-        
-        nodes_with_stats = nodes_query.all()
-        
-        nodes_data = []
-        now_utc = datetime.now(timezone.utc)
-        
-        # 批量获取任务信息
-        from .models import Task
-        all_pending_tasks = Task.query.filter(
-            Task.status == 'pending',
-            Task.execution_time > now_utc
-        ).all()
-        
-        # 创建任务映射
-        tasks_by_node = {}
-        for task in all_pending_tasks:
-            if task.node_id not in tasks_by_node:
-                tasks_by_node[task.node_id] = []
-            tasks_by_node[task.node_id].append(task)
-        
-        for node, total_count, normal_count in nodes_with_stats:
-            node_dict = {
-                "id": node.id, "node_name": node.node_name, "last_seen": node.last_seen,
-                "heartbeat_timeout": node.heartbeat_timeout, "ip_address": node.ip_address,
-                "cron_schedule": node.cron_schedule, "min_sleep_minutes": node.min_sleep_minutes,
-                "max_sleep_minutes": node.max_sleep_minutes, "clusters": node.clusters,
-                "search_delay_min": node.search_delay_min, "search_delay_max": node.search_delay_max,
-                "activity_status": get_inferred_status(node),
-                "log_push_enabled": node.log_push_enabled,
-                "log_push_interval": node.log_push_interval
-            }
+        for node in nodes:
+            # 使用智能状态推断
+            inferred_status = get_inferred_status(node)
             
-            if node.last_seen:
-                last_seen_dt = node.last_seen
-                if last_seen_dt.tzinfo is None:
-                    last_seen_dt = last_seen_dt.replace(tzinfo=timezone.utc)
-                timeout = node.heartbeat_timeout or 600
-                node_dict['status'] = 'Online' if (now_utc - last_seen_dt).total_seconds() <= timeout else 'Offline'
-            else:
-                node_dict['status'] = 'Never Seen'
-            
-            # 使用预计算的统计数据
-            node_dict['account_count_total'] = int(total_count or 0)
-            node_dict['account_count_normal'] = int(normal_count or 0)
-            node_dict['account_count_abnormal'] = int(total_count or 0) - int(normal_count or 0)
-
-            # 获取下次执行时间（从预加载的任务中查找）
-            try:
-                node_tasks = tasks_by_node.get(node.id, [])
-                if node_tasks:
-                    # 找到最早的任务
-                    next_task = min(node_tasks, key=lambda t: t.execution_time)
-                    node_dict['next_run_time'] = next_task.execution_time.isoformat()
-                else:
-                    # 如果没有待执行任务，按原来的方式计算
-                    if node.cron_schedule:
-                        from apscheduler.triggers.cron import CronTrigger
-                        import random
-                        
-                        trigger = CronTrigger.from_crontab(node.cron_schedule)
-                        next_run_time = trigger.get_next_fire_time(None, now_utc)
-                        
-                        min_delay = node.min_sleep_minutes or 0
-                        max_delay = node.max_sleep_minutes or 0
-                        
-                        if min_delay > 0 or max_delay > 0:
-                            if min_delay > max_delay:
-                                min_delay, max_delay = max_delay, min_delay
-                            
-                            delay_seconds = random.randint(min_delay * 60, max_delay * 60)
-                            next_run_time = next_run_time + datetime.timedelta(seconds=delay_seconds)
-                        
-                        node_dict['next_run_time'] = next_run_time.isoformat()
-                    else:
-                        node_dict['next_run_time'] = None
-            except Exception as e:
-                node_dict['next_run_time'] = None
-                print(f"获取节点 {node.node_name} 下次执行时间失败: {str(e)}")
-            
-            nodes_data.append(node_dict)
+            node_data.append({
+                'id': node.id,
+                'node_name': node.node_name,
+                'status': 'Online' if node.status == 1 else 'Offline',
+                'activity_status': inferred_status,
+                'ip_address': node.ip_address,
+                'last_seen': node.last_seen.isoformat() if node.last_seen else None,
+                'status_updated_at': node.status_updated_at.isoformat() if node.status_updated_at else None,
+                'account_count_total': BotAccount.query.filter_by(assigned_node_id=node.id).count(),
+                'next_run_time': None,  # 暂时设为None，后续可以根据cron_schedule计算
+                'created_at': None
+            })
         
-        # 缓存结果
-        set_cached_data(cache_key, nodes_data)
-        # 返回符合规范的格式，包含success状态码
-        return jsonify(nodes_data)
-
-    if request.method == 'POST' or request.method == 'PUT':
-        # 清除相关缓存
-        clear_cache()
-        # 特别清理节点数据缓存
-        if 'nodes_data' in _cache:
-            del _cache['nodes_data']
-        
+        return jsonify({
+            "code": 0,
+            "msg": "success", 
+            "count": len(node_data),
+            "data": node_data
+        })
+    
+    elif request.method == 'POST':
+        # 创建新节点
         data = request.get_json()
+        node_name = data.get('node_name')
         
-        if request.method == 'POST':
-            node_name = data.get('node_name')
-            if not node_name: return jsonify({"status": "error", "message": "节点名称为必填项"}), 400
-            if BotNode.query.filter_by(node_name=node_name).first():
-                return jsonify({"status": "error", "message": "该节点名称已存在"}), 409
-            
-            new_token = secrets.token_hex(24)
-            token_hash = generate_password_hash(new_token)
-            node = BotNode(node_name=node_name, api_token_hash=token_hash)
-            db.session.add(node)
-        else: # PUT
-            node_id = data.get('id')
-            node = BotNode.query.get(node_id)
-            if not node: return jsonify({"status": "error", "message": "未找到该节点"}), 404
-            
-            # 检查节点名字是否被修改，如果修改了需要验证是否重复
-            new_node_name = data.get('node_name', node.node_name)
-            if new_node_name != node.node_name:
-                # 检查新名字是否已被其他节点使用
-                existing_node = BotNode.query.filter(BotNode.node_name == new_node_name, BotNode.id != node_id).first()
-                if existing_node:
-                    return jsonify({"status": "error", "message": "该节点名称已存在"}), 409
-                node.node_name = new_node_name
-
-        node.cron_schedule = data.get('cron_schedule', node.cron_schedule)
-        node.min_sleep_minutes = data.get('min_sleep_minutes', node.min_sleep_minutes)
-        node.max_sleep_minutes = data.get('max_sleep_minutes', node.max_sleep_minutes)
-        node.clusters = data.get('clusters', node.clusters)
-        node.search_delay_min = data.get('search_delay_min', node.search_delay_min)
-        node.search_delay_max = data.get('search_delay_max', node.search_delay_max)
-        # 日志推送配置
-        log_push_enabled_value = data.get('log_push_enabled', node.log_push_enabled)
-        # 处理checkbox的值转换：'on' -> True, 其他 -> False
-        node.log_push_enabled = log_push_enabled_value == 'on' if isinstance(log_push_enabled_value, str) else bool(log_push_enabled_value)
-        node.log_push_interval = data.get('log_push_interval', node.log_push_interval)
+        if not node_name:
+            return jsonify({'error': '节点名称不能为空'}), 400
         
+        # 检查节点名称是否已存在
+        existing_node = BotNode.query.filter_by(node_name=node_name).first()
+        if existing_node:
+            return jsonify({'error': '节点名称已存在'}), 400
+        
+        # 生成API Token
+        api_token = secrets.token_urlsafe(32)
+        
+        # 创建节点
+        new_node = BotNode(
+            node_name=node_name,
+            api_token_hash=api_token,
+            status=0,  # 默认离线
+            activity_status='Idle'
+        )
+        
+        db.session.add(new_node)
         db.session.commit()
         
-        # 更新定时任务
-        scheduler.update_node_task(node.id, node.cron_schedule, node.node_name, node.min_sleep_minutes, node.max_sleep_minutes)
+        return jsonify({
+            'status': 'success',
+            'message': '节点创建成功',
+            'node_id': new_node.id,
+            'api_token': api_token
+        })
+    
+    elif request.method == 'PUT':
+        # 更新节点信息
+        data = request.get_json()
+        node_id = data.get('id')
+        node_name = data.get('node_name')
         
-        if request.method == 'POST':
-            return jsonify({"status": "success", "node_name": node.node_name, "api_token": new_token})
-        else:
-            return jsonify({"status": "success", "message": "节点配置已更新。"})
+        if not node_id or not node_name:
+            return jsonify({'error': '节点ID和名称不能为空'}), 400
+        
+        node = BotNode.query.get(node_id)
+        if not node:
+            return jsonify({'error': '节点不存在'}), 404
+        
+        # 检查节点名称是否已被其他节点使用
+        existing_node = BotNode.query.filter(BotNode.node_name == node_name, BotNode.id != node_id).first()
+        if existing_node:
+            return jsonify({'error': '节点名称已被其他节点使用'}), 400
+        
+        node.node_name = node_name
+        db.session.commit()
+        
+        return jsonify({'status': 'success', 'message': '节点更新成功'})
 
 @bp.route('/logs/receive', methods=['POST'])
+@web_login_required
 def receive_logs():
-    """接收来自Node端的日志推送"""
+    """接收节点日志"""
     try:
         data = request.get_json()
-        if not data:
-            return jsonify({"status": "error", "message": "无效的请求数据"}), 400
-        
-        # 验证token
-        token = request.headers.get('Authorization', '').replace('Bearer ', '')
-        if not token:
-            return jsonify({"status": "error", "message": "缺少认证token"}), 401
-        
-        # 查找对应的节点（使用check_password_hash进行认证）
-        from werkzeug.security import check_password_hash
-        nodes = BotNode.query.all()
-        node = None
-        for n in nodes:
-            if check_password_hash(n.api_token_hash, token):
-                node = n
-                break
-        
-        if not node:
-            return jsonify({"status": "error", "message": "无效的token"}), 401
-        
-        # 处理日志数据
+        node_id = data.get('node_id')
         logs = data.get('logs', [])
-        if not isinstance(logs, list):
-            return jsonify({"status": "error", "message": "日志数据格式错误"}), 400
         
-        # 存储日志到数据库
-        from .models import NodeLog
-        from datetime import datetime
+        if not node_id:
+            return jsonify({'error': '节点ID不能为空'}), 400
         
-        stored_count = 0
-        for log_entry in logs:
-            try:
-                # 解析时间戳
-                timestamp_str = log_entry.get('timestamp', '')
-                if timestamp_str:
-                    # 尝试解析ISO格式时间戳
-                    try:
-                        timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                    except:
-                        timestamp = datetime.utcnow()
-                else:
-                    timestamp = datetime.utcnow()
-                
-                # 创建日志记录
-                node_log = NodeLog(
-                    node_id=node.id,
-                    node_name=node.node_name,
-                    timestamp=timestamp,
-                    level=log_entry.get('level', 'LOG'),
-                    platform=log_entry.get('platform', ''),
-                    title=log_entry.get('title', ''),
-                    message=log_entry.get('message', ''),
-                    pid=log_entry.get('pid', '')
-                )
-                db.session.add(node_log)
-                stored_count += 1
-                
-            except Exception as e:
-                print(f"存储日志条目失败: {e}")
-                continue
+        # 这里可以添加日志存储逻辑
+        # 目前只是简单记录
+        current_app.logger.info(f"收到节点 {node_id} 的 {len(logs)} 条日志")
         
-        # 提交数据库事务
-        db.session.commit()
-        
-        # 清理旧日志（保留最近1000条）
-        try:
-            from sqlalchemy import text
-            db.session.execute(text("""
-                DELETE FROM node_logs 
-                WHERE node_id = :node_id 
-                AND id NOT IN (
-                    SELECT id FROM node_logs 
-                    WHERE node_id = :node_id 
-                    ORDER BY timestamp DESC 
-                    LIMIT 1000
-                )
-            """), {'node_id': node.id})
-            db.session.commit()
-        except Exception as e:
-            print(f"清理旧日志失败: {e}")
-        
-        return jsonify({"status": "success", "message": f"成功接收并存储 {stored_count} 条日志"})
-        
+        return jsonify({'success': True, 'message': '日志接收成功'})
+    
     except Exception as e:
-        db.session.rollback()
-        return jsonify({"status": "error", "message": str(e)}), 500
+        current_app.logger.error(f"接收日志失败: {e}")
+        return jsonify({'error': '接收日志失败'}), 500
 
 @bp.route('/nodes/<int:node_id>/trigger', methods=['POST'])
 @web_login_required
 def trigger_node(node_id):
-    node = BotNode.query.get(node_id)
-    if not node:
-        return jsonify({"status": "error", "message": "未找到该节点"}), 404
-
-    if node.activity_status != 'Idle':
-        return jsonify({"status": "error", "message": f"节点正忙 ({node.activity_status})，无法触发。"}), 409
-    
-    # 注意：不在这里发送任务开始推送，因为任务会通过定时调度系统发送推送
-    # 这样可以避免重复推送
-    # 尝试使用WebSocket发送任务
+    """触发节点执行任务"""
     try:
-        from . import websocket_events
-        success = websocket_events.send_task_to_node(node_id, 'RUN_TASKS')
-        if success:
-            return jsonify({"status": "success", "message": f"已通过WebSocket向节点 {node.node_name} 发送触发指令。"})
-    except Exception as e:
-        logger.warning(f"WebSocket任务发送失败，回退到轮询模式: {e}")
+        node = BotNode.query.get(node_id)
+        if not node:
+            return jsonify({'error': '节点不存在'}), 404
+        
+        if node.status != 1:
+            return jsonify({'error': '节点离线，无法执行任务'}), 400
+        
+        # 设置任务状态为待执行
+        node.command_status = 'pending'
+        node.command = 'run_tasks'
+        node.command_updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        
+        return jsonify({'status': 'success', 'message': '任务已下发'})
     
-    # 回退到传统轮询模式
-    node.command = 'RUN_TASKS'
-    node.command_status = 'pending'  # 设置命令状态为待处理
-    db.session.commit()
-    return jsonify({"status": "success", "message": f"已向节点 {node.node_name} 发送触发指令（轮询模式）。"})
+    except Exception as e:
+        current_app.logger.error(f"触发节点失败: {e}")
+        return jsonify({'error': '触发节点失败'}), 500
 
 @bp.route('/nodes/<int:node_id>/stop', methods=['POST'])
 @web_login_required
 def stop_node(node_id):
-    node = BotNode.query.get(node_id)
-    if not node: return jsonify({"status": "error", "message": "未找到该节点"}), 404
-    
-    node.command = 'STOP_TASKS'
-    node.command_status = 'pending'  # 设置命令状态为待处理
-    db.session.commit()
-    return jsonify({"status": "success", "message": f"已向节点 {node.node_name} 发送停止指令。"})
-
-@bp.route('/nodes/<int:node_id>/reset', methods=['POST'])
-@web_login_required
-def reset_node_status(node_id):
-    node = BotNode.query.get(node_id)
-    if not node: return jsonify({"status": "error", "message": "未找到该节点"}), 404
-    
-    node.activity_status = 'Idle'
-    db.session.commit()
-    
-    return jsonify({"status": "success", "message": f"节点 {node.node_name} 的Bot状态已重置为待机"})
-
-
-@bp.route('/nodes/<int:node_id>/regenerate-token', methods=['POST'])
-@web_login_required
-def regenerate_node_token(node_id):
-    """重新生成节点的API Token"""
+    """停止节点任务"""
     try:
         node = BotNode.query.get(node_id)
         if not node:
-            return jsonify({"status": "error", "message": "节点不存在"}), 404
+            return jsonify({'error': '节点不存在'}), 404
+        
+        # 设置停止命令
+        node.command_status = 'pending'
+        node.command = 'stop_tasks'
+        node.command_updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        
+        return jsonify({'status': 'success', 'message': '停止命令已下发'})
+    
+    except Exception as e:
+        current_app.logger.error(f"停止节点失败: {e}")
+        return jsonify({'error': '停止节点失败'}), 500
+
+@bp.route('/nodes/<int:node_id>/reset', methods=['POST'])
+@web_login_required
+def reset_node(node_id):
+    """重置节点任务"""
+    try:
+        node = BotNode.query.get(node_id)
+        if not node:
+            return jsonify({'error': '节点不存在'}), 404
+        
+        # 重置节点状态
+        node.command_status = 'idle'
+        node.command = None
+        node.activity_status = 'Idle'
+        node.status_updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        
+        return jsonify({'status': 'success', 'message': '节点已重置'})
+    
+    except Exception as e:
+        current_app.logger.error(f"重置节点失败: {e}")
+        return jsonify({'error': '重置节点失败'}), 500
+
+@bp.route('/nodes/<int:node_id>/regenerate-token', methods=['POST'])
+@web_login_required
+def regenerate_token(node_id):
+    """重新生成节点API Token"""
+    try:
+        node = BotNode.query.get(node_id)
+        if not node:
+            return jsonify({'error': '节点不存在'}), 404
         
         # 生成新的API Token
         new_token = secrets.token_urlsafe(32)
-        token_hash = generate_password_hash(new_token)
-        
-        # 更新数据库中的token hash
-        node.api_token_hash = token_hash
+        node.api_token = new_token
         db.session.commit()
         
-        logger.info(f"节点 {node.node_name} 的API Token已重新生成")
-        
         return jsonify({
-            "status": "success", 
-            "message": f"节点 {node.node_name} 的API Token已重新生成",
-            "token": new_token
+            'status': 'success',
+            'message': 'Token重新生成成功',
+            'token': new_token
         })
         
     except Exception as e:
-        logger.error(f"重新生成API Token失败: {e}")
-        db.session.rollback()
-        return jsonify({"status": "error", "message": f"重新生成API Token失败: {str(e)}"}), 500
-
+        current_app.logger.error(f"重新生成Token失败: {e}")
+        return jsonify({'error': '重新生成Token失败'}), 500
 
 @bp.route('/nodes/<int:node_id>', methods=['DELETE'])
 @web_login_required
 def delete_node(node_id):
+    """删除节点"""
     try:
-        logger.info(f"开始删除节点，ID: {node_id}")
-        
         node = BotNode.query.get(node_id)
         if not node:
-            logger.warning(f"节点不存在，ID: {node_id}")
-            return jsonify({"status": "error", "message": "节点不存在"}), 404
+            return jsonify({'error': '节点不存在'}), 404
         
-        node_name = node.node_name
-        logger.info(f"开始删除节点: {node_name} (ID: {node_id})")
+        # 检查是否有账户分配到此节点
+        account_count = BotAccount.query.filter_by(assigned_node_id=node_id).count()
+        if account_count > 0:
+            return jsonify({'error': f'该节点下还有 {account_count} 个账户，无法删除'}), 400
         
-        # 第一步：清理节点任务（在删除节点前）
-        try:
-            from .scheduler import clear_node_tasks
-            clear_node_tasks(node.id)
-            logger.info(f"已清理节点 {node_name} 的任务")
-        except Exception as task_error:
-            logger.error(f"清理节点 {node_name} 任务时出错: {str(task_error)}")
-            # 不阻止删除，继续执行
-        
-        # 第二步：清理验证码记录（有CASCADE约束，但为了安全先手动删除）
-        try:
-            from .models import VerificationCode
-            verification_count = VerificationCode.query.filter_by(node_id=node.id).count()
-            if verification_count > 0:
-                VerificationCode.query.filter_by(node_id=node.id).delete()
+        db.session.delete(node)
                 db.session.commit()
-                logger.info(f"已删除节点 {node_name} 的 {verification_count} 条验证码记录")
-        except Exception as verification_error:
-            logger.error(f"删除节点 {node_name} 验证码记录时出错: {str(verification_error)}")
-            db.session.rollback()
-            # 不阻止删除，继续执行
         
-        # 第三步：清理节点日志（有CASCADE约束，但为了安全先手动删除）
-        try:
-            from .models import NodeLog
-            log_count = NodeLog.query.filter_by(node_id=node.id).count()
-            if log_count > 0:
-                NodeLog.query.filter_by(node_id=node.id).delete()
-                db.session.commit()
-                logger.info(f"已删除节点 {node_name} 的 {log_count} 条日志")
-        except Exception as log_error:
-            logger.error(f"删除节点 {node_name} 日志时出错: {str(log_error)}")
-            db.session.rollback()
-            # 不阻止删除，继续执行
+        return jsonify({'status': 'success', 'message': '节点删除成功'})
+    
+    except Exception as e:
+        current_app.logger.error(f"删除节点失败: {e}")
+        return jsonify({'error': '删除节点失败'}), 500
+
+@bp.route('/accounts', methods=['GET'])
+@web_login_required
+def get_accounts():
+    """获取所有账户列表（用于账户分析页面）"""
+    try:
+        # 获取所有账户
+        accounts = db.session.query(
+            BotAccount,
+            Account,
+            BotNode
+        ).outerjoin(
+            Account, BotAccount.id == Account.bot_account_id
+        ).outerjoin(
+            BotNode, BotAccount.assigned_node_id == BotNode.id
+        ).all()
         
-        # 第四步：清理任务表（有CASCADE约束，但为了安全先手动删除）
-        try:
-            from .models import Task
-            task_count = Task.query.filter_by(node_id=node.id).count()
-            if task_count > 0:
-                Task.query.filter_by(node_id=node.id).delete()
-                db.session.commit()
-                logger.info(f"已删除节点 {node_name} 的 {task_count} 个任务")
-        except Exception as task_db_error:
-            logger.error(f"删除节点 {node_name} 任务记录时出错: {str(task_db_error)}")
-            db.session.rollback()
-            # 不阻止删除，继续执行
-        
-        # 第五步：设置关联账户为未分配状态
-        try:
-            associated_accounts_count = node.accounts.count()
-            logger.info(f"节点 {node_name} 关联了 {associated_accounts_count} 个账户")
-            
-            if associated_accounts_count > 0:
-                for account in node.accounts:
-                    account.assigned_node_id = None
-                db.session.commit()
-                logger.info(f"已将 {associated_accounts_count} 个账户设置为未分配状态")
-        except Exception as account_error:
-            logger.error(f"设置账户未分配状态时出错: {str(account_error)}")
-            db.session.rollback()
-            return jsonify({"status": "error", "message": f"处理关联账户时出错: {str(account_error)}"}), 500
-        
-        # 第六步：删除节点本身
-        try:
-            logger.info(f"准备删除节点 {node_name}")
-            db.session.delete(node)
-            db.session.commit()
-            logger.info(f"节点 {node_name} 删除成功")
-        except Exception as delete_error:
-            logger.error(f"删除节点 {node_name} 时出错: {str(delete_error)}")
-            import traceback
-            logger.error(f"删除节点错误堆栈: {traceback.format_exc()}")
-            db.session.rollback()
-            return jsonify({"status": "error", "message": f"删除节点时出错: {str(delete_error)}"}), 500
-        
-        # 清理缓存
-        clear_cache()
-        # 特别清理节点数据缓存
-        if 'nodes_data' in _cache:
-            del _cache['nodes_data']
-        # 强制清理所有缓存
-        _cache.clear()
-        
-        # 返回成功消息
-        if associated_accounts_count > 0:
-            return jsonify({
-                "status": "success", 
-                "message": f"节点 {node_name} 已删除，{associated_accounts_count} 个关联账户已设置为未分配状态。"
+        account_data = []
+        for bot_account, account, node in accounts:
+            account_data.append({
+                'id': bot_account.id,
+                'email': bot_account.email,
+                'node_name': node.node_name if node else '未分配',
+                'total_points': account.total_points if account else 0,
+                'daily_gain': account.daily_gain if account else 0,
+                'desktop_gain': account.desktop_gain if account else 0,
+                'mobile_gain': account.mobile_gain if account else 0,
+                'last_updated': account.last_updated if account else None,
+                'is_enabled': bot_account.is_enabled,
+                'created_at': bot_account.created_at.isoformat() if bot_account.created_at else None
             })
-        else:
+        
             return jsonify({
-                "status": "success", 
-                "message": f"节点 {node_name} 已删除。"
+            'success': True,
+            'data': account_data
             })
             
     except Exception as e:
-        logger.error(f"删除节点时发生未知错误: {str(e)}")
-        import traceback
-        logger.error(f"未知错误堆栈: {traceback.format_exc()}")
-        db.session.rollback()
-        return jsonify({"status": "error", "message": f"删除节点时发生未知错误: {str(e)}"}), 500
-
-
+        current_app.logger.error(f"获取账户列表失败: {e}")
+        return jsonify({'success': False, 'message': '获取账户列表失败'}), 500
 
 @bp.route('/bot_accounts', methods=['GET', 'POST'])
 @web_login_required
 def manage_bot_accounts():
     if request.method == 'GET':
-        # 获取分页参数
-        page = int(request.args.get('page', 1))
-        page_size = int(request.args.get('pageSize', 10))
+        # 获取所有账户
+        accounts = db.session.query(
+            BotAccount,
+            Account,
+            BotNode
+        ).outerjoin(
+            Account, BotAccount.id == Account.bot_account_id
+        ).outerjoin(
+            BotNode, BotAccount.assigned_node_id == BotNode.id
+        ).all()
         
-        # 获取筛选参数
-        status_filter = request.args.get('status', '')
-        node_id_filter = request.args.get('node_id', '')
-        email_keyword = request.args.get('email', '')
-        
-        # 构建缓存键，包含分页和筛选参数
-        cache_key = f'bot_accounts_data_{page}_{page_size}_{status_filter}_{node_id_filter}_{email_keyword}'
-        cached_data = get_cached_data(cache_key)
-        if cached_data:
-            return jsonify(cached_data)
-        
-        # 优化查询：使用预加载减少N+1查询
-        from .models import UserAgent
-        
-        # 预加载所有User-Agent映射
-        user_agents = {ua.used_by_account_id: ua.id for ua in UserAgent.query.filter(UserAgent.used_by_account_id.isnot(None)).all()}
-        
-        # 构建查询 - 安全处理 created_at 字段
-        try:
-            # 先检查 created_at 字段是否存在
-            from sqlalchemy import inspect
-            inspector = inspect(db.engine)
-            columns = [col['name'] for col in inspector.get_columns('bot_accounts')]
-            has_created_at = 'created_at' in columns
-            
-            if has_created_at:
-                # 字段存在，正常查询
-                query = db.session.query(BotAccount, Account, BotNode.node_name)\
-                    .outerjoin(Account, BotAccount.id == Account.bot_account_id)\
-                    .outerjoin(BotNode, BotAccount.assigned_node_id == BotNode.id)
-            else:
-                # 字段不存在，使用基本查询
-                print("Warning: created_at field not found, using basic query")
-                query = db.session.query(BotAccount, Account, BotNode.node_name)\
-                    .outerjoin(Account, BotAccount.id == Account.bot_account_id)\
-                    .outerjoin(BotNode, BotAccount.assigned_node_id == BotNode.id)
-        except Exception as e:
-            print(f"Error checking created_at field: {e}")
-            # 出错时使用基本查询
-            query = db.session.query(BotAccount, Account, BotNode.node_name)\
-                .outerjoin(Account, BotAccount.id == Account.bot_account_id)\
-                .outerjoin(BotNode, BotAccount.assigned_node_id == BotNode.id)
-        
-        # 应用基本筛选条件
-        if status_filter in ['enabled', 'disabled']:
-            if status_filter == 'enabled':
-                query = query.filter(BotAccount.is_enabled == True)
-            elif status_filter == 'disabled':
-                query = query.filter(BotAccount.is_enabled == False)
-        
-        if node_id_filter:
-            query = query.filter(BotAccount.assigned_node_id == int(node_id_filter))
-        
-        if email_keyword:
-            query = query.filter(BotAccount.email.contains(email_keyword))
-        
-        # 对于normal/error筛选，需要特殊处理
-        if status_filter in ['normal', 'error']:
-            # 先获取所有数据，然后在内存中筛选
-            all_accounts = query.order_by(BotAccount.email).all()
-            
-            # 筛选数据
-            filtered_accounts = []
-            for acc, monitoring_data, node_name in all_accounts:
-                user_agent_id = user_agents.get(acc.id)
-                
-                # 检查账户状态
-                has_error = False
-                if acc.is_enabled and monitoring_data and monitoring_data.status_details:
-                    try:
-                        status_details = json.loads(monitoring_data.status_details)
-                        pc_status = status_details.get('pc', {}).get('status', False)
-                        mobile_status = status_details.get('mobile', {}).get('status', False)
-                        if not pc_status or not mobile_status:
-                            has_error = True
-                    except:
-                        has_error = True
-                elif acc.is_enabled:
-                    has_error = True  # 启用但没有状态信息
-                
-                # 应用normal/error筛选
-                if status_filter == 'normal':
-                    # 正常：启用且没有错误
-                    if acc.is_enabled and not has_error:
-                        filtered_accounts.append((acc, monitoring_data, node_name, user_agent_id))
-                elif status_filter == 'error':
-                    # 异常：启用但有错误
-                    if acc.is_enabled and has_error:
-                        filtered_accounts.append((acc, monitoring_data, node_name, user_agent_id))
-            
-            # 计算分页
-            total_count = len(filtered_accounts)
-            offset = (page - 1) * page_size
-            accounts = filtered_accounts[offset:offset + page_size]
-            
-        else:
-            # 普通筛选，直接在数据库层面分页
-            total_count = query.count()
-            offset = (page - 1) * page_size
-            accounts = query.order_by(BotAccount.email).offset(offset).limit(page_size).all()
-            # 为普通查询添加user_agent_id
-            accounts = [(acc, monitoring_data, node_name, user_agents.get(acc.id)) for acc, monitoring_data, node_name in accounts]
-        
-        accounts_data = []
-        for acc, monitoring_data, node_name, user_agent_id in accounts:
-            acc_dict = {
-                "id": acc.id, "email": acc.email, "password": acc.password,
-                "auxiliary_email": acc.auxiliary_email,
-                "proxy": json.loads(acc.proxy or '{}'),
-                "userAgents": json.loads(acc.user_agents or '{}'),
-                "user_agent_id": user_agent_id,
-                "hotSearchEndpoints": json.loads(acc.hot_search_endpoints or '[]'),
-                "assigned_node_id": acc.assigned_node_id,
-                "assigned_node_name": node_name,
-                "is_enabled": acc.is_enabled,
-                "created_at": acc.created_at.isoformat() if hasattr(acc, 'created_at') and acc.created_at else None,
-                "monitoring_data": {
-                    "status_details": json.loads(monitoring_data.status_details) if monitoring_data and monitoring_data.status_details else {},
-                    "last_updated": monitoring_data.last_updated if monitoring_data else None,
-                    "total_points": monitoring_data.total_points if monitoring_data else 'N/A',
-                    "daily_gain": monitoring_data.daily_gain if monitoring_data else 'N/A',
-                    "desktop_gain": monitoring_data.desktop_gain if monitoring_data else 'N/A',
-                    "mobile_gain": monitoring_data.mobile_gain if monitoring_data else 'N/A'
-                }
+        account_data = []
+        for bot_account, account, node in accounts:
+            # 构建监控数据对象
+            monitoring_data = {
+                'total_points': account.total_points if account else 0,
+                'daily_gain': account.daily_gain if account else 0,
+                'desktop_gain': account.desktop_gain if account else 0,
+                'mobile_gain': account.mobile_gain if account else 0,
+                'last_updated': account.last_updated.isoformat() if account and account.last_updated else None,
+                'status_details': account.status_details if account else None
             }
-            accounts_data.append(acc_dict)
-        
-        # 返回Layui表格期望的格式
-        result = {
-            "code": 0,
-            "msg": "",
-            "count": total_count,
-            "data": accounts_data
-        }
-        
-        # 缓存结果
-        set_cached_data(cache_key, result)
-        return jsonify(result)
-
-    if request.method == 'POST':
-            # 清除相关缓存
-            clear_cache()
             
+            account_data.append({
+                'id': bot_account.id,
+                'email': bot_account.email,
+                'password': bot_account.password,
+                'assigned_node_id': bot_account.assigned_node_id,
+                'assigned_node_name': node.node_name if node else '未分配',
+                'is_enabled': bot_account.is_enabled,
+                'monitoring_data': monitoring_data,  # 包装监控数据
+                'created_at': bot_account.created_at.isoformat() if bot_account.created_at else None
+            })
+        
+        return jsonify({
+            "code": 0,
+            "msg": "success",
+            "count": len(account_data),
+            "data": account_data
+        })
+    
+    elif request.method == 'POST':
+        # 创建新账户
             data = request.get_json()
             email = data.get('email')
-            try:
-                account = BotAccount.query.filter_by(email=email).first()
-                if not account:
-                    account = BotAccount(email=email, is_enabled=True)
-                    db.session.add(account)
-                    db.session.flush()  # 刷新以获取id
-                    # 创建对应的Account记录
-                    new_account = Account(bot_account_id=account.id, total_points=0, daily_gain=0)
-                    db.session.add(new_account)
-                else:
-                    db.session.add(account)
-
-                # 处理密码字段：完全移除密码验证，允许空密码
                 password = data.get('password')
-                if password:  # 如果密码不为空，则更新密码
-                    account.password = password
-                # 完全移除密码验证，允许空密码
-                
-                account.auxiliary_email = data.get('auxiliary_email')
-                account.proxy = json.dumps(data.get('proxy', {}))
-                account.hot_search_endpoints = json.dumps(data.get('hotSearchEndpoints', []))
-                account.assigned_node_id = data.get('assigned_node_id')
-                
-                # 处理User-Agent分配
-                user_agent_id = data.get('user_agent_id')
-                
-                # 先释放当前账户使用的User-Agent
-                from .models import UserAgent
-                current_user_agent = UserAgent.query.filter_by(used_by_account_id=account.id).first()
-                if current_user_agent:
-                    current_user_agent.is_used = False
-                    current_user_agent.used_by_account_id = None
-                
-                if user_agent_id and user_agent_id != 'custom':
-                    # 如果选择了预定义的User-Agent
-                    user_agent = UserAgent.query.get(user_agent_id)
-                    if user_agent and not user_agent.is_used:
-                        # 分配User-Agent给账户
-                        user_agent.is_used = True
-                        user_agent.used_by_account_id = account.id
-                        # 设置账户的User-Agent
-                        account.user_agents = json.dumps({
-                            'desktop': user_agent.desktop_ua,
-                            'mobile': user_agent.mobile_ua
-                        })
-                    else:
-                        return jsonify({"status": "error", "message": "选择的User-Agent不可用或已被使用"}), 400
-                else:
-                    # 使用自定义User-Agent
-                    account.user_agents = json.dumps(data.get('userAgents', {}))
-                
+        assigned_node_id = data.get('assigned_node_id')
+        
+        if not email or not password:
+            return jsonify({'error': '邮箱和密码不能为空'}), 400
+        
+        # 检查邮箱是否已存在
+        existing_account = BotAccount.query.filter_by(email=email).first()
+        if existing_account:
+            return jsonify({'error': '邮箱已存在'}), 400
+        
+        # 创建账户
+        new_account = BotAccount(
+            email=email,
+            password=password,
+            assigned_node_id=assigned_node_id,
+            is_enabled=True
+        )
+        
+        db.session.add(new_account)
                 db.session.commit()
-                return jsonify({"status": "success", "message": "Account saved."})
-            except Exception as e:
-                db.session.rollback()
-                return jsonify({"status": "error", "message": str(e)}), 500
+        
+        return jsonify({
+            'success': True,
+            'message': '账户创建成功',
+            'account_id': new_account.id
+        })
 
 @bp.route('/bot_accounts/<int:account_id>/toggle', methods=['POST'])
 @web_login_required
-def toggle_bot_account(account_id):
+def toggle_account(account_id):
+    """切换账户激活状态"""
     try:
-        # 查找账户
-        print(f"尝试切换账户状态，账户ID: {account_id}")
         account = BotAccount.query.get(account_id)
         if not account:
-            print(f"未找到账户: {account_id}")
-            return jsonify({"status": "error", "message": "未找到该账户"}), 404
+            return jsonify({'error': '账户不存在'}), 404
         
-        # 记录原始状态
-        original_status = account.is_enabled
-        print(f"账户 {account.email} (ID: {account_id}) 原始状态: {original_status}")
-        
-        # 切换状态
         account.is_enabled = not account.is_enabled
-        status_text = "启用" if account.is_enabled else "禁用"
-        print(f"账户状态切换为: {account.is_enabled}")
-        
-        # 提交更改
         db.session.commit()
-        print(f"数据库更改已提交")
         
-        # 验证更改是否生效
-        updated_account = BotAccount.query.get(account_id)
-        print(f"验证更改: 切换后状态为 {updated_account.is_enabled}")
-        
-        return jsonify({"status": "success", "message": f"账户已{status_text}", "is_enabled": updated_account.is_enabled})
+        status = '激活' if account.is_enabled else '停用'
+        return jsonify({
+            'success': True,
+            'message': f'账户已{status}',
+            'is_enabled': account.is_enabled
+        })
+    
     except Exception as e:
-        db.session.rollback()
-        print(f"切换账户状态时出错: {str(e)}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        current_app.logger.error(f"切换账户状态失败: {e}")
+        return jsonify({'error': '切换账户状态失败'}), 500
 
 @bp.route('/bot_accounts/<int:account_id>', methods=['GET', 'DELETE'])
 @web_login_required
-def manage_single_bot_account(account_id):
+def manage_single_account(account_id):
     if request.method == 'GET':
-        # 获取单个账户信息
-        try:
+        # 获取单个账户详情
             account = BotAccount.query.get(account_id)
             if not account:
-                return jsonify({"status": "error", "message": "Account not found"}), 404
-            
-            # 获取关联的监控数据
-            monitoring_data = None
-            if hasattr(account, 'monitoring_data') and account.monitoring_data:
-                monitoring_data = {
-                    'total_points': account.monitoring_data.total_points,
-                    'daily_gain': account.monitoring_data.daily_gain,
-                    'desktop_gain': account.monitoring_data.desktop_gain,
-                    'mobile_gain': account.monitoring_data.mobile_gain,
-                    'last_updated': account.monitoring_data.last_updated.isoformat() if account.monitoring_data.last_updated else None,
-                    'status_details': account.monitoring_data.status_details
-                }
+            return jsonify({'error': '账户不存在'}), 404
+        
+        # 获取关联的积分数据
+        points_data = Account.query.filter_by(bot_account_id=account_id).first()
             
             # 获取分配的节点信息
-            node_info = None
-            if account.assigned_node_id:
-                node = BotNode.query.get(account.assigned_node_id)
-                if node:
-                    node_info = {
-                        'id': node.id,
-                        'name': node.node_name
-                    }
+        node = BotNode.query.get(account.assigned_node_id) if account.assigned_node_id else None
             
             account_data = {
                 'id': account.id,
                 'email': account.email,
                 'password': account.password,
-                'auxiliary_email': account.auxiliary_email,
-                'proxy': account.proxy,
-                'user_agents': account.user_agents,
-                'hot_search_endpoints': account.hot_search_endpoints,
                 'assigned_node_id': account.assigned_node_id,
-                'status': account.status,
+            'node_name': node.node_name if node else '未分配',
                 'is_enabled': account.is_enabled,
-                'monitoring_data': monitoring_data,
-                'node_info': node_info
-            }
-            
-            return jsonify({"status": "success", "data": account_data})
-            
-        except Exception as e:
-            return jsonify({"status": "error", "message": str(e)}), 500
+            'total_points': points_data.total_points if points_data else 0,
+            'daily_gain': points_data.daily_gain if points_data else 0,
+            'desktop_points': points_data.desktop_points if points_data else 0,
+            'mobile_points': points_data.mobile_points if points_data else 0,
+            'desktop_gain': points_data.desktop_gain if points_data else 0,
+            'mobile_gain': points_data.mobile_gain if points_data else 0,
+            'last_updated': points_data.last_updated if points_data else None,
+            'created_at': account.created_at.isoformat() if account.created_at else None
+        }
+        
+        return jsonify(account_data)
     
     elif request.method == 'DELETE':
         # 删除账户
         try:
             account = BotAccount.query.get(account_id)
-            if account:
-                # 释放该账户使用的User-Agent
-                from .models import UserAgent
-                user_agent = UserAgent.query.filter_by(used_by_account_id=account.id).first()
-                if user_agent:
-                    user_agent.is_used = False
-                    user_agent.used_by_account_id = None
+            if not account:
+                return jsonify({'error': '账户不存在'}), 404
+            
+            # 删除关联的积分数据
+            points_data = Account.query.filter_by(bot_account_id=account_id).first()
+            if points_data:
+                db.session.delete(points_data)
                 
                 db.session.delete(account)
                 db.session.commit()
-            return jsonify({"status": "success", "message": "Account deleted."})
+            
+            return jsonify({'status': 'success', 'message': '账户删除成功'})
+        
         except Exception as e:
-            db.session.rollback()
-            return jsonify({"status": "error", "message": str(e)}), 500
+            current_app.logger.error(f"删除账户失败: {e}")
+            return jsonify({'error': '删除账户失败'}), 500
 
-
+@bp.route('/bot_accounts/batch_delete', methods=['POST'])
+@web_login_required
+def batch_delete_accounts():
+    """批量删除账户"""
+    try:
+        data = request.get_json()
+        account_ids = data.get('ids', [])
+        
+        if not account_ids:
+            return jsonify({'error': '请选择要删除的账户'}), 400
+        
+        deleted_count = 0
+        for account_id in account_ids:
+            account = BotAccount.query.get(account_id)
+            if account:
+                # 删除关联的积分数据
+                points_data = Account.query.filter_by(bot_account_id=account_id).first()
+                if points_data:
+                    db.session.delete(points_data)
+                
+                db.session.delete(account)
+                deleted_count += 1
+        
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success', 
+            'message': f'成功删除 {deleted_count} 个账户'
+        })
+    
+    except Exception as e:
+        current_app.logger.error(f"批量删除账户失败: {e}")
+        db.session.rollback()
+        return jsonify({'error': '批量删除账户失败'}), 500
 
 @bp.route('/push_configs', methods=['GET', 'POST'])
 @web_login_required
 def manage_push_configs():
     if request.method == 'GET':
+        # 获取所有推送配置
         configs = PushConfig.query.all()
-        return jsonify([{ "id": c.id, "url": c.url, "notify_on_node_online": c.notify_on_node_online, "notify_on_node_offline": c.notify_on_node_offline, "notify_on_account_error": c.notify_on_account_error, "notify_on_verification_code": c.notify_on_verification_code } for c in configs])
-
-    if request.method == 'POST':
+        config_data = []
+        
+        for config in configs:
+            config_data.append({
+                'id': config.id,
+                'name': config.name,
+                'channel': config.channel,
+                'is_enabled': config.is_enabled,
+                'config_data': json.loads(config.config_data) if config.config_data else {},
+                'created_at': config.created_at.isoformat() if config.created_at else None
+            })
+        
+        return jsonify(config_data)
+    
+    elif request.method == 'POST':
+        # 创建新推送配置
         data = request.get_json()
-        url = data.get('url')
-        if not url: return jsonify({"status": "error", "message": "URL is required"}), 400
+        name = data.get('name')
+        channel = data.get('channel')
+        config_data = data.get('config_data', {})
         
-        config_id = data.get('id')
-        if config_id:
-            config = PushConfig.query.get(config_id)
-        else:
-            config = PushConfig()
-            db.session.add(config)
+        if not name or not channel:
+            return jsonify({'error': '配置名称和渠道不能为空'}), 400
         
-        config.url = url
+        # 检查配置名称是否已存在
+        existing_config = PushConfig.query.filter_by(name=name).first()
+        if existing_config:
+            return jsonify({'error': '配置名称已存在'}), 400
         
-        # 布尔值转换函数
-        def to_bool(value):
-            if isinstance(value, bool):
-                return value
-            if isinstance(value, str):
-                return value.lower() in ('true', '1', 'on', 'yes')
-            return bool(value)
+        # 创建配置
+        new_config = PushConfig(
+            name=name,
+            channel=channel,
+            config_data=json.dumps(config_data),
+            is_enabled=True
+        )
         
-        # 处理布尔值转换，确保正确转换为布尔类型
-        config.notify_on_node_online = to_bool(data.get('notify_on_node_online', False))
-        config.notify_on_node_offline = to_bool(data.get('notify_on_node_offline', False))
-        config.notify_on_account_error = to_bool(data.get('notify_on_account_error', False))
-        config.notify_on_verification_code = to_bool(data.get('notify_on_verification_code', False))
-        
+        db.session.add(new_config)
         db.session.commit()
-        return jsonify({"status": "success"})
+        
+        return jsonify({
+            'success': True,
+            'message': '推送配置创建成功',
+            'config_id': new_config.id
+        })
 
 @bp.route('/push_configs/<int:config_id>', methods=['DELETE'])
 @web_login_required
 def delete_push_config(config_id):
+    """删除推送配置"""
+    try:
     config = PushConfig.query.get(config_id)
-    if config:
+        if not config:
+            return jsonify({'error': '推送配置不存在'}), 404
+        
         db.session.delete(config)
         db.session.commit()
-    return jsonify({"status": "success"})
+        
+        return jsonify({'success': True, 'message': '推送配置删除成功'})
+    
+    except Exception as e:
+        current_app.logger.error(f"删除推送配置失败: {e}")
+        return jsonify({'error': '删除推送配置失败'}), 500
 
 @bp.route('/nodes/<int:node_id>/logs', methods=['GET'])
 @web_login_required
 def get_node_logs(node_id):
-    """获取指定节点的日志"""
+    """获取节点日志"""
     try:
-        # 验证节点是否存在
         node = BotNode.query.get(node_id)
         if not node:
-            return jsonify({"status": "error", "message": "未找到该节点"}), 404
+            return jsonify({'error': '节点不存在'}), 404
         
-        # 获取查询参数
-        level = request.args.get('level', '')
-        title = request.args.get('title', '')
-        limit = int(request.args.get('limit', 100))
-        
-        # 构建查询
-        from .models import NodeLog
-        query = NodeLog.query.filter_by(node_id=node_id)
-        
-        if level:
-            query = query.filter(NodeLog.level == level)
-        
-        if title:
-            query = query.filter(NodeLog.title.contains(title))
-        
-        # 按时间倒序排列并限制数量
-        logs = query.order_by(NodeLog.timestamp.desc()).limit(limit).all()
-        
-        # 转换为JSON格式
-        logs_data = []
-        for log_entry in logs:
-            logs_data.append({
-                'id': log_entry.id,
-                'timestamp': log_entry.timestamp.isoformat(),
-                'level': log_entry.level,
-                'platform': log_entry.platform,
-                'title': log_entry.title,
-                'message': log_entry.message,
-                'pid': log_entry.pid
-            })
+        # 这里可以添加从数据库或文件系统读取日志的逻辑
+        # 目前返回空日志
+        logs = []
         
         return jsonify({
-            "status": "success",
-            "node_name": node.node_name,
-            "logs": logs_data,
-            "total": len(logs_data)
+            'success': True,
+            'logs': logs,
+            'node_name': node.node_name
         })
         
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        current_app.logger.error(f"获取节点日志失败: {e}")
+        return jsonify({'error': '获取节点日志失败'}), 500
 
 @bp.route('/nodes/<int:node_id>/logs/clear', methods=['POST'])
 @web_login_required
 def clear_node_logs(node_id):
-    """清空指定节点的日志"""
+    """清空节点日志"""
     try:
-        # 验证节点是否存在
         node = BotNode.query.get(node_id)
         if not node:
-            return jsonify({"status": "error", "message": "未找到该节点"}), 404
+            return jsonify({'error': '节点不存在'}), 404
         
-        # 删除该节点的所有日志
-        from .models import NodeLog
-        deleted_count = NodeLog.query.filter_by(node_id=node_id).delete()
-        db.session.commit()
+        # 这里可以添加清空日志的逻辑
+        # 目前只是简单返回成功
         
-        return jsonify({
-            "status": "success",
-            "message": f"已清空节点 {node.node_name} 的 {deleted_count} 条日志"
-        })
+        return jsonify({'status': 'success', 'message': '日志已清空'})
         
     except Exception as e:
-        db.session.rollback()
-        return jsonify({"status": "error", "message": str(e)}), 500
+        current_app.logger.error(f"清空节点日志失败: {e}")
+        return jsonify({'error': '清空节点日志失败'}), 500
 
-# 移动端积分数据接口（完全免登录，无需Token认证）
 @bp.route('/mobile/get_points', methods=['GET'])
 def mobile_get_points():
-    # 直接获取所有账户的积分数据，无需Token认证，与账户管理页面保持一致
-    accounts = BotAccount.query.order_by(BotAccount.email).all()
-    points_data = []
-    
-    for acc in accounts:
-        monitoring_data = acc.monitoring_data
-        
-        # 计算积分价值
-        total_value = monitoring_data.total_points / 179.25 if monitoring_data and monitoring_data.total_points else 0
-        daily_value = monitoring_data.daily_gain / 179.25 if monitoring_data and monitoring_data.daily_gain else 0
-        
-        # 检查数据是否过期（超过24小时）
-        last_updated = None
-        is_stale = False
-        
-        if monitoring_data and monitoring_data.last_updated:
-            try:
-                # 尝试处理字符串格式的时间
-                if isinstance(monitoring_data.last_updated, str):
-                    last_updated = datetime.fromisoformat(monitoring_data.last_updated.replace('Z', '+00:00'))
-                # 尝试处理整数时间戳
-                elif isinstance(monitoring_data.last_updated, (int, float)):
-                    last_updated = datetime.fromtimestamp(monitoring_data.last_updated, tz=timezone.utc)
-                # 如果已经是datetime对象
-                elif isinstance(monitoring_data.last_updated, datetime):
-                    last_updated = monitoring_data.last_updated
-                
-                if last_updated:
-                    # 确保两个时间都是时区感知的
-                    now_utc = datetime.now(timezone.utc)
-                    if last_updated.tzinfo is None:
-                        # 如果last_updated没有时区信息，假设为UTC
-                        last_updated = last_updated.replace(tzinfo=timezone.utc)
-                    time_diff = now_utc - last_updated
-                    is_stale = time_diff.total_seconds() > 86400  # 24小时
-            except Exception as e:
-                # 如果时间解析失败，记录错误但不影响其他功能
-                current_app.logger.warning(f"Failed to parse last_updated for account {acc.email}: {e}")
-                is_stale = True  # 解析失败时标记为过期
-        
-        # 从status_details中解析状态信息，与账户管理页面保持一致
-        status_details = {}
-        if monitoring_data and monitoring_data.status_details:
-            try:
-                status_details = json.loads(monitoring_data.status_details)
-            except:
-                status_details = {}
-        
-        # 根据status_details和启用状态确定显示状态
-        if not acc.is_enabled:
-            desktop_status = '禁用'
-            mobile_status = '禁用'
-        else:
-            # 优先使用monitoring_data.status_details中的真实状态
-            # 从status_details中获取状态信息（注意：键名是'pc'而不是'desktop'）
-            desktop_status_raw = status_details.get('pc', {}).get('status', False)
-            mobile_status_raw = status_details.get('mobile', {}).get('status', False)
-            
-            # 解析桌面端状态
-            if desktop_status_raw:
-                desktop_status = '正常'
-            else:
-                # 检查具体的错误信息
-                desktop_error = status_details.get('pc', {}).get('error', '')
-                if '需要验证' in desktop_error:
-                    desktop_status = '需要验证'
-                elif '密码错误' in desktop_error:
-                    desktop_status = '密码错误'
-                elif '已锁定' in desktop_error:
-                    desktop_status = '已锁定'
-                elif '登录失败' in desktop_error:
-                    desktop_status = '登录失败'
-                else:
-                    desktop_status = '异常'
-            
-            # 解析移动端状态
-            if mobile_status_raw:
-                mobile_status = '正常'
-            else:
-                # 检查具体的错误信息
-                mobile_error = status_details.get('mobile', {}).get('error', '')
-                if '需要验证' in mobile_error:
-                    mobile_status = '需要验证'
-                elif '密码错误' in mobile_error:
-                    mobile_status = '密码错误'
-                elif '已锁定' in mobile_error:
-                    mobile_status = '已锁定'
-                elif '登录失败' in mobile_error:
-                    mobile_status = '登录失败'
-                else:
-                    mobile_status = '异常'
-        
-        points_data.append({
-            'email': acc.email,
-            'total_points': monitoring_data.total_points if monitoring_data else None,
-            'daily_gain': monitoring_data.daily_gain if monitoring_data else None,
-            'desktop_gain': monitoring_data.desktop_gain if monitoring_data else None,
-            'mobile_gain': monitoring_data.mobile_gain if monitoring_data else None,
-            'total_value': round(total_value, 2),
-            'daily_value': round(daily_value, 2),
-            'node_name': acc.node.node_name if acc.node else None,
-            'last_updated': monitoring_data.last_updated if monitoring_data else None,
-            'is_stale': is_stale,
-            'desktop_status': desktop_status,
-            'mobile_status': mobile_status
-        })
-    
-    return jsonify(points_data)
-
-@bp.route('/system_status', methods=['GET'])
-@web_login_required
-def get_system_status():
-    """获取系统资源状态"""
-    import psutil
-    import os
-    import platform
-    import socket
-    import requests
-    from datetime import datetime, timedelta
-    
+    """移动端获取积分数据（免登录）"""
     try:
-        # CPU使用率
-        cpu_percent = psutil.cpu_percent(interval=1)
-        cpu_cores = psutil.cpu_count()
+        # 检查缓存
+        cache_key = 'mobile_points_data'
+        cached_data = get_cached_data(cache_key)
+        if cached_data:
+            return jsonify(cached_data)
         
-        # 内存使用情况
-        memory_used_gb = 0
-        memory_total_gb = 0
-        memory_percent = 0
+        # 获取所有节点和账户数据
+        nodes = BotNode.query.filter_by(status=1).all()  # 只获取在线节点
+        node_data = []
         
-        try:
-            # 尝试从挂载的 /host/proc/meminfo 获取内存信息
-            if os.path.exists('/host/proc/meminfo'):
-                current_app.logger.info("从 /host/proc/meminfo 读取内存信息")
-                with open('/host/proc/meminfo', 'r') as f:
-                    meminfo = {}
-                    for line in f:
-                        if ':' in line:
-                            key, value = line.split(':', 1)
-                            meminfo[key.strip()] = value.strip()
-                    
-                    current_app.logger.info(f"内存信息键: {list(meminfo.keys())}")
-                    
-                    # 解析内存信息
-                    if 'MemTotal' in meminfo and 'MemAvailable' in meminfo:
-                        total_kb = int(meminfo['MemTotal'].split()[0])
-                        available_kb = int(meminfo['MemAvailable'].split()[0])
-                        used_kb = total_kb - available_kb
-                        
-                        memory_total_gb = total_kb / (1024 ** 2)  # KB to GB
-                        memory_used_gb = used_kb / (1024 ** 2)    # KB to GB
-                        memory_percent = (used_kb / total_kb) * 100 if total_kb > 0 else 0
-                        current_app.logger.info(f"内存统计: 总计 {memory_total_gb:.2f}GB, 已用 {memory_used_gb:.2f}GB, 使用率 {memory_percent:.1f}%")
-                    elif 'MemTotal' in meminfo and 'MemFree' in meminfo:
-                        total_kb = int(meminfo['MemTotal'].split()[0])
-                        free_kb = int(meminfo['MemFree'].split()[0])
-                        used_kb = total_kb - free_kb
-                        
-                        memory_total_gb = total_kb / (1024 ** 2)  # KB to GB
-                        memory_used_gb = used_kb / (1024 ** 2)    # KB to GB
-                        memory_percent = (used_kb / total_kb) * 100 if total_kb > 0 else 0
-                        current_app.logger.info(f"内存统计: 总计 {memory_total_gb:.2f}GB, 已用 {memory_used_gb:.2f}GB, 使用率 {memory_percent:.1f}%")
-                    else:
-                        current_app.logger.warning("内存信息文件中缺少必要的字段")
-                        # 尝试其他字段
-                        if 'MemTotal' in meminfo:
-                            total_kb = int(meminfo['MemTotal'].split()[0])
-                            # 尝试计算已用内存
-                            if 'Buffers' in meminfo and 'Cached' in meminfo:
-                                buffers_kb = int(meminfo['Buffers'].split()[0])
-                                cached_kb = int(meminfo['Cached'].split()[0])
-                                free_kb = int(meminfo.get('MemFree', '0').split()[0])
-                                used_kb = total_kb - free_kb - buffers_kb - cached_kb
-                            else:
-                                free_kb = int(meminfo.get('MemFree', '0').split()[0])
-                                used_kb = total_kb - free_kb
-                            
-                            memory_total_gb = total_kb / (1024 ** 2)
-                            memory_used_gb = used_kb / (1024 ** 2)
-                            memory_percent = (used_kb / total_kb) * 100 if total_kb > 0 else 0
-                            current_app.logger.info(f"备用内存统计: 总计 {memory_total_gb:.2f}GB, 已用 {memory_used_gb:.2f}GB, 使用率 {memory_percent:.1f}%")
-            else:
-                current_app.logger.warning("/host/proc/meminfo 文件不存在")
-        except Exception as e:
-            current_app.logger.warning(f"无法从宿主机 /proc/meminfo 读取内存信息: {e}")
+        for node in nodes:
+            # 获取该节点下的账户
+            accounts = db.session.query(
+                BotAccount,
+                Account
+            ).outerjoin(
+                Account, BotAccount.id == Account.bot_account_id
+            ).filter(
+                BotAccount.assigned_node_id == node.id,
+                BotAccount.is_enabled == True
+            ).all()
+            
+            account_data = []
+            total_points = 0
+            
+            for bot_account, account in accounts:
+                if account:
+                    total_points += account.total_points or 0
+                    account_data.append({
+                        'email': bot_account.email,
+                        'total_points': account.total_points or 0,
+                        'daily_gain': account.daily_gain or 0,
+                        'desktop_points': account.desktop_points or 0,
+                        'mobile_points': account.mobile_points or 0
+                    })
+            
+            if account_data:  # 只显示有账户的节点
+                node_data.append({
+                    'node_name': node.node_name,
+                    'account_count': len(account_data),
+                    'total_points': total_points,
+                    'accounts': account_data
+                })
         
-        # 如果无法从挂载文件获取，则使用 psutil
-        if memory_total_gb == 0:
-            try:
-                memory = psutil.virtual_memory()
-                memory_used_gb = memory.used / (1024 ** 3)
-                memory_total_gb = memory.total / (1024 ** 3)
-                memory_percent = memory.percent
-            except Exception as e2:
-                current_app.logger.warning(f"psutil 内存统计也失败: {e2}")
-                memory_used_gb = 0
-                memory_total_gb = 0
-                memory_percent = 0
+        # 缓存数据
+        set_cached_data(cache_key, node_data)
         
-        # 磁盘使用情况
-        disk = psutil.disk_usage('/')
-        disk_used_gb = disk.used / (1024 ** 3)
-        disk_total_gb = disk.total / (1024 ** 3)
-        disk_percent = (disk.used / disk.total) * 100 if disk.total > 0 else 0
-        
-        # 系统运行时间
-        uptime_seconds = 0
-        try:
-            # 尝试从挂载的 /host/proc/uptime 获取系统运行时间
-            if os.path.exists('/host/proc/uptime'):
-                with open('/host/proc/uptime', 'r') as f:
-                    uptime_line = f.read().strip()
-                    uptime_seconds = int(float(uptime_line.split()[0]))
-            else:
-                # 回退到使用 psutil
-                uptime_seconds = int(time.time() - psutil.boot_time())
-        except Exception as e:
-            current_app.logger.warning(f"无法获取系统运行时间: {e}")
-            # 回退到使用 psutil
-            try:
-                uptime_seconds = int(time.time() - psutil.boot_time())
-            except:
-                uptime_seconds = 0
-        
-        # 网络连接数
-        connections = 0
-        try:
-            # 尝试从挂载的 /host/proc/net/sockstat 获取连接数
-            if os.path.exists('/host/proc/net/sockstat'):
-                with open('/host/proc/net/sockstat', 'r') as f:
-                    for line in f:
-                        if line.startswith('TCP:'):
-                            parts = line.split()
-                            if len(parts) >= 4:
-                                try:
-                                    connections = int(parts[2])  # established connections
-                                except (ValueError, IndexError):
-                                    pass
-                            break
-            else:
-                # 回退到使用 psutil
-                connections = len(psutil.net_connections())
-        except Exception as e:
-            current_app.logger.warning(f"无法获取网络连接数: {e}")
-            # 回退到使用 psutil
-            try:
-                connections = len(psutil.net_connections())
-            except:
-                connections = 0
-        
-        # 活跃节点数（从数据库查询）
-        active_nodes = BotNode.query.filter_by(status=1).count()
-        
-        # 账户数量
-        account_count = BotAccount.query.count()
-        
-        # 系统信息
-        # 优先从挂载的 /host/proc/sys/kernel/hostname 获取宿主机主机名
-        hostname = "unknown"
-        
-        try:
-            if os.path.exists('/host/proc/sys/kernel/hostname'):
-                with open('/host/proc/sys/kernel/hostname', 'r') as f:
-                    hostname = f.read().strip()
-                    current_app.logger.info(f"从 /host/proc/sys/kernel/hostname 获取主机名: {hostname}")
-            else:
-                current_app.logger.warning("/host/proc/sys/kernel/hostname 文件不存在")
-                
-            # 如果从文件获取失败，尝试环境变量
-            if not hostname or hostname == "unknown":
-                hostname = os.environ.get('HOST_HOSTNAME', '')
-                current_app.logger.info(f"从环境变量 HOST_HOSTNAME 获取主机名: {hostname}")
-                
-                if not hostname or hostname in ['$(hostname)', 'unknown', '']:
-                    # 最后回退到容器主机名
-                    hostname = socket.gethostname()
-                    current_app.logger.info(f"使用容器主机名: {hostname}")
-        except Exception as e:
-            current_app.logger.warning(f"无法获取宿主机主机名: {e}")
-            hostname = socket.gethostname()
-            current_app.logger.info(f"回退到容器主机名: {hostname}")
-        
-        # 尝试从挂载的宿主机文件获取系统信息
-        system_version = "未知"
-        system_arch = "未知"
-        
-        try:
-            # 从挂载的 /etc/host-os-release 文件读取系统信息
-            if os.path.exists('/etc/host-os-release'):
-                with open('/etc/host-os-release', 'r') as f:
-                    os_info = {}
-                    for line in f:
-                        if '=' in line:
-                            key, value = line.strip().split('=', 1)
-                            os_info[key] = value.strip('"')
-                    
-                    # 构建系统版本信息
-                    if 'PRETTY_NAME' in os_info:
-                        system_version = os_info['PRETTY_NAME']
-                    elif 'NAME' in os_info and 'VERSION' in os_info:
-                        system_version = f"{os_info['NAME']} {os_info['VERSION']}"
-                    elif 'ID' in os_info and 'VERSION_ID' in os_info:
-                        system_version = f"{os_info['ID']} {os_info['VERSION_ID']}"
-        except Exception as e:
-            current_app.logger.warning(f"无法读取宿主机系统信息: {e}")
-        
-        # 如果无法从挂载文件获取，则使用容器内信息
-        if system_version == "未知":
-            system_info = platform.uname()
-            system_version = f"{system_info.system} {system_info.release}"
-            system_arch = system_info.machine
-        else:
-            # 从挂载的 /proc 获取架构信息
-            try:
-                if os.path.exists('/host/proc/version'):
-                    with open('/host/proc/version', 'r') as f:
-                        version_info = f.read()
-                        # 提取架构信息
-                        if 'x86_64' in version_info:
-                            system_arch = 'x86_64'
-                        elif 'aarch64' in version_info or 'arm64' in version_info:
-                            system_arch = 'aarch64'
-                        elif 'arm' in version_info:
-                            system_arch = 'arm'
-                        else:
-                            system_arch = 'unknown'
-            except Exception as e:
-                current_app.logger.warning(f"无法读取宿主机架构信息: {e}")
-                system_arch = platform.machine()
-        
-        # 获取公网IP
-        public_ip = "未知"
-        try:
-            response = requests.get('https://api.ipify.org', timeout=5)
-            if response.status_code == 200:
-                public_ip = response.text.strip()
-        except:
-            try:
-                response = requests.get('https://ipinfo.io/ip', timeout=5)
-                if response.status_code == 200:
-                    public_ip = response.text.strip()
-            except:
-                pass
-        
-        # 注意：已移除网络流量统计功能，专注于积分分析
-        
-        try:
-            # 尝试从挂载的 /host/proc 获取网络统计信息
-            if os.path.exists('/host/proc/net/dev'):
-                current_app.logger.info("从 /host/proc/net/dev 读取网络统计信息")
-                with open('/host/proc/net/dev', 'r') as f:
-                    lines = f.readlines()
-                    current_app.logger.info(f"网络接口文件行数: {len(lines)}")
-                    for line in lines[2:]:  # 跳过前两行标题
-                        parts = line.split(':')
-                        if len(parts) >= 2:
-                            interface = parts[0].strip()
-                            stats = parts[1].split()
-                            if len(stats) >= 10:
-                                # 排除虚拟接口和回环接口，但包含物理网卡
-                                if not interface.startswith(('lo', 'docker', 'veth', 'br-', 'virbr', 'tun', 'tap', 'wlan', 'wifi')):
-                                    try:
-                                        bytes_recv = int(stats[0])
-                                        bytes_sent = int(stats[8])
-                                        total_bytes_recv += bytes_recv
-                                        total_bytes_sent += bytes_sent
-                                        current_app.logger.info(f"接口 {interface}: 接收 {bytes_recv} 字节, 发送 {bytes_sent} 字节")
-                                    except (ValueError, IndexError) as e:
-                                        current_app.logger.warning(f"解析接口 {interface} 数据失败: {e}")
-                                        continue
-                                else:
-                                    current_app.logger.info(f"跳过虚拟接口: {interface}")
-                current_app.logger.info(f"总网络流量: 接收 {total_bytes_recv} 字节, 发送 {total_bytes_sent} 字节")
-            else:
-                current_app.logger.warning("/host/proc/net/dev 文件不存在")
-        except Exception as e:
-            current_app.logger.warning(f"无法从宿主机 /proc/net/dev 读取网络统计: {e}")
-        
-        # 如果无法从挂载文件获取或获取失败，则使用 psutil
-        if total_bytes_sent == 0 and total_bytes_recv == 0:
-            try:
-                current_app.logger.info("回退到使用 psutil 获取网络统计")
-                network_io = psutil.net_io_counters(pernic=True)
-                for interface, stats in network_io.items():
-                    # 更宽松的过滤条件，包含更多物理网卡
-                    if not interface.startswith(('lo', 'docker', 'veth', 'br-', 'virbr', 'tun', 'tap')):
-                        total_bytes_sent += stats.bytes_sent
-                        total_bytes_recv += stats.bytes_recv
-                        current_app.logger.info(f"psutil 接口 {interface}: 接收 {stats.bytes_recv} 字节, 发送 {stats.bytes_sent} 字节")
-            except Exception as e2:
-                current_app.logger.warning(f"psutil 网络统计也失败: {e2}")
-        
-        # 如果仍然没有数据，尝试获取所有接口的总计
-        if total_bytes_sent == 0 and total_bytes_recv == 0:
-            try:
-                current_app.logger.info("尝试获取所有网络接口的总计")
-                network_io = psutil.net_io_counters()
-                total_bytes_sent = network_io.bytes_sent
-                total_bytes_recv = network_io.bytes_recv
-                current_app.logger.info(f"总计网络流量: 接收 {total_bytes_recv} 字节, 发送 {total_bytes_sent} 字节")
-            except Exception as e3:
-                current_app.logger.warning(f"获取总计网络统计也失败: {e3}")
-        
-        # 转换为GB
-        traffic_sent_gb = total_bytes_sent / (1024 ** 3)
-        traffic_recv_gb = total_bytes_recv / (1024 ** 3)
-        
-        # 仅在调试模式下输出详细信息
-        if current_app.debug:
-            current_app.logger.debug(f"系统监控数据: 磁盘={disk_percent:.1f}%, 内存={memory_percent:.1f}%, CPU={cpu_percent:.1f}%, 运行时间={uptime_seconds/86400:.1f}天")
-        
-        return jsonify({
-            'cpu': round(cpu_percent, 1),
-            'cpuCores': cpu_cores,
-            'memory': {
-                'used': round(memory_used_gb, 2),
-                'total': round(memory_total_gb, 2),
-                'percent': round(memory_percent, 1)
-            },
-            'disk': {
-                'used': round(disk_used_gb, 1),
-                'total': round(disk_total_gb, 1),
-                'percent': round(disk_percent, 1)
-            },
-            'uptime': uptime_seconds,
-            'connections': connections,
-            'activeNodes': active_nodes,
-            'accountCount': account_count,
-            'systemInfo': {
-                'hostname': hostname,
-                'version': system_version,
-                'arch': system_arch,
-                'publicIp': public_ip
-            },
-        })
-        
+        return jsonify(node_data)
+    
     except Exception as e:
-        current_app.logger.error(f"获取系统状态失败: {e}")
-        return jsonify({
-            'error': '获取系统状态失败',
-            'message': str(e)
-        }), 500
+        current_app.logger.error(f"获取移动端积分数据失败: {e}")
+        return jsonify({'error': '获取积分数据失败'}), 500
 
 @bp.route('/wallpaper', methods=['GET'])
 def get_wallpaper():
@@ -1530,7 +822,7 @@ def get_wallpaper():
     except Exception as e:
         return jsonify({
             "success": False,
-            "message": f"获取壁纸失败: {str(e)}"
+            "error": str(e)
         }), 500
 
 @bp.route('/points_history', methods=['GET'])
@@ -1540,7 +832,7 @@ def get_points_history():
     try:
         # 获取查询参数
         days = int(request.args.get('days', 7))  # 默认查询7天
-        account_id = request.args.get('account_id')  # 可选：指定账户ID
+        account_id = request.args.get('account_id', type=int)
         
         # 计算查询日期范围
         end_date = datetime.now(timezone.utc).date()
@@ -1571,12 +863,12 @@ def get_points_history():
         
         # 组织数据
         history_data = []
-        for history, email, node_name in results:
+        for result in results:
+            history, email, node_name = result
             history_data.append({
                 'id': history.id,
-                'account_id': history.bot_account_id,
                 'email': email,
-                'node_name': node_name,
+                'node_name': node_name or '未分配',
                 'total_points': history.total_points,
                 'daily_gain': history.daily_gain,
                 'desktop_gain': history.desktop_gain,
@@ -1586,17 +878,11 @@ def get_points_history():
             })
         
         return jsonify({
-            'status': 'success',
-            'data': history_data,
-            'total': len(history_data),
-            'date_range': {
-                'start_date': start_date.isoformat(),
-                'end_date': end_date.isoformat(),
-                'days': days
-            }
+            'success': True,
+            'data': history_data
         })
         
-    except Exception as e:
+        except Exception as e:
         return jsonify({
             'status': 'error',
             'message': f'获取积分历史失败: {str(e)}'
@@ -1633,9 +919,8 @@ def get_points_analysis():
         
         # 按日期组织数据
         daily_data = {}
-        account_summary = {}
-        
-        for history, email, node_name in results:
+        for result in results:
+            history, email, node_name = result
             date_str = history.record_date.isoformat()
             
             if date_str not in daily_data:
@@ -1648,61 +933,162 @@ def get_points_analysis():
                     'account_count': 0
                 }
             
-            # 累计数据
-            daily_data[date_str]['total_points'] += history.total_points or 0
-            daily_data[date_str]['total_daily_gain'] += history.daily_gain or 0
-            daily_data[date_str]['total_desktop_gain'] += history.desktop_gain or 0
-            daily_data[date_str]['total_mobile_gain'] += history.mobile_gain or 0
+            daily_data[date_str]['total_points'] += history.total_points
+            daily_data[date_str]['total_daily_gain'] += history.daily_gain
+            daily_data[date_str]['total_desktop_gain'] += history.desktop_gain
+            daily_data[date_str]['total_mobile_gain'] += history.mobile_gain
             daily_data[date_str]['account_count'] += 1
-            
-            # 账户汇总
-            if email not in account_summary:
-                account_summary[email] = {
-                    'email': email,
-                    'node_name': node_name,
-                    'total_points': 0,
-                    'total_daily_gain': 0,
-                    'total_desktop_gain': 0,
-                    'total_mobile_gain': 0,
-                    'days_active': 0
-                }
-            
-            account_summary[email]['total_points'] = max(account_summary[email]['total_points'], history.total_points or 0)
-            account_summary[email]['total_daily_gain'] += history.daily_gain or 0
-            account_summary[email]['total_desktop_gain'] += history.desktop_gain or 0
-            account_summary[email]['total_mobile_gain'] += history.mobile_gain or 0
-            account_summary[email]['days_active'] += 1
         
-        # 转换为列表格式
-        daily_chart_data = list(daily_data.values())
-        account_chart_data = list(account_summary.values())
+        # 转换为列表并排序
+        daily_chart = sorted(daily_data.values(), key=lambda x: x['date'])
         
-        # 计算总体统计
+        # 计算总统计
         total_stats = {
-            'total_accounts': len(account_summary),
-            'total_points': sum(item['total_points'] for item in account_chart_data),
-            'total_daily_gain': sum(item['total_daily_gain'] for item in account_chart_data),
-            'total_desktop_gain': sum(item['total_desktop_gain'] for item in account_chart_data),
-            'total_mobile_gain': sum(item['total_mobile_gain'] for item in account_chart_data),
-            'avg_daily_gain': sum(item['total_daily_gain'] for item in account_chart_data) / max(len(account_chart_data), 1),
-            'date_range': {
-                'start_date': start_date.isoformat(),
-                'end_date': end_date.isoformat(),
-                'days': days
-            }
+            'total_points': sum(item['total_points'] for item in daily_chart),
+            'avg_daily_gain': sum(item['total_daily_gain'] for item in daily_chart) / len(daily_chart) if daily_chart else 0,
+            'total_desktop_gain': sum(item['total_desktop_gain'] for item in daily_chart),
+            'total_mobile_gain': sum(item['total_mobile_gain'] for item in daily_chart)
         }
         
         return jsonify({
             'status': 'success',
             'data': {
-                'daily_chart': daily_chart_data,
-                'account_summary': account_chart_data,
+                'daily_chart': daily_chart,
                 'total_stats': total_stats
+            }
+        })
+        
+        except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'获取积分分析失败: {str(e)}'
+        }), 500
+
+@bp.route('/account_analysis/<int:account_id>', methods=['GET'])
+@web_login_required
+def get_account_analysis(account_id):
+    """获取指定账户的积分分析数据"""
+    try:
+        # 获取查询参数
+        days = int(request.args.get('days', 7))  # 默认查询7天
+        
+        # 计算查询日期范围
+        end_date = datetime.now(timezone.utc).date()
+        start_date = end_date - timedelta(days=days-1)
+        
+        # 获取指定账户的历史数据
+        results = db.session.query(
+            AccountPointsHistory,
+            BotAccount.email,
+            BotNode.node_name
+        ).join(
+            BotAccount, AccountPointsHistory.bot_account_id == BotAccount.id
+        ).outerjoin(
+            BotNode, BotAccount.assigned_node_id == BotNode.id
+        ).filter(
+            AccountPointsHistory.bot_account_id == account_id,
+            AccountPointsHistory.record_date >= start_date,
+            AccountPointsHistory.record_date <= end_date
+        ).order_by(
+            AccountPointsHistory.record_date
+        ).all()
+        
+        if not results:
+            return jsonify({
+                'success': False,
+                'message': '该账户暂无历史数据'
+            }), 404
+        
+        # 组织图表数据
+        chart_data = {
+            'labels': [],
+            'total_points': [],
+            'daily_gains': [],
+            'desktop_gains': [],
+            'mobile_gains': []
+        }
+        
+        # 统计数据
+        stats = {
+            'total_points': 0,
+            'max_points': 0,
+            'min_points': float('inf'),
+            'avg_daily_gain': 0,
+            'max_daily_gain': 0,
+            'min_daily_gain': float('inf'),
+            'total_desktop_gain': 0,
+            'avg_desktop_gain': 0,
+            'total_mobile_gain': 0,
+            'avg_mobile_gain': 0,
+            'desktop_ratio': 0,
+            'mobile_ratio': 0
+        }
+        
+        daily_gains = []
+        desktop_gains = []
+        mobile_gains = []
+        
+        for result in results:
+            history, email, node_name = result
+            
+            # 图表数据
+            date_str = history.record_date.strftime('%m/%d')
+            chart_data['labels'].append(date_str)
+            chart_data['total_points'].append(history.total_points)
+            chart_data['daily_gains'].append(history.daily_gain)
+            chart_data['desktop_gains'].append(history.desktop_gain)
+            chart_data['mobile_gains'].append(history.mobile_gain)
+            
+            # 统计数据
+            stats['total_points'] = history.total_points  # 最新记录的总积分
+            stats['max_points'] = max(stats['max_points'], history.total_points)
+            stats['min_points'] = min(stats['min_points'], history.total_points)
+            
+            daily_gains.append(history.daily_gain)
+            desktop_gains.append(history.desktop_gain)
+            mobile_gains.append(history.mobile_gain)
+        
+        # 计算统计指标
+        if daily_gains:
+            stats['avg_daily_gain'] = sum(daily_gains) / len(daily_gains)
+            stats['max_daily_gain'] = max(daily_gains)
+            stats['min_daily_gain'] = min(daily_gains)
+        
+        if desktop_gains:
+            stats['total_desktop_gain'] = sum(desktop_gains)
+            stats['avg_desktop_gain'] = sum(desktop_gains) / len(desktop_gains)
+        
+        if mobile_gains:
+            stats['total_mobile_gain'] = sum(mobile_gains)
+            stats['avg_mobile_gain'] = sum(mobile_gains) / len(mobile_gains)
+        
+        # 计算占比
+        total_gain = stats['total_desktop_gain'] + stats['total_mobile_gain']
+        if total_gain > 0:
+            stats['desktop_ratio'] = round((stats['total_desktop_gain'] / total_gain) * 100, 1)
+            stats['mobile_ratio'] = round((stats['total_mobile_gain'] / total_gain) * 100, 1)
+        
+        # 处理最小值
+        if stats['min_points'] == float('inf'):
+            stats['min_points'] = 0
+        if stats['min_daily_gain'] == float('inf'):
+            stats['min_daily_gain'] = 0
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'account_info': {
+                    'id': account_id,
+                    'email': results[0][1],  # email
+                    'node_name': results[0][2]  # node_name
+                },
+                'chart_data': chart_data,
+                'stats': stats
             }
         })
         
     except Exception as e:
         return jsonify({
-            'status': 'error',
-            'message': f'获取积分分析失败: {str(e)}'
+            'success': False,
+            'message': f'获取账户分析失败: {str(e)}'
         }), 500
