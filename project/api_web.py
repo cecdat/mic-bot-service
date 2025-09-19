@@ -404,7 +404,7 @@ def delete_node(node_id):
             return jsonify({'error': f'该节点下还有 {account_count} 个账户，无法删除'}), 400
         
         db.session.delete(node)
-                db.session.commit()
+        db.session.commit()
         
         return jsonify({'status': 'success', 'message': '节点删除成功'})
     
@@ -443,10 +443,10 @@ def get_accounts():
                 'created_at': bot_account.created_at.isoformat() if bot_account.created_at else None
             })
         
-            return jsonify({
+        return jsonify({
             'success': True,
             'data': account_data
-            })
+        })
             
     except Exception as e:
         current_app.logger.error(f"获取账户列表失败: {e}")
@@ -499,9 +499,9 @@ def manage_bot_accounts():
     
     elif request.method == 'POST':
         # 创建新账户
-            data = request.get_json()
-            email = data.get('email')
-                password = data.get('password')
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
         assigned_node_id = data.get('assigned_node_id')
         
         if not email or not password:
@@ -521,7 +521,7 @@ def manage_bot_accounts():
         )
         
         db.session.add(new_account)
-                db.session.commit()
+        db.session.commit()
         
         return jsonify({
             'success': True,
@@ -557,23 +557,23 @@ def toggle_account(account_id):
 def manage_single_account(account_id):
     if request.method == 'GET':
         # 获取单个账户详情
-            account = BotAccount.query.get(account_id)
-            if not account:
+        account = BotAccount.query.get(account_id)
+        if not account:
             return jsonify({'error': '账户不存在'}), 404
         
         # 获取关联的积分数据
         points_data = Account.query.filter_by(bot_account_id=account_id).first()
             
-            # 获取分配的节点信息
+        # 获取分配的节点信息
         node = BotNode.query.get(account.assigned_node_id) if account.assigned_node_id else None
             
-            account_data = {
-                'id': account.id,
-                'email': account.email,
-                'password': account.password,
-                'assigned_node_id': account.assigned_node_id,
+        account_data = {
+            'id': account.id,
+            'email': account.email,
+            'password': account.password,
+            'assigned_node_id': account.assigned_node_id,
             'node_name': node.node_name if node else '未分配',
-                'is_enabled': account.is_enabled,
+            'is_enabled': account.is_enabled,
             'total_points': points_data.total_points if points_data else 0,
             'daily_gain': points_data.daily_gain if points_data else 0,
             'desktop_points': points_data.desktop_points if points_data else 0,
@@ -598,8 +598,8 @@ def manage_single_account(account_id):
             if points_data:
                 db.session.delete(points_data)
                 
-                db.session.delete(account)
-                db.session.commit()
+            db.session.delete(account)
+            db.session.commit()
             
             return jsonify({'status': 'success', 'message': '账户删除成功'})
         
@@ -699,7 +699,7 @@ def manage_push_configs():
 def delete_push_config(config_id):
     """删除推送配置"""
     try:
-    config = PushConfig.query.get(config_id)
+        config = PushConfig.query.get(config_id)
         if not config:
             return jsonify({'error': '推送配置不存在'}), 404
         
@@ -882,7 +882,7 @@ def get_points_history():
             'data': history_data
         })
         
-        except Exception as e:
+    except Exception as e:
         return jsonify({
             'status': 'error',
             'message': f'获取积分历史失败: {str(e)}'
@@ -958,7 +958,7 @@ def get_points_analysis():
             }
         })
         
-        except Exception as e:
+    except Exception as e:
         return jsonify({
             'status': 'error',
             'message': f'获取积分分析失败: {str(e)}'
