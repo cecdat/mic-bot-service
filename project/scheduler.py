@@ -41,7 +41,9 @@ def init_scheduler(app):
             minutes=5,
             id='task_scanner',
             name='任务表扫描器',
-            replace_existing=True
+            replace_existing=True,
+            max_instances=1,  # 限制同时只能有一个实例运行
+            misfire_grace_time=60  # 允许60秒的延迟执行
         )
         logger.info('已添加任务表扫描定时任务')
         
@@ -65,14 +67,16 @@ def init_scheduler(app):
         )
         logger.info('已添加每日任务重建定时任务')
         
-        # 添加节点离线检测定时任务 (每2分钟执行一次)
+        # 添加节点离线检测定时任务 (每3分钟执行一次，减少系统负载)
         scheduler.add_job(
             func=check_node_offline_status,
             trigger='interval',
-            minutes=2,
+            minutes=3,
             id='node_offline_checker',
             name='节点离线检测器',
-            replace_existing=True
+            replace_existing=True,
+            max_instances=1,  # 限制同时只能有一个实例运行
+            misfire_grace_time=30  # 允许30秒的延迟执行
         )
         logger.info('已添加节点离线检测定时任务')
     
@@ -255,19 +259,23 @@ def check_node_offline_status():
             now = datetime.now(timezone.utc)
             offline_nodes = []
             
-            # 查询所有在线状态的节点
-            online_nodes = BotNode.query.filter_by(status=1).all()
+            # 查询所有在线状态的节点，只获取需要的字段
+            online_nodes = BotNode.query.filter_by(status=1).with_entities(
+                BotNode.id, BotNode.node_name, BotNode.ip_address, 
+                BotNode.last_seen, BotNode.heartbeat_timeout
+            ).all()
             
-            for node in online_nodes:
-                if not node.last_seen:
+            for node_tuple in online_nodes:
+                node_id, node_name, ip_address, last_seen, heartbeat_timeout = node_tuple
+                
+                if not last_seen:
                     # 如果节点从未签到过，跳过
                     continue
                 
                 # 计算心跳超时时间
-                timeout_seconds = node.heartbeat_timeout or 600  # 默认10分钟
+                timeout_seconds = heartbeat_timeout or 600  # 默认10分钟
                 
                 # 确保时间对象都是timezone-aware
-                last_seen = node.last_seen
                 if last_seen.tzinfo is None:
                     last_seen = last_seen.replace(tzinfo=timezone.utc)
                 
@@ -276,16 +284,18 @@ def check_node_offline_status():
                 
                 # 如果超过心跳超时时间，标记为离线
                 if time_diff > timeout_seconds:
-                    logger.info(f'节点 {node.node_name} 心跳超时，标记为离线 (超时: {time_diff:.0f}秒)')
+                    logger.info(f'节点 {node_name} 心跳超时，标记为离线 (超时: {time_diff:.0f}秒)')
                     
                     # 更新节点状态为离线
-                    node.status = 0
-                    node.activity_status = 'Offline'
-                    node.status_updated_at = now
+                    node = BotNode.query.get(node_id)
+                    if node:
+                        node.status = 0
+                        node.activity_status = 'Offline'
+                        node.status_updated_at = now
                     
                     offline_nodes.append({
-                        'node_name': node.node_name,
-                        'ip_address': node.ip_address,
+                        'node_name': node_name,
+                        'ip_address': ip_address,
                         'timeout_seconds': timeout_seconds,
                         'last_seen': last_seen
                     })

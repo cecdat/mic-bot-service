@@ -279,6 +279,16 @@ def manage_nodes():
                 'status_updated_at': node.status_updated_at.isoformat() if node.status_updated_at else None,
                 'account_count_total': BotAccount.query.filter_by(assigned_node_id=node.id).count(),
                 'next_run_time': next_run_time.isoformat() if next_run_time else None,
+                'cron_schedule': node.cron_schedule,
+                'min_sleep_minutes': node.min_sleep_minutes,
+                'max_sleep_minutes': node.max_sleep_minutes,
+                'clusters': node.clusters,
+                'search_delay_min': node.search_delay_min,
+                'search_delay_max': node.search_delay_max,
+                'search_split_enabled': node.search_split_enabled,
+                'search_split_count': node.search_split_count,
+                'search_split_interval_min': node.search_split_interval_min,
+                'search_split_interval_max': node.search_split_interval_max,
                 'created_at': None
             })
         
@@ -310,7 +320,17 @@ def manage_nodes():
             node_name=node_name,
             api_token_hash=api_token,
             status=0,  # 默认离线
-            activity_status='Idle'
+            activity_status='Idle',
+            cron_schedule=data.get('cron_schedule', '10 9,13,19 * * *'),
+            min_sleep_minutes=data.get('min_sleep_minutes', 5),
+            max_sleep_minutes=data.get('max_sleep_minutes', 20),
+            clusters=data.get('clusters', 1),
+            search_delay_min=data.get('search_delay_min', '30s'),
+            search_delay_max=data.get('search_delay_max', '2min'),
+            search_split_enabled=data.get('search_split_enabled', False),
+            search_split_count=data.get('search_split_count', 3),
+            search_split_interval_min=data.get('search_split_interval_min', 30),
+            search_split_interval_max=data.get('search_split_interval_max', 120)
         )
         
         db.session.add(new_node)
@@ -341,32 +361,23 @@ def manage_nodes():
         if existing_node:
             return jsonify({'error': '节点名称已被其他节点使用'}), 400
         
+        # 更新节点配置
         node.node_name = node_name
+        node.cron_schedule = data.get('cron_schedule', node.cron_schedule)
+        node.min_sleep_minutes = data.get('min_sleep_minutes', node.min_sleep_minutes)
+        node.max_sleep_minutes = data.get('max_sleep_minutes', node.max_sleep_minutes)
+        node.clusters = data.get('clusters', node.clusters)
+        node.search_delay_min = data.get('search_delay_min', node.search_delay_min)
+        node.search_delay_max = data.get('search_delay_max', node.search_delay_max)
+        node.search_split_enabled = data.get('search_split_enabled', node.search_split_enabled)
+        node.search_split_count = data.get('search_split_count', node.search_split_count)
+        node.search_split_interval_min = data.get('search_split_interval_min', node.search_split_interval_min)
+        node.search_split_interval_max = data.get('search_split_interval_max', node.search_split_interval_max)
+        
         db.session.commit()
         
         return jsonify({'status': 'success', 'message': '节点更新成功'})
 
-@bp.route('/logs/receive', methods=['POST'])
-@web_login_required
-def receive_logs():
-    """接收节点日志"""
-    try:
-        data = request.get_json()
-        node_id = data.get('node_id')
-        logs = data.get('logs', [])
-        
-        if not node_id:
-            return jsonify({'error': '节点ID不能为空'}), 400
-        
-        # 这里可以添加日志存储逻辑
-        # 目前只是简单记录
-        current_app.logger.info(f"收到节点 {node_id} 的 {len(logs)} 条日志")
-        
-        return jsonify({'success': True, 'message': '日志接收成功'})
-    
-    except Exception as e:
-        current_app.logger.error(f"接收日志失败: {e}")
-        return jsonify({'error': '接收日志失败'}), 500
 
 @bp.route('/nodes/<int:node_id>/trigger', methods=['POST'])
 @web_login_required

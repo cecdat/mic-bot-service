@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- CSRF令牌暂时移除，因为后端未提供该变量 -->
-    <title>{% block title %}监控面板{% endblock %} - Mic-Bot Server</title>
+    <title>{% block title %}首页{% endblock %} - Mic-Bot Server</title>
     <link rel="stylesheet" href="{{ url_for('frontend.static', filename='layui/css/layui.css') }}">
     <link rel="stylesheet" href="{{ url_for('frontend.static', filename='styles.css') }}">
     <style>
@@ -78,7 +78,7 @@
         <div class="layui-side-scroll">
             <ul class="layui-nav layui-nav-tree" lay-filter="main-nav">
                 <li class="layui-nav-item {% if request.path == url_for('frontend.index') %}layui-this{% endif %}">
-                    <a href="{{ url_for('frontend.index') }}"><i class="layui-icon layui-icon-home"></i> 监控面板</a>
+                    <a href="{{ url_for('frontend.index') }}"><i class="layui-icon layui-icon-home"></i> 首页</a>
                 </li>
                 <li class="layui-nav-item {% if request.path == url_for('frontend.manage') %}layui-this{% endif %}">
                     <a href="{{ url_for('frontend.manage') }}"><i class="layui-icon layui-icon-user"></i> 账户管理</a>

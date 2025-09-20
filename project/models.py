@@ -29,9 +29,11 @@ class BotNode(db.Model):
     clusters = db.Column(db.Integer, default=1)
     search_delay_min = db.Column(db.String(10), default='30s')
     search_delay_max = db.Column(db.String(10), default='2min')
-    # 日志推送相关字段
-    log_push_enabled = db.Column(db.Boolean, default=False)
-    log_push_interval = db.Column(db.Integer, default=30)
+    # 搜索任务拆分配置
+    search_split_enabled = db.Column(db.Boolean, default=False)  # 是否启用搜索任务拆分
+    search_split_count = db.Column(db.Integer, default=3)  # 搜索任务拆分为几次执行
+    search_split_interval_min = db.Column(db.Integer, default=30)  # 拆分间隔最小分钟数
+    search_split_interval_max = db.Column(db.Integer, default=120)  # 拆分间隔最大分钟数
     accounts = db.relationship('BotAccount', backref='node', lazy='dynamic')
 
 class BotAccount(db.Model):

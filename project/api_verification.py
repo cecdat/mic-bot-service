@@ -118,15 +118,11 @@ def list_verification_codes():
         
         codes_data = []
         for code in pending_codes:
-            # 查找对应的账户信息
-            account = BotAccount.query.filter_by(email=code.email).first()
-            auxiliary_email = account.auxiliary_email if account else None
-            
             codes_data.append({
                 'id': code.id,
                 'node_name': code.node.node_name,
                 'main_account_email': code.email,  # 主账户邮箱（正在执行登录的账户）
-                'auxiliary_email': auxiliary_email,  # 辅助邮箱（用于接收验证码）
+                'auxiliary_email': code.auxiliary_email,  # 辅助邮箱（用于接收验证码）
                 'created_at': code.created_at.strftime('%Y-%m-%d %H:%M:%S'),
                 'expires_at': code.expires_at.strftime('%Y-%m-%d %H:%M:%S'),
                 'status': code.status

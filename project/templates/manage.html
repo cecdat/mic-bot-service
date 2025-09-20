@@ -230,12 +230,15 @@
                     console.log('节点API返回数据:', res);
                     let nodesData = [];
                     
-                    // 兼容两种数据格式
-                    if (res && res.success && Array.isArray(res.data)) {
-                        // 格式1: {"success": true, "data": [...]}
+                    // 处理Layui格式的API返回数据
+                    if (res && res.code === 0 && Array.isArray(res.data)) {
+                        // 格式: {"code": 0, "count": 11, "data": [...]}
+                        nodesData = res.data;
+                    } else if (res && res.success && Array.isArray(res.data)) {
+                        // 格式: {"success": true, "data": [...]}
                         nodesData = res.data;
                     } else if (Array.isArray(res)) {
-                        // 格式2: 直接数组 [...]
+                        // 格式: 直接数组 [...]
                         nodesData = res;
                     } else {
                         console.error('节点API返回数据格式错误:', res);
@@ -569,12 +572,15 @@
                                         console.log('编辑账户-节点API返回数据:', res);
                                         let nodesData = [];
                                         
-                                        // 兼容两种数据格式
-                                        if (res && res.success && Array.isArray(res.data)) {
-                                            // 格式1: {"success": true, "data": [...]}
+                                        // 处理Layui格式的API返回数据
+                                        if (res && res.code === 0 && Array.isArray(res.data)) {
+                                            // 格式: {"code": 0, "count": 11, "data": [...]}
+                                            nodesData = res.data;
+                                        } else if (res && res.success && Array.isArray(res.data)) {
+                                            // 格式: {"success": true, "data": [...]}
                                             nodesData = res.data;
                                         } else if (Array.isArray(res)) {
-                                            // 格式2: 直接数组 [...]
+                                            // 格式: 直接数组 [...]
                                             nodesData = res;
                                         } else {
                                             console.error('编辑账户-节点API返回数据格式错误:', res);
@@ -780,12 +786,15 @@
                             console.log('新增账户-节点API返回数据:', res);
                             let nodesData = [];
                             
-                            // 兼容两种数据格式
-                            if (res && res.success && Array.isArray(res.data)) {
-                                // 格式1: {"success": true, "data": [...]}
+                            // 处理Layui格式的API返回数据
+                            if (res && res.code === 0 && Array.isArray(res.data)) {
+                                // 格式: {"code": 0, "count": 11, "data": [...]}
+                                nodesData = res.data;
+                            } else if (res && res.success && Array.isArray(res.data)) {
+                                // 格式: {"success": true, "data": [...]}
                                 nodesData = res.data;
                             } else if (Array.isArray(res)) {
-                                // 格式2: 直接数组 [...]
+                                // 格式: 直接数组 [...]
                                 nodesData = res;
                             } else {
                                 console.error('新增账户-节点API返回数据格式错误:', res);

@@ -274,10 +274,7 @@ def get_node_config():
         "max_sleep_minutes": node.max_sleep_minutes,
         "clusters": node.clusters,
         "search_delay_min": node.search_delay_min,
-        "search_delay_max": node.search_delay_max,
-        # 日志推送配置
-        "log_push_enabled": node.log_push_enabled,
-        "log_push_interval": node.log_push_interval
+        "search_delay_max": node.search_delay_max
     }
     return jsonify(config_data)
 

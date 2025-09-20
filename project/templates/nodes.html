@@ -75,15 +75,24 @@
                 </div>
             </div>
             
-            <!-- 日志推送配置 -->
+            <!-- 搜索任务拆分配置 -->
             <div class="layui-form-item" style="margin-bottom: 15px;">
-                <label class="layui-form-label" style="width: 80px; white-space: nowrap;">日志推送</label>
+                <label class="layui-form-label" style="width: 80px; white-space: nowrap;">搜索拆分</label>
                 <div class="layui-input-block" style="margin-left: 90px;">
-                    <input type="checkbox" name="log_push_enabled" lay-skin="primary" title="启用日志推送" style="margin-right: 8px;">
-                    <div class="layui-input-inline" style="width: 80px; margin-left: 15px;">
-                        <input type="number" name="log_push_interval" placeholder="30" value="30" class="layui-input">
+                    <input type="checkbox" name="search_split_enabled" lay-skin="primary" title="启用搜索任务拆分" style="margin-right: 8px;">
+                    <div class="layui-input-inline" style="width: 60px; margin-left: 15px;">
+                        <input type="number" name="search_split_count" placeholder="3" value="3" min="1" max="10" class="layui-input">
                     </div>
-                    <div class="layui-form-mid" style="margin-left: 3px; font-size: 12px;">秒</div>
+                    <div class="layui-form-mid" style="margin-left: 3px; font-size: 12px;">次</div>
+                    <div class="layui-form-mid" style="margin: 0 8px; font-size: 12px;">间隔</div>
+                    <div class="layui-input-inline" style="width: 60px;">
+                        <input type="number" name="search_split_interval_min" placeholder="30" value="30" min="5" class="layui-input">
+                    </div>
+                    <div class="layui-form-mid" style="margin: 0 3px;">-</div>
+                    <div class="layui-input-inline" style="width: 60px;">
+                        <input type="number" name="search_split_interval_max" placeholder="120" value="120" min="10" class="layui-input">
+                    </div>
+                    <div class="layui-form-mid" style="margin-left: 3px; font-size: 12px;">分钟</div>
                 </div>
             </div>
             
@@ -346,9 +355,8 @@ layui.use(['table', 'form', 'layer'], function(){
                 window.location.href = "{{ url_for('frontend.login') }}";
                 return;
             }
-            // 处理新的API返回格式
-            const data = res.success ? res.data : res;
-            return { "code": 0, "msg": "", "count": data.length, "data": data };
+            // 直接返回API数据，因为API已经返回了正确的Layui格式
+            return res;
         }
     });
     
@@ -407,8 +415,10 @@ layui.use(['table', 'form', 'layer'], function(){
                     "clusters": data ? data.clusters : 1,
                     "search_delay_min": data ? data.search_delay_min : '30s',
                     "search_delay_max": data ? data.search_delay_max : '2min',
-                    "log_push_enabled": data ? data.log_push_enabled : false,
-                    "log_push_interval": data ? data.log_push_interval : 30
+                    "search_split_enabled": data ? data.search_split_enabled : false,
+                    "search_split_count": data ? data.search_split_count : 3,
+                    "search_split_interval_min": data ? data.search_split_interval_min : 30,
+                    "search_split_interval_max": data ? data.search_split_interval_max : 120
                 });
                 // 允许编辑节点名字
                 layero.find('[name="node_name"]')[0].readOnly = false;

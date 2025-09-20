@@ -6,12 +6,14 @@ from flask_socketio import SocketIO
 os.environ['PYTHONIOENCODING'] = 'utf-8'
 
 # 应用工厂创建应用实例
+print("🚀 正在启动 Mic-Bot Service...")
 app = create_app()
 
 # 初始化SocketIO
 # 根据环境变量选择async_mode
 import os
 async_mode = os.environ.get('SOCKETIO_ASYNC_MODE', 'threading')
+print(f"🔌 正在初始化 SocketIO (模式: {async_mode})...")
 socketio = SocketIO(
     app, 
     cors_allowed_origins="*", 
@@ -31,13 +33,16 @@ socketio = SocketIO(
     close_timeout=10,  # 连接关闭超时时间
     disconnect_timeout=5  # 断开连接超时时间
 )
+print("✅ SocketIO 初始化完成")
 
 # 将socketio实例添加到应用上下文
 app.socketio = socketio
 
 # 注册WebSocket事件处理器
+print("📡 正在注册 WebSocket 事件处理器...")
 from project import websocket_events
 websocket_events.register_websocket_events(socketio)
+print("✅ WebSocket 事件处理器注册完成")
 
 if __name__ == '__main__':
     # 只在开发环境直接运行

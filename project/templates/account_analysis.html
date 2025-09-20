@@ -1,0 +1,961 @@
+{% extends "layout.html" %}
+
+{% block title %}首页{% endblock %}
+
+{% block content %}
+<style>
+/* 账户分析页面样式 */
+.account-analysis-container {
+    background: #f2f2f2;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.analysis-header {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 20px 30px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.analysis-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #2d3748;
+    margin: 0;
+    display: flex;
+    align-items: center;
+}
+
+.analysis-title i {
+    margin-right: 12px;
+    color: #667eea;
+}
+
+.controls-section {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.time-range-selector {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.time-range-btn {
+    padding: 8px 16px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    background: white;
+    color: #4a5568;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.time-range-btn:hover {
+    border-color: #667eea;
+    color: #667eea;
+}
+
+.time-range-btn.active {
+    background: #667eea;
+    border-color: #667eea;
+    color: white;
+}
+
+.refresh-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    border-radius: 12px;
+    padding: 12px 24px;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.refresh-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+}
+
+/* 账户选择器 */
+.account-selector {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.account-selector h3 {
+    margin: 0 0 15px 0;
+    color: #2d3748;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.account-dropdown-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.account-dropdown {
+    flex: 1;
+    padding: 12px 16px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 16px;
+    background: white;
+    color: #2d3748;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.account-dropdown:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.account-dropdown:hover {
+    border-color: #cbd5e0;
+}
+
+.account-card {
+    background: white;
+    border-radius: 12px;
+    padding: 15px;
+    border: 2px solid #e2e8f0;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.account-card:hover {
+    border-color: #667eea;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.15);
+}
+
+.account-card.selected {
+    border-color: #667eea;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+}
+
+.account-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.account-email {
+    font-weight: 600;
+    color: #2d3748;
+    font-size: 14px;
+}
+
+.account-node {
+    background: #667eea;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.account-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    font-size: 12px;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    color: #4a5568;
+}
+
+.stat-value {
+    font-weight: 600;
+    color: #2d3748;
+}
+
+/* 分析内容区域 */
+.analysis-content {
+    display: none;
+}
+
+.analysis-content.active {
+    display: block;
+}
+
+.analysis-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.chart-container {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.chart-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 0 0 20px 0;
+    display: flex;
+    align-items: center;
+}
+
+.chart-title i {
+    margin-right: 8px;
+    color: #667eea;
+}
+
+.chart-wrapper {
+    position: relative;
+    height: 400px;
+}
+
+.stats-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.stat-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.stat-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.stat-card-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 0;
+    display: flex;
+    align-items: center;
+}
+
+.stat-card-title i {
+    margin-right: 8px;
+    font-size: 18px;
+}
+
+.stat-card-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: white;
+}
+
+.stat-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #2d3748;
+    margin: 8px 0;
+}
+
+.stat-label {
+    font-size: 14px;
+    color: #718096;
+    margin-bottom: 8px;
+}
+
+.stat-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.detail-item:last-child {
+    border-bottom: none;
+}
+
+.detail-label {
+    font-size: 13px;
+    color: #718096;
+    font-weight: 500;
+}
+
+.detail-value {
+    font-size: 13px;
+    color: #2d3748;
+    font-weight: 600;
+}
+
+/* 趋势指示器 */
+.trend-indicator {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+.trend-up {
+    background: rgba(72, 187, 120, 0.1);
+    color: #38a169;
+}
+
+.trend-down {
+    background: rgba(245, 101, 101, 0.1);
+    color: #e53e3e;
+}
+
+.trend-stable {
+    background: rgba(160, 174, 192, 0.1);
+    color: #718096;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .account-analysis-container {
+        padding: 10px;
+    }
+    
+    .analysis-header {
+        flex-direction: column;
+        gap: 16px;
+        text-align: center;
+    }
+    
+    .controls-section {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .analysis-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .account-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .chart-wrapper {
+        height: 300px;
+    }
+}
+
+/* 加载状态 */
+.loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 200px;
+    color: #718096;
+    font-size: 16px;
+}
+
+.loading i {
+    margin-right: 8px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* 空状态 */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #718096;
+}
+
+.empty-state i {
+    font-size: 48px;
+    margin-bottom: 16px;
+    color: #cbd5e0;
+}
+
+.empty-state h3 {
+    margin: 0 0 8px 0;
+    color: #4a5568;
+    font-size: 18px;
+}
+
+.empty-state p {
+    margin: 0;
+    font-size: 14px;
+}
+</style>
+
+<div class="account-analysis-container">
+    <div class="analysis-header">
+        <h1 class="analysis-title">
+            <i class="layui-icon layui-icon-chart"></i>
+            账户积分分析
+        </h1>
+        <div class="controls-section">
+            <div class="time-range-selector">
+                <button class="time-range-btn active" data-days="7">7天</button>
+                <button class="time-range-btn" data-days="15">15天</button>
+                <button class="time-range-btn" data-days="30">30天</button>
+            </div>
+            <button class="refresh-btn" onclick="refreshData()">
+                <i class="layui-icon layui-icon-refresh"></i>
+                刷新数据
+            </button>
+        </div>
+    </div>
+    
+    <!-- 账户选择器 -->
+    <div class="account-selector">
+        <h3><i class="layui-icon layui-icon-user"></i> 选择账户</h3>
+        <div class="account-dropdown-container">
+            <select id="accountSelect" class="account-dropdown">
+                <option value="">请选择账户...</option>
+            </select>
+        </div>
+    </div>
+    
+    <!-- 分析内容 -->
+    <div class="analysis-content" id="analysisContent">
+        <div class="analysis-grid">
+            <!-- 图表区域 -->
+            <div class="chart-container">
+                <h3 class="chart-title">
+                    <i class="layui-icon layui-icon-chart"></i>
+                    积分趋势图
+                </h3>
+                <div class="chart-wrapper">
+                    <canvas id="pointsChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- 统计信息 -->
+            <div class="stats-container">
+                <!-- 总积分统计 -->
+                <div class="stat-card">
+                    <div class="stat-card-header">
+                        <h4 class="stat-card-title">
+                            <i class="layui-icon layui-icon-diamond"></i>
+                            总积分
+                        </h4>
+                        <div class="stat-card-icon" style="background: linear-gradient(135deg, #667eea, #764ba2);">
+                            <i class="layui-icon layui-icon-diamond"></i>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="totalPoints">0</div>
+                    <div class="stat-label">当前总积分</div>
+                    <div class="stat-details">
+                        <div class="detail-item">
+                            <span class="detail-label">历史最高:</span>
+                            <span class="detail-value" id="maxPoints">0</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">历史最低:</span>
+                            <span class="detail-value" id="minPoints">0</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 日均收益统计 -->
+                <div class="stat-card">
+                    <div class="stat-card-header">
+                        <h4 class="stat-card-title">
+                            <i class="layui-icon layui-icon-chart"></i>
+                            日均收益
+                        </h4>
+                        <div class="stat-card-icon" style="background: linear-gradient(135deg, #48bb78, #38a169);">
+                            <i class="layui-icon layui-icon-chart"></i>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="avgDailyGain">0</div>
+                    <div class="stat-label">平均每日收益</div>
+                    <div class="stat-details">
+                        <div class="detail-item">
+                            <span class="detail-label">最高单日:</span>
+                            <span class="detail-value" id="maxDailyGain">0</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">最低单日:</span>
+                            <span class="detail-value" id="minDailyGain">0</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 桌面端统计 -->
+                <div class="stat-card">
+                    <div class="stat-card-header">
+                        <h4 class="stat-card-title">
+                            <i class="layui-icon layui-icon-computer"></i>
+                            桌面端
+                        </h4>
+                        <div class="stat-card-icon" style="background: linear-gradient(135deg, #4299e1, #3182ce);">
+                            <i class="layui-icon layui-icon-computer"></i>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="desktopGain">0</div>
+                    <div class="stat-label">桌面端收益</div>
+                    <div class="stat-details">
+                        <div class="detail-item">
+                            <span class="detail-label">日均:</span>
+                            <span class="detail-value" id="avgDesktopGain">0</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">占比:</span>
+                            <span class="detail-value" id="desktopRatio">0%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 移动端统计 -->
+                <div class="stat-card">
+                    <div class="stat-card-header">
+                        <h4 class="stat-card-title">
+                            <i class="layui-icon layui-icon-cellphone"></i>
+                            移动端
+                        </h4>
+                        <div class="stat-card-icon" style="background: linear-gradient(135deg, #ed8936, #dd6b20);">
+                            <i class="layui-icon layui-icon-cellphone"></i>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="mobileGain">0</div>
+                    <div class="stat-label">移动端收益</div>
+                    <div class="stat-details">
+                        <div class="detail-item">
+                            <span class="detail-label">日均:</span>
+                            <span class="detail-value" id="avgMobileGain">0</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">占比:</span>
+                            <span class="detail-value" id="mobileRatio">0%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// 全局变量
+let currentAccountId = null;
+let currentDays = 7;
+let pointsChart = null;
+let accountsData = [];
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    loadAccounts();
+    initTimeRangeSelector();
+    
+    // 添加账户选择下拉框事件监听
+    const accountSelect = document.getElementById('accountSelect');
+    accountSelect.addEventListener('change', function() {
+        const selectedAccountId = this.value;
+        if (selectedAccountId) {
+            selectAccount(parseInt(selectedAccountId));
+        }
+    });
+});
+
+// 初始化时间范围选择器
+function initTimeRangeSelector() {
+    const timeRangeBtns = document.querySelectorAll('.time-range-btn');
+    timeRangeBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            // 移除所有active类
+            timeRangeBtns.forEach(b => b.classList.remove('active'));
+            // 添加active类到当前按钮
+            this.classList.add('active');
+            // 更新当前天数
+            currentDays = parseInt(this.dataset.days);
+            // 如果有选中的账户，重新加载数据
+            if (currentAccountId) {
+                loadAccountAnalysis(currentAccountId);
+            }
+        });
+    });
+}
+
+// 加载账户列表
+function loadAccounts() {
+    fetchWithAuth('/web_api/accounts')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                accountsData = data.data;
+                renderAccountGrid();
+            } else {
+                showError('加载账户列表失败: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('加载账户列表失败:', error);
+            showError('加载账户列表失败');
+        });
+}
+
+// 渲染账户下拉框
+function renderAccountGrid() {
+    const accountSelect = document.getElementById('accountSelect');
+    
+    if (accountsData.length === 0) {
+        accountSelect.innerHTML = '<option value="">暂无账户数据</option>';
+        return;
+    }
+    
+    let html = '<option value="">请选择账户...</option>';
+    accountsData.forEach(account => {
+        const nodeName = account.node_name || '未分配';
+        const totalPoints = account.total_points || 0;
+        const dailyGain = account.daily_gain || 0;
+        
+        html += `
+            <option value="${account.id}" data-email="${account.email}" data-node="${nodeName}" data-points="${totalPoints}" data-gain="${dailyGain}">
+                ${account.email} (${nodeName}) - 总积分: ${totalPoints.toLocaleString()}, 今日收益: ${dailyGain.toLocaleString()}
+            </option>
+        `;
+    });
+    
+    accountSelect.innerHTML = html;
+    
+    // 默认选择第一个账户
+    if (accountsData.length > 0) {
+        accountSelect.value = accountsData[0].id;
+        selectAccount(accountsData[0].id);
+    }
+}
+
+// 选择账户
+function selectAccount(accountId) {
+    // 设置当前账户ID
+    currentAccountId = accountId;
+    
+    // 加载账户分析数据
+    loadAccountAnalysis(accountId);
+}
+
+// 加载账户分析数据
+function loadAccountAnalysis(accountId) {
+    const analysisContent = document.getElementById('analysisContent');
+    analysisContent.classList.add('active');
+    
+    // 显示加载状态
+    showLoading();
+    
+    fetchWithAuth(`/web_api/account_analysis/${accountId}?days=${currentDays}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderAccountAnalysis(data.data);
+            } else {
+                showError('加载账户分析失败: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('加载账户分析失败:', error);
+            showError('加载账户分析失败');
+        });
+}
+
+// 渲染账户分析
+function renderAccountAnalysis(data) {
+    // 显示加载状态
+    showLoading();
+    
+    // 更新统计信息
+    updateStats(data.stats);
+    
+    // 更新图表
+    updateChart(data.chart_data);
+}
+
+// 更新统计信息
+function updateStats(stats) {
+    document.getElementById('totalPoints').textContent = stats.total_points.toLocaleString();
+    document.getElementById('maxPoints').textContent = stats.max_points.toLocaleString();
+    document.getElementById('minPoints').textContent = stats.min_points.toLocaleString();
+    
+    document.getElementById('avgDailyGain').textContent = Math.round(stats.avg_daily_gain).toLocaleString();
+    document.getElementById('maxDailyGain').textContent = stats.max_daily_gain.toLocaleString();
+    document.getElementById('minDailyGain').textContent = stats.min_daily_gain.toLocaleString();
+    
+    document.getElementById('desktopGain').textContent = stats.total_desktop_gain.toLocaleString();
+    document.getElementById('avgDesktopGain').textContent = Math.round(stats.avg_desktop_gain).toLocaleString();
+    document.getElementById('desktopRatio').textContent = stats.desktop_ratio + '%';
+    
+    document.getElementById('mobileGain').textContent = stats.total_mobile_gain.toLocaleString();
+    document.getElementById('avgMobileGain').textContent = Math.round(stats.avg_mobile_gain).toLocaleString();
+    document.getElementById('mobileRatio').textContent = stats.mobile_ratio + '%';
+}
+
+// 更新图表
+function updateChart(chartData) {
+    const ctx = document.getElementById('pointsChart');
+    
+    // 检查 canvas 元素是否存在
+    if (!ctx) {
+        console.error('Canvas element "pointsChart" not found');
+        return;
+    }
+    
+    // 检查 Chart.js 是否已加载
+    if (typeof Chart === 'undefined') {
+        console.error('Chart.js library not loaded');
+        return;
+    }
+    
+    // 检查数据是否有效
+    if (!chartData || !chartData.labels || chartData.labels.length === 0) {
+        console.error('Invalid chart data:', chartData);
+        return;
+    }
+    
+    if (pointsChart) {
+        pointsChart.destroy();
+    }
+    
+    try {
+        // 隐藏加载状态
+        hideLoading();
+        
+        pointsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: chartData.labels,
+            datasets: [{
+                label: '总积分',
+                data: chartData.total_points,
+                borderColor: '#667eea',
+                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                tension: 0.4,
+                fill: true,
+                yAxisID: 'y'
+            }, {
+                label: '每日收益',
+                data: chartData.daily_gains,
+                borderColor: '#764ba2',
+                backgroundColor: 'rgba(118, 75, 162, 0.1)',
+                tension: 0.4,
+                fill: false,
+                yAxisID: 'y1'
+            }, {
+                label: '桌面端收益',
+                data: chartData.desktop_gains,
+                borderColor: '#4299e1',
+                backgroundColor: 'rgba(66, 153, 225, 0.1)',
+                tension: 0.4,
+                fill: false,
+                yAxisID: 'y1'
+            }, {
+                label: '移动端收益',
+                data: chartData.mobile_gains,
+                borderColor: '#ed8936',
+                backgroundColor: 'rgba(237, 137, 54, 0.1)',
+                tension: 0.4,
+                fill: false,
+                yAxisID: 'y1'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 15,
+                        font: {
+                            size: 12
+                        }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleColor: 'white',
+                    bodyColor: 'white',
+                    borderColor: '#667eea',
+                    borderWidth: 1,
+                    cornerRadius: 8,
+                    displayColors: true,
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + context.parsed.y.toLocaleString();
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: '日期',
+                        font: {
+                            size: 12,
+                            weight: 'bold'
+                        }
+                    },
+                    ticks: {
+                        font: {
+                            size: 11
+                        }
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: '总积分',
+                        font: {
+                            size: 12,
+                            weight: 'bold'
+                        }
+                    },
+                    ticks: {
+                        font: {
+                            size: 11
+                        },
+                        callback: function(value) {
+                            return value.toLocaleString();
+                        }
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: '每日收益',
+                        font: {
+                            size: 12,
+                            weight: 'bold'
+                        }
+                    },
+                    grid: {
+                        drawOnChartArea: false,
+                    },
+                    ticks: {
+                        font: {
+                            size: 11
+                        },
+                        callback: function(value) {
+                            return value.toLocaleString();
+                        }
+                    }
+                }
+            }
+        }
+    });
+    } catch (error) {
+        console.error('Failed to create chart:', error);
+        showError('图表创建失败: ' + error.message);
+    }
+}
+
+// 显示加载状态
+function showLoading() {
+    const chartWrapper = document.querySelector('.chart-wrapper');
+    // 保留 canvas 元素，只显示加载提示
+    const existingCanvas = chartWrapper.querySelector('canvas');
+    if (existingCanvas) {
+        // 如果 canvas 已存在，只显示加载覆盖层
+        chartWrapper.innerHTML = `
+            <div style="position: relative;">
+                <canvas id="pointsChart"></canvas>
+                <div class="loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.9); padding: 20px; border-radius: 8px;">
+                    <i class="layui-icon layui-icon-loading"></i> 加载中...
+                </div>
+            </div>
+        `;
+    } else {
+        // 如果 canvas 不存在，创建新的
+        chartWrapper.innerHTML = `
+            <div style="position: relative;">
+                <canvas id="pointsChart"></canvas>
+                <div class="loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.9); padding: 20px; border-radius: 8px;">
+                    <i class="layui-icon layui-icon-loading"></i> 加载中...
+                </div>
+            </div>
+        `;
+    }
+}
+
+// 隐藏加载状态
+function hideLoading() {
+    const chartWrapper = document.querySelector('.chart-wrapper');
+    const loadingDiv = chartWrapper.querySelector('.loading');
+    if (loadingDiv) {
+        loadingDiv.remove();
+    }
+}
+
+// 显示错误信息
+function showError(message) {
+    layui.use('layer', function(){
+        var layer = layui.layer;
+        layer.msg(message, {icon: 2});
+    });
+}
+
+// 刷新数据
+function refreshData() {
+    if (currentAccountId) {
+        loadAccountAnalysis(currentAccountId);
+    } else {
+        loadAccounts();
+    }
+}
+</script>
+{% endblock %}

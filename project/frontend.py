@@ -93,7 +93,7 @@ def logout():
 @bp.route('/')
 @web_login_required
 def index():
-    return render_template('index.html')
+    return render_template('account_analysis.html')
 
 @bp.route('/manage')
 @web_login_required
@@ -116,6 +116,11 @@ def push():
 @web_login_required
 def verification():
     return render_template('verification.html')
+
+@bp.route('/account_analysis')
+@web_login_required
+def account_analysis():
+    return render_template('account_analysis.html')
 
 # 添加User-Agent管理路由
 @bp.route('/user_agents')
