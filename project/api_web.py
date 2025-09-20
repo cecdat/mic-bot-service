@@ -526,8 +526,13 @@ def get_accounts():
 @web_login_required
 def manage_bot_accounts():
     if request.method == 'GET':
-        # 获取所有账户
-        accounts = db.session.query(
+        # 获取查询参数
+        node_id = request.args.get('node_id', type=int)
+        status = request.args.get('status')
+        email = request.args.get('email')
+        
+        # 构建查询
+        query = db.session.query(
             BotAccount,
             Account,
             BotNode
@@ -535,7 +540,22 @@ def manage_bot_accounts():
             Account, BotAccount.id == Account.bot_account_id
         ).outerjoin(
             BotNode, BotAccount.assigned_node_id == BotNode.id
-        ).all()
+        )
+        
+        # 应用过滤条件
+        if node_id:
+            query = query.filter(BotAccount.assigned_node_id == node_id)
+        
+        if status:
+            if status == 'enabled':
+                query = query.filter(BotAccount.is_enabled == True)
+            elif status == 'disabled':
+                query = query.filter(BotAccount.is_enabled == False)
+        
+        if email:
+            query = query.filter(BotAccount.email.contains(email))
+        
+        accounts = query.all()
         
         account_data = []
         for bot_account, account, node in accounts:
