@@ -88,6 +88,73 @@ def get_inferred_status(node):
     # 默认返回当前状态
     return node.activity_status
 
+def calculate_next_run_time(cron_schedule):
+    """根据cron表达式计算下次执行时间"""
+    if not cron_schedule:
+        return None
+    
+    try:
+        # 解析cron表达式 (分钟 小时 日 月 星期)
+        cron_parts = cron_schedule.strip().split()
+        if len(cron_parts) != 5:
+            return None
+        
+        minute_part, hour_part, day_part, month_part, weekday_part = cron_parts
+        
+        # 获取当前时间
+        now = datetime.now()
+        
+        # 解析小时和分钟
+        hours = []
+        minutes = []
+        
+        # 解析小时
+        if hour_part == '*':
+            hours = list(range(24))
+        else:
+            for part in hour_part.split(','):
+                try:
+                    hours.append(int(part))
+                except ValueError:
+                    continue
+        
+        # 解析分钟
+        if minute_part == '*':
+            minutes = list(range(60))
+        else:
+            for part in minute_part.split(','):
+                try:
+                    minutes.append(int(part))
+                except ValueError:
+                    continue
+        
+        # 确保小时和分钟值在有效范围内
+        hours = [h for h in hours if 0 <= h <= 23]
+        minutes = [m for m in minutes if 0 <= m <= 59]
+        
+        if not hours or not minutes:
+            return None
+        
+        # 查找下一个执行时间
+        for day_offset in range(8):  # 最多查找8天
+            target_date = now.date() + timedelta(days=day_offset)
+            
+            for hour in sorted(hours):
+                for minute in sorted(minutes):
+                    next_time = datetime.combine(target_date, datetime.min.time().replace(hour=hour, minute=minute))
+                    
+                    # 如果是今天，需要确保时间还没过
+                    if day_offset == 0 and next_time <= now:
+                        continue
+                    
+                    return next_time
+        
+        return None
+        
+    except Exception as e:
+        current_app.logger.error(f"计算下次执行时间失败: {e}")
+        return None
+
 bp = Blueprint('api_web', __name__, url_prefix='/web_api')
 
 @bp.route('/login', methods=['POST'])
@@ -199,6 +266,9 @@ def manage_nodes():
             # 使用智能状态推断
             inferred_status = get_inferred_status(node)
             
+            # 计算下次执行时间
+            next_run_time = calculate_next_run_time(node.cron_schedule)
+            
             node_data.append({
                 'id': node.id,
                 'node_name': node.node_name,
@@ -208,7 +278,7 @@ def manage_nodes():
                 'last_seen': node.last_seen.isoformat() if node.last_seen else None,
                 'status_updated_at': node.status_updated_at.isoformat() if node.status_updated_at else None,
                 'account_count_total': BotAccount.query.filter_by(assigned_node_id=node.id).count(),
-                'next_run_time': None,  # 暂时设为None，后续可以根据cron_schedule计算
+                'next_run_time': next_run_time.isoformat() if next_run_time else None,
                 'created_at': None
             })
         
