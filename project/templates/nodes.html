@@ -18,6 +18,7 @@
     <span class="layui-badge layui-bg-warm" title="运行" {{# if(d.activity_status !== 'Idle' || d.status !== 'Online'){ }} style='opacity: 0.5; cursor: not-allowed;' {{# }}} lay-event="trigger"><i class="layui-icon layui-icon-play"></i></span>
     <span class="layui-badge layui-bg-danger" title="停止" {{# if(d.activity_status !== 'Running'){ }} style='opacity: 0.5; cursor: not-allowed;' {{# }}} lay-event="stop"><i class="layui-icon layui-icon-pause"></i></span>
     <span class="layui-badge layui-bg-primary" title="重置bot状态" lay-event="reset"><i class="layui-icon layui-icon-refresh"></i></span>
+    <span class="layui-badge layui-bg-orange" title="重启服务" {{# if(d.status !== 'Online'){ }} style='opacity: 0.5; cursor: not-allowed;' {{# }}} lay-event="restart"><i class="layui-icon layui-icon-refresh-3"></i></span>
     <span class="layui-badge layui-bg-green" title="查看日志" lay-event="logs"><i class="layui-icon layui-icon-console"></i></span>
     <span class="layui-badge layui-bg-orange" title="重置API Token" lay-event="reset-token"><i class="layui-icon layui-icon-key"></i></span>
     <span class="layui-badge layui-bg-primary" title="编辑" lay-event="edit"><i class="layui-icon layui-icon-set"></i></span>
@@ -347,7 +348,7 @@ layui.use(['table', 'form', 'layer'], function(){
             }},
             {field: 'last_seen', title: '上次心跳时间', sort: true, minWidth: 180, templet: d => d.last_seen ? new Date(d.last_seen).toISOString().replace('T', ' ').replace('Z', '') : 'N/A'},
             {field: 'next_run_time', title: '下次执行时间', sort: true, minWidth: 180, templet: d => d.next_run_time ? new Date(d.next_run_time).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : 'N/A'},
-            {fixed: 'right', title:'操作', toolbar: '#table-actions', width: 280, align: 'center'}
+            {fixed: 'right', title:'操作', toolbar: '#table-actions', width: 320, align: 'center'}
         ]],
         page: true,
         parseData: function(res){
@@ -382,6 +383,9 @@ layui.use(['table', 'form', 'layer'], function(){
             stopNode(data.id);
         } else if (obj.event === 'logs') {
             openLogsModal(data);
+        } else if (obj.event === 'restart'){
+            if (data.status !== 'Online') { layer.msg('节点不在线，无法重启服务！', {icon: 7}); return; }
+            restartNode(data.id, data.node_name);
         } else if (obj.event === 'del') {
             deleteNode(data.id, data.node_name);
         } else if (obj.event === 'reset') {
@@ -620,6 +624,33 @@ layui.use(['table', 'form', 'layer'], function(){
                 .catch(error => {
                     layer.closeAll('loading');
                     layer.msg('重置节点状态失败: ' + error.message, { icon: 2 });
+                });
+            layer.close(index);
+        });
+    }
+
+    function restartNode(nodeId, nodeName) {
+        layer.confirm(`确定要重启节点 [${nodeName}] 的服务吗？<br><br><span style="color: #ff6b6b;">⚠️ 重启后节点将重新启动，正在执行的任务会被中断！</span>`, {
+            icon: 3, title: '确认重启服务',
+            btn: ['确认重启', '取消']
+        }, function(index) {
+            layer.load(1);
+            fetchWithAuth(`/web_api/nodes/${nodeId}/restart`, { method: 'POST' })
+                .then(response => response.json())
+                .then(result => {
+                    layer.closeAll('loading');
+                    if (result.status === 'success') {
+                        layer.msg(result.message || '重启命令已下发', { icon: 1 });
+                        tableIns.reload({
+                            url: '/web_api/nodes?_t=' + Date.now()
+                        });
+                    } else {
+                        layer.msg(result.message || '重启服务失败', { icon: 2 });
+                    }
+                })
+                .catch(error => {
+                    layer.closeAll('loading');
+                    layer.msg('重启服务失败: ' + error.message, { icon: 2 });
                 });
             layer.close(index);
         });

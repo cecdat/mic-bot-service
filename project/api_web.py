@@ -446,6 +446,27 @@ def reset_node(node_id):
         current_app.logger.error(f"重置节点失败: {e}")
         return jsonify({'error': '重置节点失败'}), 500
 
+@bp.route('/nodes/<int:node_id>/restart', methods=['POST'])
+@web_login_required
+def restart_node(node_id):
+    """重启节点服务"""
+    try:
+        node = BotNode.query.get(node_id)
+        if not node:
+            return jsonify({'error': '节点不存在'}), 404
+        
+        # 设置重启命令
+        node.command_status = 'pending'
+        node.command = 'RESTART_SERVICE'
+        node.command_updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        
+        return jsonify({'status': 'success', 'message': '重启命令已下发'})
+    
+    except Exception as e:
+        current_app.logger.error(f"重启节点失败: {e}")
+        return jsonify({'error': '重启节点失败'}), 500
+
 @bp.route('/nodes/<int:node_id>/regenerate-token', methods=['POST'])
 @web_login_required
 def regenerate_token(node_id):
