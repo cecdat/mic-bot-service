@@ -231,4 +231,61 @@ CREATE INDEX IF NOT EXISTS idx_verification_codes_account_created ON verificatio
 CREATE INDEX IF NOT EXISTS idx_bot_nodes_activity_status ON bot_nodes (activity_status);
 CREATE INDEX IF NOT EXISTS idx_bot_accounts_created_at ON bot_accounts (created_at);
 
+-- 推送配置表
+CREATE TABLE IF NOT EXISTS push_configs (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    channel VARCHAR(50) NOT NULL,
+    is_enabled BOOLEAN DEFAULT TRUE,
+    config_data TEXT,
+    notify_on_node_online BOOLEAN DEFAULT FALSE,
+    notify_on_node_offline BOOLEAN DEFAULT FALSE,
+    notify_on_account_error BOOLEAN DEFAULT FALSE,
+    notify_on_verification_code BOOLEAN DEFAULT FALSE,
+    notify_on_task_completed BOOLEAN DEFAULT FALSE,
+    notify_on_system_alert BOOLEAN DEFAULT FALSE,
+    notify_on_task_start BOOLEAN DEFAULT FALSE,
+    notify_on_task_finish BOOLEAN DEFAULT FALSE,
+    status INTEGER DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 推送配置表注释
+COMMENT ON TABLE push_configs IS '推送配置表';
+COMMENT ON COLUMN push_configs.id IS '主键ID';
+COMMENT ON COLUMN push_configs.name IS '配置名称';
+COMMENT ON COLUMN push_configs.channel IS '推送渠道';
+COMMENT ON COLUMN push_configs.is_enabled IS '是否启用';
+COMMENT ON COLUMN push_configs.config_data IS '配置数据(JSON格式)';
+COMMENT ON COLUMN push_configs.notify_on_node_online IS '节点上线通知';
+COMMENT ON COLUMN push_configs.notify_on_node_offline IS '节点下线通知';
+COMMENT ON COLUMN push_configs.notify_on_account_error IS '账户错误通知';
+COMMENT ON COLUMN push_configs.notify_on_verification_code IS '验证码提醒通知';
+COMMENT ON COLUMN push_configs.notify_on_task_completed IS '任务完成通知';
+COMMENT ON COLUMN push_configs.notify_on_system_alert IS '系统告警通知';
+COMMENT ON COLUMN push_configs.notify_on_task_start IS '任务开始通知';
+COMMENT ON COLUMN push_configs.notify_on_task_finish IS '任务完成通知';
+
+-- 推送配置表索引
+CREATE INDEX IF NOT EXISTS idx_push_configs_channel ON push_configs(channel);
+CREATE INDEX IF NOT EXISTS idx_push_configs_is_enabled ON push_configs(is_enabled);
+CREATE INDEX IF NOT EXISTS idx_push_configs_status ON push_configs(status);
+
+-- 创建更新时间触发器函数（如果不存在）
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- 创建推送配置表更新时间触发器
+DROP TRIGGER IF EXISTS update_push_configs_updated_at ON push_configs;
+CREATE TRIGGER update_push_configs_updated_at 
+    BEFORE UPDATE ON push_configs 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- 数据库基础结构v2.5完成

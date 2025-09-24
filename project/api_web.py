@@ -337,7 +337,7 @@ def manage_nodes():
                 # 创建节点
                 new_node = BotNode(
                     node_name=node_name,
-                    api_token_hash=api_token,
+                    api_token_hash=generate_password_hash(api_token),
                     status=0,  # 默认离线
                     activity_status='Idle',
                     cron_schedule=data.get('cron_schedule', '10 9,13,19 * * *'),
@@ -638,7 +638,8 @@ def regenerate_token(node_id):
         
         # 生成新的API Token
         new_token = secrets.token_urlsafe(32)
-        node.api_token = new_token
+        # 将token进行hash处理后存储到数据库
+        node.api_token_hash = generate_password_hash(new_token)
         db.session.commit()
         
         return jsonify({
@@ -660,25 +661,36 @@ def delete_node(node_id):
         if not node:
             return jsonify({'error': '节点不存在'}), 404
         
-        # 检查是否有账户分配到此节点
-        account_count = BotAccount.query.filter_by(assigned_node_id=node_id).count()
+        node_name = node.node_name
+        
+        # 检查是否有账户分配到此节点，如果有则将其设为未分配
+        assigned_accounts = BotAccount.query.filter_by(assigned_node_id=node_id).all()
+        account_count = len(assigned_accounts)
+        
         if account_count > 0:
-            return jsonify({'error': f'该节点下还有 {account_count} 个账户，无法删除'}), 400
+            # 将账户的assigned_node_id设为None（未分配状态）
+            for account in assigned_accounts:
+                account.assigned_node_id = None
+            current_app.logger.info(f'已将节点 {node_name} 下的 {account_count} 个账户设为未分配状态')
         
         # 清理节点的所有任务（调度器任务和数据库任务）
         try:
             scheduler.clear_node_tasks(node_id)
-            current_app.logger.info(f'已清理节点 {node_id} 的所有任务')
+            current_app.logger.info(f'已清理节点 {node_name} 的所有任务')
         except Exception as clear_error:
-            current_app.logger.warning(f'清理节点 {node_id} 任务时出错: {clear_error}')
+            current_app.logger.warning(f'清理节点 {node_name} 任务时出错: {clear_error}')
             # 继续执行删除操作，不因为任务清理失败而阻止节点删除
         
         # 删除节点
         db.session.delete(node)
         db.session.commit()
         
-        current_app.logger.info(f'节点 {node_id} 删除成功')
-        return jsonify({'status': 'success', 'message': '节点删除成功'})
+        message = f'节点 {node_name} 删除成功'
+        if account_count > 0:
+            message += f'，已将 {account_count} 个账户设为未分配状态'
+        
+        current_app.logger.info(message)
+        return jsonify({'status': 'success', 'message': message})
     
     except Exception as e:
         db.session.rollback()

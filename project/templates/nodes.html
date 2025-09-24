@@ -253,14 +253,14 @@ layui.use(['table', 'form', 'layer'], function(){
         if(obj.event === 'edit'){
             openNodeModal(data);
         } else if(obj.event === 'trigger'){
-            if (data.status !== 'Online') { layer.msg('节点不在线，无法触发任务！', {icon: 7}); return; }
-            if (data.activity_status !== 'Idle') { layer.msg('节点正在运行任务，请稍后再试！', {icon: 7}); return; }
-            triggerNode(data.id);
+            if (data.status !== 'Online') { layer.msg(`节点 <strong style="color: #ff6b6b;">${data.node_name}</strong> 不在线，无法触发任务！`, {icon: 7}); return; }
+            if (data.activity_status !== 'Idle') { layer.msg(`节点 <strong style="color: #ff6b6b;">${data.node_name}</strong> 正在运行任务，请稍后再试！`, {icon: 7}); return; }
+            triggerNode(data.id, data.node_name);
         } else if(obj.event === 'stop'){
-            if (data.activity_status !== 'Running') { layer.msg('节点当前未在运行任务，无需停止。', {icon: 7}); return; }
-            stopNode(data.id);
+            if (data.activity_status !== 'Running') { layer.msg(`节点 <strong style="color: #ff6b6b;">${data.node_name}</strong> 当前未在运行任务，无需停止。`, {icon: 7}); return; }
+            stopNode(data.id, data.node_name);
         } else if (obj.event === 'restart'){
-            if (data.status !== 'Online') { layer.msg('节点不在线，无法重启服务！', {icon: 7}); return; }
+            if (data.status !== 'Online') { layer.msg(`节点 <strong style="color: #ff6b6b;">${data.node_name}</strong> 不在线，无法重启服务！`, {icon: 7}); return; }
             restartNode(data.id, data.node_name);
         } else if (obj.event === 'del') {
             deleteNode(data.id, data.node_name);
@@ -406,15 +406,15 @@ layui.use(['table', 'form', 'layer'], function(){
         return false;
     });
 
-    function triggerNode(nodeId) {
-        layer.confirm('确定要手动触发该节点立即执行一次任务吗？', {icon: 3, title:'提示'}, function(index){
+    function triggerNode(nodeId, nodeName) {
+        layer.confirm(`确定要手动触发节点 <strong style="color: #ff6b6b;">${nodeName}</strong> 立即执行一次任务吗？`, {icon: 3, title:'提示'}, function(index){
             layer.load(1);
             fetchWithAuth(`/web_api/nodes/${nodeId}/trigger`, { method: 'POST' })
             .then(res => res.json())
             .then(result => {
                 layer.closeAll('loading');
                 if (result.status === 'success') {
-                    layer.msg('触发指令已发送！', {icon: 1});
+                    layer.msg(`节点 <strong style="color: #5fb878;">${nodeName}</strong> 触发指令已发送！`, {icon: 1});
                     tableIns.reload({
                         url: '/web_api/nodes?_t=' + Date.now()
                     });
@@ -429,15 +429,15 @@ layui.use(['table', 'form', 'layer'], function(){
         });
     }
 
-    function stopNode(nodeId) {
-        layer.confirm('确定要向该节点发送停止指令吗？（仅停止当前轮任务）', {icon: 3, title:'提示'}, function(index){
+    function stopNode(nodeId, nodeName) {
+        layer.confirm(`确定要向节点 <strong style="color: #ff6b6b;">${nodeName}</strong> 发送停止指令吗？（仅停止当前轮任务）`, {icon: 3, title:'提示'}, function(index){
             layer.load(1);
             fetchWithAuth(`/web_api/nodes/${nodeId}/stop`, { method: 'POST' })
             .then(res => res.json())
             .then(result => {
                 layer.closeAll('loading');
                 if (result.status === 'success') {
-                    layer.msg('停止指令已发送！', {icon: 1});
+                    layer.msg(`节点 <strong style="color: #5fb878;">${nodeName}</strong> 停止指令已发送！`, {icon: 1});
                     tableIns.reload({
                         url: '/web_api/nodes?_t=' + Date.now()
                     });
@@ -453,14 +453,14 @@ layui.use(['table', 'form', 'layer'], function(){
     }
     
     function deleteNode(nodeId, nodeName) {
-        layer.confirm(`确定要删除节点 "${nodeName}" 吗？<br><span class="layui-text-red">所有分配给该节点的账户将会被自动置为“未分配”。</span>`, {icon: 3, title:'危险操作确认'}, function(index){
+        layer.confirm(`确定要删除节点 <strong style="color: #ff6b6b;">${nodeName}</strong> 吗？<br><span class="layui-text-red">所有分配给该节点的账户将会被自动置为"未分配"。</span>`, {icon: 3, title:'危险操作确认'}, function(index){
             layer.load(1);
             fetchWithAuth(`/web_api/nodes/${nodeId}`, { method: 'DELETE' })
             .then(res => res.json())
             .then(result => {
                 layer.closeAll('loading');
                 if (result.status === 'success') {
-                    layer.msg('节点删除成功', {icon: 1});
+                    layer.msg(`节点 <strong style="color: #5fb878;">${nodeName}</strong> 删除成功`, {icon: 1});
                     tableIns.reload({
                         url: '/web_api/nodes?_t=' + Date.now()
                     });
@@ -476,7 +476,7 @@ layui.use(['table', 'form', 'layer'], function(){
     }
 
     function resetNode(nodeId, nodeName) {
-        layer.confirm(`确定要重置节点 [${nodeName}] 的Bot状态吗？`, {
+        layer.confirm(`确定要重置节点 <strong style="color: #ff6b6b;">${nodeName}</strong> 的Bot状态吗？`, {
             icon: 3, title: '确认重置',
             btn: ['确认', '取消']
         }, function(index) {
@@ -486,7 +486,7 @@ layui.use(['table', 'form', 'layer'], function(){
                 .then(result => {
                     layer.closeAll('loading');
                     if (result.status === 'success') {
-                        layer.msg(result.message || '节点状态已重置', { icon: 1 });
+                        layer.msg(`节点 <strong style="color: #5fb878;">${nodeName}</strong> 状态已重置`, { icon: 1 });
                         tableIns.reload({
                         url: '/web_api/nodes?_t=' + Date.now()
                     });
@@ -505,7 +505,7 @@ layui.use(['table', 'form', 'layer'], function(){
     function restartNode(nodeId, nodeName) {
         layer.confirm(`
             <div style="padding: 10px;">
-                <p><strong>确定要重启节点 [${nodeName}] 的服务吗？</strong></p>
+                <p><strong>确定要重启节点 <span style="color: #ff6b6b;">${nodeName}</span> 的服务吗？</strong></p>
                 <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 10px; margin: 10px 0;">
                     <p style="margin: 0; color: #856404;"><i class="layui-icon layui-icon-tips" style="margin-right: 5px;"></i><strong>重启说明：</strong></p>
                     <ul style="margin: 5px 0 0 20px; color: #856404;">
@@ -537,7 +537,7 @@ layui.use(['table', 'form', 'layer'], function(){
                 .then(result => {
                     layer.close(restartLayer);
                     if (result.status === 'success') {
-                        layer.msg('重启命令已下发，节点正在重启...', { 
+                        layer.msg(`节点 <strong style="color: #5fb878;">${nodeName}</strong> 重启命令已下发，正在重启...`, { 
                             icon: 1, 
                             time: 3000 
                         });
@@ -565,7 +565,7 @@ layui.use(['table', 'form', 'layer'], function(){
         let checkCount = 0;
         const maxChecks = 30; // 最多检查30次，每次2秒，总共1分钟
         
-        const statusLayer = layer.msg(`节点 [${nodeName}] 正在重启中...`, {
+        const statusLayer = layer.msg(`节点 <strong style="color: #ff6b6b;">${nodeName}</strong> 正在重启中...`, {
             icon: 16,
             shade: 0.3,
             time: 0
@@ -583,7 +583,7 @@ layui.use(['table', 'form', 'layer'], function(){
                         if (node.status === 'Online' && node.activity_status === 'Idle') {
                             // 节点已重新上线
                             layer.close(statusLayer);
-                            layer.msg(`节点 [${nodeName}] 重启成功！`, { 
+                            layer.msg(`节点 <strong style="color: #5fb878;">${nodeName}</strong> 重启成功！`, { 
                                 icon: 1, 
                                 time: 3000 
                             });
@@ -599,7 +599,7 @@ layui.use(['table', 'form', 'layer'], function(){
                     if (checkCount >= maxChecks) {
                         // 超时
                         layer.close(statusLayer);
-                        layer.msg(`节点 [${nodeName}] 重启超时，请手动检查节点状态`, { 
+                        layer.msg(`节点 <strong style="color: #ff6b6b;">${nodeName}</strong> 重启超时，请手动检查节点状态`, { 
                             icon: 2, 
                             time: 5000 
                         });
@@ -625,7 +625,7 @@ layui.use(['table', 'form', 'layer'], function(){
 
     // 重置API Token
     function resetApiToken(nodeId, nodeName) {
-        layer.confirm(`确定要重置节点 [${nodeName}] 的API Token吗？<br><br><span style="color: #ff6b6b;">⚠️ 重置后，旧的API Token将立即失效，需要更新节点配置中的Token！</span>`, {
+        layer.confirm(`确定要重置节点 <strong style="color: #ff6b6b;">${nodeName}</strong> 的API Token吗？<br><br><span style="color: #ff6b6b;">⚠️ 重置后，旧的API Token将立即失效，需要更新节点配置中的Token！</span>`, {
             icon: 3, title: '确认重置API Token',
             btn: ['确认重置', '取消']
         }, function(index) {
@@ -638,7 +638,7 @@ layui.use(['table', 'form', 'layer'], function(){
                         // 显示新Token的弹窗
                         layer.open({
                             type: 1,
-                            title: '🔑 新的API Token已生成',
+                            title: `🔑 节点 ${nodeName} 新的API Token已生成`,
                             area: ['80%', 'auto'],
                             content: `
                                 <div style="padding: 20px;">
