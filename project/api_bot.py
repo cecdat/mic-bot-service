@@ -274,7 +274,8 @@ def get_node_config():
         "max_sleep_minutes": node.max_sleep_minutes,
         "clusters": node.clusters,
         "search_delay_min": node.search_delay_min,
-        "search_delay_max": node.search_delay_max
+        "search_delay_max": node.search_delay_max,
+        "search_cross_execution": node.search_cross_execution
     }
     return jsonify(config_data)
 
@@ -282,7 +283,7 @@ def get_node_config():
 @bot_api_required
 def get_assigned_accounts():
     node = g.node
-    accounts = BotAccount.query.filter_by(assigned_node_id=node.id, is_enabled=True).all()
+    accounts = BotAccount.query.filter_by(assigned_node_id=node.id, is_enabled=True).order_by(BotAccount.email.asc()).all()
     
     accounts_data = []
     for acc in accounts:

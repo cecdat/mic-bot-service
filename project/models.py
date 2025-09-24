@@ -29,11 +29,7 @@ class BotNode(db.Model):
     clusters = db.Column(db.Integer, default=1)
     search_delay_min = db.Column(db.String(10), default='30s')
     search_delay_max = db.Column(db.String(10), default='2min')
-    # 搜索任务拆分配置
-    search_split_enabled = db.Column(db.Boolean, default=False)  # 是否启用搜索任务拆分
-    search_split_count = db.Column(db.Integer, default=3)  # 搜索任务拆分为几次执行
-    search_split_interval_min = db.Column(db.Integer, default=30)  # 拆分间隔最小分钟数
-    search_split_interval_max = db.Column(db.Integer, default=120)  # 拆分间隔最大分钟数
+    search_cross_execution = db.Column(db.Boolean, default=False)  # 搜索任务交叉执行开关
     accounts = db.relationship('BotAccount', backref='node', lazy='dynamic')
 
 class BotAccount(db.Model):
@@ -136,8 +132,9 @@ class Task(db.Model):
     result = db.Column(db.Text)
     error_message = db.Column(db.Text)
     # 外键关系
-    node = db.relationship('BotNode', backref=db.backref('tasks', lazy=True))
-    account = db.relationship('BotAccount', backref=db.backref('tasks', lazy=True))
+    # 注意：使用 cascade='all, delete-orphan' 确保删除节点时相关任务也被删除
+    node = db.relationship('BotNode', backref=db.backref('tasks', lazy=True, cascade='all, delete-orphan'))
+    account = db.relationship('BotAccount', backref=db.backref('tasks', lazy=True, cascade='all, delete-orphan'))
 
 class NodeLog(db.Model):
     __tablename__ = 'node_logs'
@@ -154,7 +151,8 @@ class NodeLog(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # 关联关系
-    node = db.relationship('BotNode', backref='logs')
+    # 注意：使用 cascade='all, delete-orphan' 确保删除节点时相关日志也被删除
+    node = db.relationship('BotNode', backref=db.backref('logs', lazy=True, cascade='all, delete-orphan'))
 
 
 class VerificationCode(db.Model):
@@ -169,7 +167,8 @@ class VerificationCode(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
     expires_at = db.Column(db.DateTime, default=lambda: datetime.now() + timedelta(minutes=10))
     
-    node = db.relationship('BotNode', backref='verification_codes')
+    # 注意：使用 cascade='all, delete-orphan' 确保删除节点时相关验证码也被删除
+    node = db.relationship('BotNode', backref=db.backref('verification_codes', lazy=True, cascade='all, delete-orphan'))
 
 
 class UserAgent(db.Model):
@@ -184,3 +183,32 @@ class UserAgent(db.Model):
     
     # 关联关系
     used_by_account = db.relationship('BotAccount', backref='user_agent', uselist=False)
+
+
+class NodeRestartHistory(db.Model):
+    __tablename__ = 'node_restart_history'
+    id = db.Column(db.Integer, primary_key=True)
+    node_id = db.Column(db.Integer, db.ForeignKey('bot_nodes.id'), nullable=False)
+    restart_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    restart_reason = db.Column(db.String(100), nullable=False, default='manual_restart')
+    restarted_by = db.Column(db.String(100), nullable=True)  # 操作人
+    restart_duration = db.Column(db.Integer, nullable=True)  # 重启耗时（秒）
+    status = db.Column(db.String(20), nullable=False, default='success')  # success, failed, timeout
+    notes = db.Column(db.Text, nullable=True)  # 备注信息
+    
+    # 关联关系
+    # 注意：如果 node_restart_history 表不存在，这个关系可能会导致错误
+    # 暂时注释掉，避免删除节点时查询不存在的表
+    # node = db.relationship('BotNode', backref='restart_history')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'node_id': self.node_id,
+            'restart_time': self.restart_time.isoformat() if self.restart_time else None,
+            'restart_reason': self.restart_reason,
+            'restarted_by': self.restarted_by,
+            'restart_duration': self.restart_duration,
+            'status': self.status,
+            'notes': self.notes
+        }

@@ -7,9 +7,17 @@ from flask import request, session
 from .auth import web_login_required
 from .models import BotNode
 from .db import db
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import json
+
+def safe_isoformat(dt):
+    """安全地将datetime对象转换为ISO格式字符串，确保包含时区信息"""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +92,7 @@ def register_websocket_events(socketio_instance):
             'node_id': node.id,
             'activity_status': node.activity_status,
             'status_updated_at': node.status_updated_at.isoformat() if node.status_updated_at else None,
-            'last_seen': node.last_seen.isoformat() if node.last_seen else None
+            'last_seen': safe_isoformat(node.last_seen)
         })
     
     @socketio_instance.on('leave_node_room')
@@ -109,7 +117,7 @@ def register_websocket_events(socketio_instance):
                 'node_id': node.id,
                 'activity_status': node.activity_status,
                 'status_updated_at': node.status_updated_at.isoformat() if node.status_updated_at else None,
-                'last_seen': node.last_seen.isoformat() if node.last_seen else None
+                'last_seen': safe_isoformat(node.last_seen)
             })
     
     @socketio_instance.on('leave_all_nodes_room')
@@ -143,7 +151,7 @@ def register_websocket_events(socketio_instance):
             'node_name': node.node_name,
             'activity_status': node.activity_status,
             'status_updated_at': node.status_updated_at.isoformat() if node.status_updated_at else None,
-            'last_seen': node.last_seen.isoformat() if node.last_seen else None
+            'last_seen': safe_isoformat(node.last_seen)
         })
     
     @socketio_instance.on('node_ready')
@@ -355,8 +363,8 @@ def broadcast_node_heartbeat(node_id, last_seen):
     try:
         data = {
             'node_id': node_id,
-            'last_seen': last_seen.isoformat() if last_seen else None,
-            'timestamp': last_seen.isoformat() if last_seen else None
+            'last_seen': safe_isoformat(last_seen),
+            'timestamp': safe_isoformat(last_seen)
         }
         
         # 广播到特定节点房间

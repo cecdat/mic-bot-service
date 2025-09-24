@@ -19,7 +19,6 @@
     <span class="layui-badge layui-bg-danger" title="停止" {{# if(d.activity_status !== 'Running'){ }} style='opacity: 0.5; cursor: not-allowed;' {{# }}} lay-event="stop"><i class="layui-icon layui-icon-pause"></i></span>
     <span class="layui-badge layui-bg-primary" title="重置bot状态" lay-event="reset"><i class="layui-icon layui-icon-refresh"></i></span>
     <span class="layui-badge layui-bg-orange" title="重启服务" {{# if(d.status !== 'Online'){ }} style='opacity: 0.5; cursor: not-allowed;' {{# }}} lay-event="restart"><i class="layui-icon layui-icon-refresh-3"></i></span>
-    <span class="layui-badge layui-bg-green" title="查看日志" lay-event="logs"><i class="layui-icon layui-icon-console"></i></span>
     <span class="layui-badge layui-bg-orange" title="重置API Token" lay-event="reset-token"><i class="layui-icon layui-icon-key"></i></span>
     <span class="layui-badge layui-bg-primary" title="编辑" lay-event="edit"><i class="layui-icon layui-icon-set"></i></span>
     <span class="layui-badge layui-bg-gray" title="删除" lay-event="del"><i class="layui-icon layui-icon-delete"></i></span>
@@ -76,26 +75,18 @@
                 </div>
             </div>
             
-            <!-- 搜索任务拆分配置 -->
+            <!-- 搜索任务交叉执行配置 -->
             <div class="layui-form-item" style="margin-bottom: 15px;">
-                <label class="layui-form-label" style="width: 80px; white-space: nowrap;">搜索拆分</label>
+                <label class="layui-form-label" style="width: 80px; white-space: nowrap;">交叉运行</label>
                 <div class="layui-input-block" style="margin-left: 90px;">
-                    <input type="checkbox" name="search_split_enabled" lay-skin="primary" title="启用搜索任务拆分" style="margin-right: 8px;">
-                    <div class="layui-input-inline" style="width: 60px; margin-left: 15px;">
-                        <input type="number" name="search_split_count" placeholder="3" value="3" min="1" max="10" class="layui-input">
+                    <input type="checkbox" name="search_cross_execution" lay-skin="switch">
+                    <div class="layui-form-mid layui-word-aux" style="margin-left: 10px; font-size: 12px; color: #999;">
+                        开启后，搜索任务将按账户轮询执行（A→B→C→A...），否则按账户顺序执行（A全部→B全部→C全部）
                     </div>
-                    <div class="layui-form-mid" style="margin-left: 3px; font-size: 12px;">次</div>
-                    <div class="layui-form-mid" style="margin: 0 8px; font-size: 12px;">间隔</div>
-                    <div class="layui-input-inline" style="width: 60px;">
-                        <input type="number" name="search_split_interval_min" placeholder="30" value="30" min="5" class="layui-input">
-                    </div>
-                    <div class="layui-form-mid" style="margin: 0 3px;">-</div>
-                    <div class="layui-input-inline" style="width: 60px;">
-                        <input type="number" name="search_split_interval_max" placeholder="120" value="120" min="10" class="layui-input">
-                    </div>
-                    <div class="layui-form-mid" style="margin-left: 3px; font-size: 12px;">分钟</div>
                 </div>
             </div>
+            
+            <!-- 搜索任务拆分配置 -->
             
             <button class="layui-btn" lay-submit lay-filter="saveNode" id="saveNodeSubmit" style="display: none;">提交</button>
         </form>
@@ -196,126 +187,9 @@
 {% block custom_js %}
 <script>
 // 全局函数定义
-// 加载节点日志
-function loadNodeLogs() {
-    if (!window.currentLogModal) return;
-    
-    const { nodeId } = window.currentLogModal;
-    
-    const level = document.getElementById('levelFilter')?.value || '';
-    const title = document.getElementById('titleFilter')?.value || '';
-    const limit = document.getElementById('limitFilter')?.value || '100';
-    
-    // 构建查询参数
-    const params = new URLSearchParams();
-    if (level) params.append('level', level);
-    if (title) params.append('title', title);
-    if (limit) params.append('limit', limit);
-    
-    const url = `/web_api/nodes/${nodeId}/logs?${params.toString()}`;
-    
-    // 更新状态
-    const statusEl = document.getElementById('logStatus');
-    if (statusEl) statusEl.textContent = '正在加载日志...';
-    
-    fetchWithAuth(url)
-        .then(response => response.json())
-        .then(result => {
-            if (result.status === 'success') {
-                displayLogs(result.logs);
-                const statusEl = document.getElementById('logStatus');
-                if (statusEl) statusEl.textContent = `已加载 ${result.total} 条日志`;
-            } else {
-                throw new Error(result.message || '加载日志失败');
-            }
-        })
-        .catch(error => {
-            const statusEl = document.getElementById('logStatus');
-            if (statusEl) statusEl.textContent = '加载失败: ' + error.message;
-            
-            const container = document.getElementById('logContainer');
-            if (container) {
-                container.innerHTML = `<div style="color: #ff6b6b;">加载日志失败: ${error.message}</div>`;
-            }
-        });
-}
 
 
-// 显示日志
-function displayLogs(logs) {
-    const container = document.getElementById('logContainer');
-    if (!container) return;
-    
-    if (!logs || logs.length === 0) {
-        container.innerHTML = '<div style="color: #d4d4d4;">暂无日志</div>';
-        return;
-    }
-    
-    container.innerHTML = '';
-    
-    logs.forEach(log => {
-        const logEntry = document.createElement('div');
-        logEntry.className = 'log-entry ' + log.level;
-        logEntry.style.cssText = 'margin-bottom: 8px; padding: 5px; border-radius: 3px; border-left: 3px solid #555;';
-        
-        // 根据日志级别设置左边框颜色
-        if (log.level === 'log') logEntry.style.borderLeftColor = '#4CAF50';
-        else if (log.level === 'warn') logEntry.style.borderLeftColor = '#FF9800';
-        else if (log.level === 'error') logEntry.style.borderLeftColor = '#F44336';
-        
-        // 格式化时间戳
-        const timestamp = new Date(log.timestamp).toLocaleString('zh-CN', { 
-            timeZone: 'Asia/Shanghai',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
-        
-        logEntry.innerHTML = `
-            <span style="color: #888; font-size: 12px;">[${timestamp}]</span>
-            <span style="font-weight: bold; margin: 0 5px; color: ${log.level === 'log' ? '#4CAF50' : log.level === 'warn' ? '#FF9800' : '#F44336'};">[${log.level.toUpperCase()}]</span>
-            <span style="color: #9CDCFE; margin: 0 5px;">[${log.platform || ''}]</span>
-            <span style="color: #DCDCAA; margin: 0 5px;">[${log.title || ''}]</span>
-            <div style="color: #d4d4d4; margin-left: 10px;">${log.message || ''}</div>
-        `;
-        
-        container.appendChild(logEntry);
-    });
-    
-    container.scrollTop = container.scrollHeight;
-}
 
-// 清空节点日志
-function clearNodeLogs() {
-    if (!window.currentLogModal) return;
-    
-    if (!confirm('确定要清空该节点的所有日志吗？')) return;
-    
-    const { nodeId, nodeName } = window.currentLogModal;
-    
-    fetchWithAuth(`/web_api/nodes/${nodeId}/logs/clear`, { 
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(result => {
-        if (result.status === 'success') {
-            const container = document.getElementById('logContainer');
-            if (container) {
-                container.innerHTML = '<div style="color: #d4d4d4;">日志已清空</div>';
-            }
-            layer.msg(result.message, {icon: 1});
-        } else {
-            throw new Error(result.message || '清空日志失败');
-        }
-    })
-    .catch(error => {
-        console.error('清空日志失败:', error);
-        layer.msg('清空日志失败: ' + error.message, {icon: 2});
-    });
-}
 
 layui.use(['table', 'form', 'layer'], function(){
     // 移除自动刷新功能
@@ -330,6 +204,10 @@ layui.use(['table', 'form', 'layer'], function(){
         url: '/web_api/nodes?_t=' + Date.now(),
         height: 'full-160',
         cellMinWidth: 80,
+        initSort: {
+            field: 'node_name',
+            type: 'asc'
+        },
         cols: [[
             {field: 'node_name', title: '节点名称', width: 150, sort: true, fixed: 'left'},
             {field: 'ip_address', title: 'IP 地址', width: 150},
@@ -381,8 +259,6 @@ layui.use(['table', 'form', 'layer'], function(){
         } else if(obj.event === 'stop'){
             if (data.activity_status !== 'Running') { layer.msg('节点当前未在运行任务，无需停止。', {icon: 7}); return; }
             stopNode(data.id);
-        } else if (obj.event === 'logs') {
-            openLogsModal(data);
         } else if (obj.event === 'restart'){
             if (data.status !== 'Online') { layer.msg('节点不在线，无法重启服务！', {icon: 7}); return; }
             restartNode(data.id, data.node_name);
@@ -419,10 +295,7 @@ layui.use(['table', 'form', 'layer'], function(){
                     "clusters": data ? data.clusters : 1,
                     "search_delay_min": data ? data.search_delay_min : '30s',
                     "search_delay_max": data ? data.search_delay_max : '2min',
-                    "search_split_enabled": data ? data.search_split_enabled : false,
-                    "search_split_count": data ? data.search_split_count : 3,
-                    "search_split_interval_min": data ? data.search_split_interval_min : 30,
-                    "search_split_interval_max": data ? data.search_split_interval_max : 120
+                    "search_cross_execution": data ? data.search_cross_execution : false,
                 });
                 // 允许编辑节点名字
                 layero.find('[name="node_name"]')[0].readOnly = false;
@@ -630,17 +503,49 @@ layui.use(['table', 'form', 'layer'], function(){
     }
 
     function restartNode(nodeId, nodeName) {
-        layer.confirm(`确定要重启节点 [${nodeName}] 的服务吗？<br><br><span style="color: #ff6b6b;">⚠️ 重启后节点将重新启动，正在执行的任务会被中断！</span>`, {
-            icon: 3, title: '确认重启服务',
-            btn: ['确认重启', '取消']
+        layer.confirm(`
+            <div style="padding: 10px;">
+                <p><strong>确定要重启节点 [${nodeName}] 的服务吗？</strong></p>
+                <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 10px; margin: 10px 0;">
+                    <p style="margin: 0; color: #856404;"><i class="layui-icon layui-icon-tips" style="margin-right: 5px;"></i><strong>重启说明：</strong></p>
+                    <ul style="margin: 5px 0 0 20px; color: #856404;">
+                        <li>节点将立即停止当前任务</li>
+                        <li>容器将自动重启并重新连接</li>
+                        <li>重启过程大约需要 10-30 秒</li>
+                        <li>会话数据不会丢失</li>
+                    </ul>
+                </div>
+                <p style="color: #ff6b6b; font-weight: bold;">⚠️ 正在执行的任务会被中断！</p>
+            </div>
+        `, {
+            icon: 3, 
+            title: '确认重启服务',
+            btn: ['确认重启', '取消'],
+            area: ['450px', 'auto']
         }, function(index) {
-            layer.load(1);
+            layer.close(index);
+            
+            // 显示重启进度
+            const restartLayer = layer.msg('正在下发重启指令...', {
+                icon: 16,
+                shade: 0.3,
+                time: 0
+            });
+            
             fetchWithAuth(`/web_api/nodes/${nodeId}/restart`, { method: 'POST' })
                 .then(response => response.json())
                 .then(result => {
-                    layer.closeAll('loading');
+                    layer.close(restartLayer);
                     if (result.status === 'success') {
-                        layer.msg(result.message || '重启命令已下发', { icon: 1 });
+                        layer.msg('重启命令已下发，节点正在重启...', { 
+                            icon: 1, 
+                            time: 3000 
+                        });
+                        
+                        // 显示重启状态监控
+                        showRestartStatus(nodeId, nodeName);
+                        
+                        // 刷新表格
                         tableIns.reload({
                             url: '/web_api/nodes?_t=' + Date.now()
                         });
@@ -649,11 +554,73 @@ layui.use(['table', 'form', 'layer'], function(){
                     }
                 })
                 .catch(error => {
-                    layer.closeAll('loading');
+                    layer.close(restartLayer);
                     layer.msg('重启服务失败: ' + error.message, { icon: 2 });
                 });
-            layer.close(index);
         });
+    }
+    
+    // 显示重启状态监控
+    function showRestartStatus(nodeId, nodeName) {
+        let checkCount = 0;
+        const maxChecks = 30; // 最多检查30次，每次2秒，总共1分钟
+        
+        const statusLayer = layer.msg(`节点 [${nodeName}] 正在重启中...`, {
+            icon: 16,
+            shade: 0.3,
+            time: 0
+        });
+        
+        const checkStatus = () => {
+            checkCount++;
+            
+            fetchWithAuth(`/web_api/nodes/${nodeId}`)
+                .then(response => response.json())
+                .then(result => {
+                    if (result.status === 'success' && result.data) {
+                        const node = result.data;
+                        
+                        if (node.status === 'Online' && node.activity_status === 'Idle') {
+                            // 节点已重新上线
+                            layer.close(statusLayer);
+                            layer.msg(`节点 [${nodeName}] 重启成功！`, { 
+                                icon: 1, 
+                                time: 3000 
+                            });
+                            
+                            // 刷新表格
+                            tableIns.reload({
+                                url: '/web_api/nodes?_t=' + Date.now()
+                            });
+                            return;
+                        }
+                    }
+                    
+                    if (checkCount >= maxChecks) {
+                        // 超时
+                        layer.close(statusLayer);
+                        layer.msg(`节点 [${nodeName}] 重启超时，请手动检查节点状态`, { 
+                            icon: 2, 
+                            time: 5000 
+                        });
+                        return;
+                    }
+                    
+                    // 继续检查
+                    setTimeout(checkStatus, 2000);
+                })
+                .catch(error => {
+                    if (checkCount >= maxChecks) {
+                        layer.close(statusLayer);
+                        layer.msg(`检查节点状态失败: ${error.message}`, { icon: 2 });
+                        return;
+                    }
+                    setTimeout(checkStatus, 2000);
+                });
+        };
+        
+        // 开始检查
+        setTimeout(checkStatus, 3000); // 3秒后开始检查
     }
 
     // 重置API Token
@@ -720,73 +687,6 @@ layui.use(['table', 'form', 'layer'], function(){
         });
     }
 
-    // 打开日志查看弹窗
-    function openLogsModal(data) {
-        const nodeName = data.node_name;
-        const nodeId = data.id;
-        
-        // 创建弹窗内容
-        const modalContent = `
-            <div style="padding: 20px; background-color: #1e1e1e; color: #d4d4d4; font-family: 'Courier New', monospace; min-height: 600px;">
-                <div style="background-color: #2d2d2d; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-                    <h2 style="margin: 0 0 15px 0; color: #d4d4d4;">${nodeName} - 日志查看器</h2>
-                    <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
-                        <div style="display: flex; align-items: center; gap: 5px;">
-                            <label style="color: #d4d4d4;">日志级别:</label>
-                            <select id="levelFilter" style="padding: 8px 12px; border: 1px solid #555; border-radius: 3px; background-color: #3c3c3c; color: #d4d4d4; font-family: inherit;">
-                                <option value="">全部</option>
-                                <option value="log">信息</option>
-                                <option value="warn">警告</option>
-                                <option value="error">错误</option>
-                            </select>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 5px;">
-                            <label style="color: #d4d4d4;">标题过滤:</label>
-                            <input type="text" id="titleFilter" placeholder="输入标题关键词" style="padding: 8px 12px; border: 1px solid #555; border-radius: 3px; background-color: #3c3c3c; color: #d4d4d4; font-family: inherit;">
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 5px;">
-                            <label style="color: #d4d4d4;">显示条数:</label>
-                            <select id="limitFilter" style="padding: 8px 12px; border: 1px solid #555; border-radius: 3px; background-color: #3c3c3c; color: #d4d4d4; font-family: inherit;">
-                                <option value="50">50条</option>
-                                <option value="100" selected>100条</option>
-                                <option value="200">200条</option>
-                                <option value="500">500条</option>
-                            </select>
-                        </div>
-                        <button onclick="loadNodeLogs()" style="padding: 8px 12px; border: 1px solid #0078d4; border-radius: 3px; background-color: #0078d4; color: #d4d4d4; font-family: inherit; cursor: pointer;">刷新日志</button>
-                        <button onclick="clearNodeLogs()" style="padding: 8px 12px; border: 1px solid #d32f2f; border-radius: 3px; background-color: #d32f2f; color: #d4d4d4; font-family: inherit; cursor: pointer;">清空日志</button>
-                    </div>
-                    <div id="logStatus" style="color: #888; font-size: 12px; margin-top: 10px;">准备加载日志...</div>
-                </div>
-                <div id="logContainer" style="background-color: #2d2d2d; border-radius: 5px; padding: 15px; height: 500px; overflow-y: auto; font-size: 14px; line-height: 1.4;">
-                    <div>正在加载日志...</div>
-                </div>
-            </div>
-        `;
-        
-        // 打开弹窗
-        const logModal = layer.open({
-            type: 1,
-            title: false,
-            closeBtn: 1,
-            shadeClose: true,
-            area: ['90%', '80%'],
-            content: modalContent,
-            success: function(layero, index) {
-                // 弹窗打开后自动加载日志
-                setTimeout(() => {
-                    loadNodeLogs();
-                }, 100);
-            }
-        });
-        
-        // 存储弹窗索引和节点信息
-        window.currentLogModal = {
-            index: logModal,
-            nodeId: nodeId,
-            nodeName: nodeName
-        };
-    }
     
 
     
@@ -796,12 +696,6 @@ layui.use(['table', 'form', 'layer'], function(){
     
 
     
-    // 监听过滤条件变化
-    document.addEventListener('change', function(e) {
-        if (e.target.id === 'levelFilter' || e.target.id === 'titleFilter' || e.target.id === 'limitFilter') {
-            loadNodeLogs(); // 重新加载日志以应用新的过滤条件
-        }
-    });
     
     // 页面卸载时清理资源
     window.addEventListener('beforeunload', function() {

@@ -1,11 +1,12 @@
--- 升级脚本 v2.11: 添加节点重启历史记录功能
--- 创建时间: 2024-12-19
--- 描述: 添加 node_restart_history 表，用于记录节点重启历史
+-- 修复 node_restart_history 表不存在的问题
+-- 执行时间: 2024-12-19
+-- 描述: 手动创建 node_restart_history 表
 
--- 创建节点重启历史记录表
+-- 检查表是否存在，如果不存在则创建
 DO $$ 
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'node_restart_history') THEN
+        -- 创建表
         CREATE TABLE node_restart_history (
             id SERIAL PRIMARY KEY,
             node_id INTEGER NOT NULL,
@@ -29,7 +30,10 @@ BEGIN
     END IF;
 END $$;
 
--- 记录版本信息
+-- 确保版本记录存在
 INSERT INTO db_version (version, description, applied_at) 
 VALUES ('2.11', '添加节点重启历史记录功能', NOW())
 ON CONFLICT (version) DO NOTHING;
+
+-- 显示表结构
+\d node_restart_history;

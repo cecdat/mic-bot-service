@@ -1,6 +1,6 @@
-from flask import Blueprint, request, jsonify, session, current_app
+from flask import Blueprint, request, jsonify, session, current_app, g
 from .db import db
-from .models import Account, BotAccount, BotNode, PushConfig, WebUser, AccountPointsHistory
+from .models import Account, BotAccount, BotNode, PushConfig, WebUser, AccountPointsHistory, NodeRestartHistory
 from .auth import web_login_required
 from . import scheduler
 from .bing_wallpaper import bing_wallpaper
@@ -11,6 +11,14 @@ import os
 import time
 from werkzeug.security import generate_password_hash, check_password_hash
 import logging
+
+def safe_isoformat(dt):
+    """安全地将datetime对象转换为ISO格式字符串，确保包含时区信息"""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -101,8 +109,8 @@ def calculate_next_run_time(cron_schedule):
         
         minute_part, hour_part, day_part, month_part, weekday_part = cron_parts
         
-        # 获取当前时间
-        now = datetime.now()
+        # 获取当前时间（UTC）
+        now = datetime.now(timezone.utc)
         
         # 解析小时和分钟
         hours = []
@@ -141,7 +149,7 @@ def calculate_next_run_time(cron_schedule):
             
             for hour in sorted(hours):
                 for minute in sorted(minutes):
-                    next_time = datetime.combine(target_date, datetime.min.time().replace(hour=hour, minute=minute))
+                    next_time = datetime.combine(target_date, datetime.min.time().replace(hour=hour, minute=minute)).replace(tzinfo=timezone.utc)
                     
                     # 如果是今天，需要确保时间还没过
                     if day_offset == 0 and next_time <= now:
@@ -221,12 +229,12 @@ def get_points():
                             is_stale = True
                 
                 # 根据积分数据推断状态
-                if account.desktop_points and account.desktop_points > 0:
+                if account.desktop_gain and account.desktop_gain > 0:
                     desktop_status = 'online'
                 else:
                     desktop_status = 'offline'
                 
-                if account.mobile_points and account.mobile_points > 0:
+                if account.mobile_gain and account.mobile_gain > 0:
                     mobile_status = 'online'
                 else:
                     mobile_status = 'offline'
@@ -257,126 +265,154 @@ def get_points():
 @bp.route('/nodes', methods=['GET', 'POST', 'PUT'])
 @web_login_required
 def manage_nodes():
-    if request.method == 'GET':
-        # 获取所有节点
-        nodes = BotNode.query.all()
-        node_data = []
-        
-        for node in nodes:
-            # 使用智能状态推断
-            inferred_status = get_inferred_status(node)
+    try:
+        if request.method == 'GET':
+            # 获取所有节点，按节点名称排序
+            nodes = BotNode.query.order_by(BotNode.node_name.asc()).all()
+            node_data = []
             
-            # 计算下次执行时间
-            next_run_time = calculate_next_run_time(node.cron_schedule)
+            for node in nodes:
+                try:
+                    # 使用智能状态推断
+                    inferred_status = get_inferred_status(node)
+                    
+                    # 计算下次执行时间
+                    next_run_time = calculate_next_run_time(node.cron_schedule)
+                    
+                    node_data.append({
+                        'id': node.id,
+                        'node_name': node.node_name,
+                        'status': 'Online' if node.status == 1 else 'Offline',
+                        'activity_status': inferred_status,
+                        'ip_address': node.ip_address,
+                        'last_seen': safe_isoformat(node.last_seen),
+                        'status_updated_at': safe_isoformat(node.status_updated_at),
+                        'account_count_total': BotAccount.query.filter_by(assigned_node_id=node.id).count(),
+                        'next_run_time': safe_isoformat(next_run_time),
+                        'cron_schedule': node.cron_schedule,
+                        'min_sleep_minutes': node.min_sleep_minutes,
+                        'max_sleep_minutes': node.max_sleep_minutes,
+                        'clusters': node.clusters,
+                        'search_delay_min': node.search_delay_min,
+                        'search_delay_max': node.search_delay_max,
+                        'search_cross_execution': getattr(node, 'search_cross_execution', False),
+                        'created_at': None
+                    })
+                except Exception as e:
+                    print(f"处理节点 {node.id} 时出错: {e}")
+                    # 继续处理其他节点
+                    continue
             
-            node_data.append({
-                'id': node.id,
-                'node_name': node.node_name,
-                'status': 'Online' if node.status == 1 else 'Offline',
-                'activity_status': inferred_status,
-                'ip_address': node.ip_address,
-                'last_seen': node.last_seen.isoformat() if node.last_seen else None,
-                'status_updated_at': node.status_updated_at.isoformat() if node.status_updated_at else None,
-                'account_count_total': BotAccount.query.filter_by(assigned_node_id=node.id).count(),
-                'next_run_time': next_run_time.isoformat() if next_run_time else None,
-                'cron_schedule': node.cron_schedule,
-                'min_sleep_minutes': node.min_sleep_minutes,
-                'max_sleep_minutes': node.max_sleep_minutes,
-                'clusters': node.clusters,
-                'search_delay_min': node.search_delay_min,
-                'search_delay_max': node.search_delay_max,
-                'search_split_enabled': node.search_split_enabled,
-                'search_split_count': node.search_split_count,
-                'search_split_interval_min': node.search_split_interval_min,
-                'search_split_interval_max': node.search_split_interval_max,
-                'created_at': None
+            return jsonify({
+                "code": 0,
+                "msg": "success", 
+                "count": len(node_data),
+                "data": node_data
             })
         
-        return jsonify({
-            "code": 0,
-            "msg": "success", 
-            "count": len(node_data),
-            "data": node_data
-        })
+        elif request.method == 'POST':
+            try:
+                # 创建新节点
+                data = request.get_json()
+                node_name = data.get('node_name')
+                
+                if not node_name:
+                    return jsonify({'error': '节点名称不能为空'}), 400
+                
+                # 检查节点名称是否已存在
+                existing_node = BotNode.query.filter_by(node_name=node_name).first()
+                if existing_node:
+                    return jsonify({'error': '节点名称已存在'}), 400
+                
+                # 生成API Token
+                api_token = secrets.token_urlsafe(32)
+                
+                # 处理交叉执行开关的布尔值转换
+                search_cross_execution_value = data.get('search_cross_execution', False)
+                if isinstance(search_cross_execution_value, str):
+                    search_cross_execution_bool = search_cross_execution_value == 'on'
+                else:
+                    search_cross_execution_bool = bool(search_cross_execution_value)
+                
+                # 创建节点
+                new_node = BotNode(
+                    node_name=node_name,
+                    api_token_hash=api_token,
+                    status=0,  # 默认离线
+                    activity_status='Idle',
+                    cron_schedule=data.get('cron_schedule', '10 9,13,19 * * *'),
+                    min_sleep_minutes=data.get('min_sleep_minutes', 5),
+                    max_sleep_minutes=data.get('max_sleep_minutes', 20),
+                    clusters=data.get('clusters', 1),
+                    search_delay_min=data.get('search_delay_min', '30s'),
+                    search_delay_max=data.get('search_delay_max', '2min'),
+                    search_cross_execution=search_cross_execution_bool
+                )
+                
+                db.session.add(new_node)
+                db.session.commit()
+                
+                return jsonify({
+                    'status': 'success',
+                    'message': '节点创建成功',
+                    'node_id': new_node.id,
+                    'api_token': api_token
+                })
+            except Exception as e:
+                db.session.rollback()
+                print(f"创建节点失败: {e}")
+                return jsonify({'error': f'创建节点失败: {str(e)}'}), 500
+        
+        elif request.method == 'PUT':
+            try:
+                # 更新节点信息
+                data = request.get_json()
+                node_id = data.get('id')
+                node_name = data.get('node_name')
+                
+                if not node_id or not node_name:
+                    return jsonify({'error': '节点ID和名称不能为空'}), 400
+                
+                node = BotNode.query.get(node_id)
+                if not node:
+                    return jsonify({'error': '节点不存在'}), 404
+                
+                # 检查节点名称是否已被其他节点使用
+                existing_node = BotNode.query.filter(BotNode.node_name == node_name, BotNode.id != node_id).first()
+                if existing_node:
+                    return jsonify({'error': '节点名称已被其他节点使用'}), 400
+                
+                # 更新节点配置
+                node.node_name = node_name
+                node.cron_schedule = data.get('cron_schedule', node.cron_schedule)
+                node.min_sleep_minutes = data.get('min_sleep_minutes', node.min_sleep_minutes)
+                node.max_sleep_minutes = data.get('max_sleep_minutes', node.max_sleep_minutes)
+                node.clusters = data.get('clusters', node.clusters)
+                node.search_delay_min = data.get('search_delay_min', node.search_delay_min)
+                node.search_delay_max = data.get('search_delay_max', node.search_delay_max)
+                # 处理交叉执行开关的布尔值转换
+                search_cross_execution_value = data.get('search_cross_execution', getattr(node, 'search_cross_execution', False))
+                if isinstance(search_cross_execution_value, str):
+                    node.search_cross_execution = search_cross_execution_value == 'on'
+                else:
+                    node.search_cross_execution = bool(search_cross_execution_value)
+                
+                db.session.commit()
+                
+                return jsonify({'status': 'success', 'message': '节点更新成功'})
+            except Exception as e:
+                db.session.rollback()
+                print(f"更新节点失败: {e}")
+                return jsonify({'error': f'更新节点失败: {str(e)}'}), 500
     
-    elif request.method == 'POST':
-        # 创建新节点
-        data = request.get_json()
-        node_name = data.get('node_name')
-        
-        if not node_name:
-            return jsonify({'error': '节点名称不能为空'}), 400
-        
-        # 检查节点名称是否已存在
-        existing_node = BotNode.query.filter_by(node_name=node_name).first()
-        if existing_node:
-            return jsonify({'error': '节点名称已存在'}), 400
-        
-        # 生成API Token
-        api_token = secrets.token_urlsafe(32)
-        
-        # 创建节点
-        new_node = BotNode(
-            node_name=node_name,
-            api_token_hash=api_token,
-            status=0,  # 默认离线
-            activity_status='Idle',
-            cron_schedule=data.get('cron_schedule', '10 9,13,19 * * *'),
-            min_sleep_minutes=data.get('min_sleep_minutes', 5),
-            max_sleep_minutes=data.get('max_sleep_minutes', 20),
-            clusters=data.get('clusters', 1),
-            search_delay_min=data.get('search_delay_min', '30s'),
-            search_delay_max=data.get('search_delay_max', '2min'),
-            search_split_enabled=data.get('search_split_enabled', False),
-            search_split_count=data.get('search_split_count', 3),
-            search_split_interval_min=data.get('search_split_interval_min', 30),
-            search_split_interval_max=data.get('search_split_interval_max', 120)
-        )
-        
-        db.session.add(new_node)
-        db.session.commit()
-        
+    except Exception as e:
+        print(f"manage_nodes 请求出错: {e}")
         return jsonify({
-            'status': 'success',
-            'message': '节点创建成功',
-            'node_id': new_node.id,
-            'api_token': api_token
-        })
-    
-    elif request.method == 'PUT':
-        # 更新节点信息
-        data = request.get_json()
-        node_id = data.get('id')
-        node_name = data.get('node_name')
-        
-        if not node_id or not node_name:
-            return jsonify({'error': '节点ID和名称不能为空'}), 400
-        
-        node = BotNode.query.get(node_id)
-        if not node:
-            return jsonify({'error': '节点不存在'}), 404
-        
-        # 检查节点名称是否已被其他节点使用
-        existing_node = BotNode.query.filter(BotNode.node_name == node_name, BotNode.id != node_id).first()
-        if existing_node:
-            return jsonify({'error': '节点名称已被其他节点使用'}), 400
-        
-        # 更新节点配置
-        node.node_name = node_name
-        node.cron_schedule = data.get('cron_schedule', node.cron_schedule)
-        node.min_sleep_minutes = data.get('min_sleep_minutes', node.min_sleep_minutes)
-        node.max_sleep_minutes = data.get('max_sleep_minutes', node.max_sleep_minutes)
-        node.clusters = data.get('clusters', node.clusters)
-        node.search_delay_min = data.get('search_delay_min', node.search_delay_min)
-        node.search_delay_max = data.get('search_delay_max', node.search_delay_max)
-        node.search_split_enabled = data.get('search_split_enabled', node.search_split_enabled)
-        node.search_split_count = data.get('search_split_count', node.search_split_count)
-        node.search_split_interval_min = data.get('search_split_interval_min', node.search_split_interval_min)
-        node.search_split_interval_max = data.get('search_split_interval_max', node.search_split_interval_max)
-        
-        db.session.commit()
-        
-        return jsonify({'status': 'success', 'message': '节点更新成功'})
+            "code": 1,
+            "msg": f"请求处理失败: {str(e)}",
+            "count": 0,
+            "data": []
+        }), 500
 
 
 @bp.route('/nodes/<int:node_id>/trigger', methods=['POST'])
@@ -393,7 +429,7 @@ def trigger_node(node_id):
         
         # 设置任务状态为待执行
         node.command_status = 'pending'
-        node.command = 'run_tasks'
+        node.command = 'RUN_TASKS'
         node.command_updated_at = datetime.now(timezone.utc)
         db.session.commit()
         
@@ -414,7 +450,7 @@ def stop_node(node_id):
         
         # 设置停止命令
         node.command_status = 'pending'
-        node.command = 'stop_tasks'
+        node.command = 'STOP_TASKS'
         node.command_updated_at = datetime.now(timezone.utc)
         db.session.commit()
         
@@ -455,17 +491,141 @@ def restart_node(node_id):
         if not node:
             return jsonify({'error': '节点不存在'}), 404
         
+        # 检查节点是否在线
+        if node.status != 1:
+            return jsonify({'error': '节点不在线，无法重启'}), 400
+        
+        # 记录重启开始时间
+        restart_start_time = datetime.now(timezone.utc)
+        
         # 设置重启命令
         node.command_status = 'pending'
         node.command = 'RESTART_SERVICE'
-        node.command_updated_at = datetime.now(timezone.utc)
-        db.session.commit()
+        node.command_updated_at = restart_start_time
+        node.command_data = json.dumps({
+            'restart_time': safe_isoformat(restart_start_time),
+            'restart_reason': 'manual_restart',
+            'restart_by': g.user.username if hasattr(g, 'user') else 'unknown'
+        })
         
-        return jsonify({'status': 'success', 'message': '重启命令已下发'})
+        # 创建重启历史记录（如果表存在）
+        try:
+            restart_record = NodeRestartHistory(
+                node_id=node_id,
+                restart_time=restart_start_time,
+                restart_reason='manual_restart',
+                restarted_by=g.user.username if hasattr(g, 'user') else 'unknown',
+                status='pending',
+                notes=f'管理员手动重启节点 {node.node_name}'
+            )
+            db.session.add(restart_record)
+            db.session.commit()
+        except Exception as history_error:
+            # 如果历史记录表不存在，记录警告但继续执行重启
+            current_app.logger.warning(f"无法创建重启历史记录: {history_error}")
+            # 回滚历史记录相关的操作，但保持节点命令设置
+            db.session.rollback()
+            # 重新设置节点命令（因为rollback会撤销之前的操作）
+            node.command_status = 'pending'
+            node.command = 'RESTART_SERVICE'
+            node.command_updated_at = restart_start_time
+            node.command_data = json.dumps({
+                'restart_time': safe_isoformat(restart_start_time),
+                'restart_reason': 'manual_restart',
+                'restart_by': g.user.username if hasattr(g, 'user') else 'unknown'
+            })
+            db.session.commit()
+        
+        # 记录重启日志
+        current_app.logger.info(f"管理员 {g.user.username if hasattr(g, 'user') else 'unknown'} 重启节点 {node.node_name} (ID: {node_id})")
+        
+        # 触发推送通知
+        try:
+            from .push import trigger_push_notification
+            trigger_push_notification(
+                'system_alert', 
+                f"🔄 节点重启", 
+                f"节点 {node.node_name} 正在重启服务\n⏰ 重启时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n👤 操作人: {g.user.username if hasattr(g, 'user') else 'unknown'}"
+            )
+        except Exception as push_error:
+            current_app.logger.warning(f"重启推送通知失败: {push_error}")
+        
+        return jsonify({
+            'status': 'success', 
+            'message': '重启命令已下发',
+            'restart_time': datetime.now(timezone.utc).isoformat()
+        })
     
     except Exception as e:
         current_app.logger.error(f"重启节点失败: {e}")
         return jsonify({'error': '重启节点失败'}), 500
+
+@bp.route('/nodes/<int:node_id>', methods=['GET'])
+@web_login_required
+def get_node_detail(node_id):
+    """获取节点详情"""
+    try:
+        node = BotNode.query.get(node_id)
+        if not node:
+            return jsonify({'error': '节点不存在'}), 404
+        
+        # 获取节点分配的账户数量
+        account_count = BotAccount.query.filter_by(assigned_node_id=node_id, is_enabled=True).count()
+        
+        node_data = {
+            'id': node.id,
+            'node_name': node.node_name,
+            'status': 'Online' if node.status == 1 else 'Offline',
+            'activity_status': node.activity_status,
+            'last_seen': safe_isoformat(node.last_seen),
+            'ip_address': node.ip_address,
+            'account_count': account_count,
+            'command': node.command,
+            'command_status': node.command_status,
+            'command_updated_at': safe_isoformat(node.command_updated_at),
+            'created_at': safe_isoformat(node.created_at) if hasattr(node, 'created_at') else None
+        }
+        
+        return jsonify({'status': 'success', 'data': node_data})
+    
+    except Exception as e:
+        current_app.logger.error(f"获取节点详情失败: {e}")
+        return jsonify({'error': '获取节点详情失败'}), 500
+
+@bp.route('/nodes/<int:node_id>/restart-history', methods=['GET'])
+@web_login_required
+def get_node_restart_history(node_id):
+    """获取节点重启历史记录"""
+    try:
+        node = BotNode.query.get(node_id)
+        if not node:
+            return jsonify({'error': '节点不存在'}), 404
+        
+        # 检查 node_restart_history 表是否存在
+        try:
+            # 获取重启历史记录
+            history_records = NodeRestartHistory.query.filter_by(node_id=node_id)\
+                .order_by(NodeRestartHistory.restart_time.desc())\
+                .limit(20).all()
+            
+            history_data = [record.to_dict() for record in history_records]
+        except Exception as table_error:
+            # 如果表不存在，返回空数据
+            current_app.logger.warning(f"node_restart_history 表不存在或查询失败: {table_error}")
+            history_data = []
+        
+        return jsonify({
+            'status': 'success', 
+            'data': {
+                'node_id': node_id,
+                'node_name': node.node_name,
+                'restart_history': history_data
+            }
+        })
+    
+    except Exception as e:
+        current_app.logger.error(f"获取节点重启历史失败: {e}")
+        return jsonify({'error': '获取节点重启历史失败'}), 500
 
 @bp.route('/nodes/<int:node_id>/regenerate-token', methods=['POST'])
 @web_login_required
@@ -505,21 +665,32 @@ def delete_node(node_id):
         if account_count > 0:
             return jsonify({'error': f'该节点下还有 {account_count} 个账户，无法删除'}), 400
         
+        # 清理节点的所有任务（调度器任务和数据库任务）
+        try:
+            scheduler.clear_node_tasks(node_id)
+            current_app.logger.info(f'已清理节点 {node_id} 的所有任务')
+        except Exception as clear_error:
+            current_app.logger.warning(f'清理节点 {node_id} 任务时出错: {clear_error}')
+            # 继续执行删除操作，不因为任务清理失败而阻止节点删除
+        
+        # 删除节点
         db.session.delete(node)
         db.session.commit()
         
+        current_app.logger.info(f'节点 {node_id} 删除成功')
         return jsonify({'status': 'success', 'message': '节点删除成功'})
     
     except Exception as e:
+        db.session.rollback()
         current_app.logger.error(f"删除节点失败: {e}")
-        return jsonify({'error': '删除节点失败'}), 500
+        return jsonify({'error': f'删除节点失败: {str(e)}'}), 500
 
 @bp.route('/accounts', methods=['GET'])
 @web_login_required
 def get_accounts():
     """获取所有账户列表（用于账户分析页面）"""
     try:
-        # 获取所有账户
+        # 获取所有账户，按邮箱排序
         accounts = db.session.query(
             BotAccount,
             Account,
@@ -528,7 +699,7 @@ def get_accounts():
             Account, BotAccount.id == Account.bot_account_id
         ).outerjoin(
             BotNode, BotAccount.assigned_node_id == BotNode.id
-        ).all()
+        ).order_by(BotAccount.email.asc()).all()
         
         account_data = []
         for bot_account, account, node in accounts:
@@ -542,7 +713,7 @@ def get_accounts():
                 'mobile_gain': account.mobile_gain if account else 0,
                 'last_updated': account.last_updated if account else None,
                 'is_enabled': bot_account.is_enabled,
-                'created_at': bot_account.created_at.isoformat() if bot_account.created_at else None
+                'created_at': safe_isoformat(bot_account.created_at)
             })
         
         return jsonify({
@@ -587,7 +758,7 @@ def manage_bot_accounts():
         if email:
             query = query.filter(BotAccount.email.contains(email))
         
-        accounts = query.all()
+        accounts = query.order_by(BotAccount.email.asc()).all()
         
         account_data = []
         for bot_account, account, node in accounts:
@@ -597,7 +768,7 @@ def manage_bot_accounts():
                 'daily_gain': account.daily_gain if account else 0,
                 'desktop_gain': account.desktop_gain if account else 0,
                 'mobile_gain': account.mobile_gain if account else 0,
-                'last_updated': account.last_updated.isoformat() if account and account.last_updated else None,
+                'last_updated': safe_isoformat(account.last_updated) if account else None,
                 'status_details': account.status_details if account else None
             }
             
@@ -609,7 +780,7 @@ def manage_bot_accounts():
                 'assigned_node_name': node.node_name if node else '未分配',
                 'is_enabled': bot_account.is_enabled,
                 'monitoring_data': monitoring_data,  # 包装监控数据
-                'created_at': bot_account.created_at.isoformat() if bot_account.created_at else None
+                'created_at': safe_isoformat(bot_account.created_at)
             })
         
         return jsonify({
@@ -620,36 +791,88 @@ def manage_bot_accounts():
         })
     
     elif request.method == 'POST':
-        # 创建新账户
+        # 创建新账户或更新现有账户
         data = request.get_json()
+        account_id = data.get('id')
         email = data.get('email')
         password = data.get('password')
+        auxiliary_email = data.get('auxiliary_email')
         assigned_node_id = data.get('assigned_node_id')
+        user_agent_id = data.get('user_agent_id')
+        proxy = data.get('proxy', {})
+        user_agents = data.get('userAgents', {})
+        hot_search_endpoints = data.get('hotSearchEndpoints', [])
         
-        if not email or not password:
-            return jsonify({'error': '邮箱和密码不能为空'}), 400
+        if not email:
+            return jsonify({'status': 'error', 'message': '邮箱不能为空'}), 400
         
-        # 检查邮箱是否已存在
-        existing_account = BotAccount.query.filter_by(email=email).first()
-        if existing_account:
-            return jsonify({'error': '邮箱已存在'}), 400
+        # 对于编辑操作，密码可以为空（表示不修改密码）
+        # 对于新增操作，密码不能为空
+        if not account_id and not password:
+            return jsonify({'status': 'error', 'message': '新增账户时密码不能为空'}), 400
         
-        # 创建账户
-        new_account = BotAccount(
-            email=email,
-            password=password,
-            assigned_node_id=assigned_node_id,
-            is_enabled=True
-        )
+        try:
+            if account_id:
+                # 更新现有账户
+                account = BotAccount.query.get(account_id)
+                if not account:
+                    return jsonify({'status': 'error', 'message': '账户不存在'}), 404
+                
+                # 检查邮箱是否被其他账户使用
+                existing_account = BotAccount.query.filter(BotAccount.email == email, BotAccount.id != account_id).first()
+                if existing_account:
+                    return jsonify({'status': 'error', 'message': '邮箱已被其他账户使用'}), 400
+                
+                # 更新账户信息
+                account.email = email
+                # 只有在密码不为空时才更新密码（编辑时密码可以为空表示不修改）
+                if password:
+                    account.password = password
+                account.auxiliary_email = auxiliary_email
+                account.assigned_node_id = assigned_node_id
+                account.proxy = json.dumps(proxy) if proxy else None
+                account.user_agents = json.dumps(user_agents) if user_agents else None
+                account.hot_search_endpoints = json.dumps(hot_search_endpoints) if hot_search_endpoints else None
+                
+                db.session.commit()
+                
+                return jsonify({
+                    'status': 'success',
+                    'message': '账户更新成功',
+                    'account_id': account.id
+                })
+            else:
+                # 创建新账户
+                # 检查邮箱是否已存在
+                existing_account = BotAccount.query.filter_by(email=email).first()
+                if existing_account:
+                    return jsonify({'status': 'error', 'message': '邮箱已存在'}), 400
+                
+                # 创建账户
+                new_account = BotAccount(
+                    email=email,
+                    password=password,
+                    auxiliary_email=auxiliary_email,
+                    assigned_node_id=assigned_node_id,
+                    proxy=json.dumps(proxy) if proxy else None,
+                    user_agents=json.dumps(user_agents) if user_agents else None,
+                    hot_search_endpoints=json.dumps(hot_search_endpoints) if hot_search_endpoints else None,
+                    is_enabled=True
+                )
+                
+                db.session.add(new_account)
+                db.session.commit()
+                
+                return jsonify({
+                    'status': 'success',
+                    'message': '账户创建成功',
+                    'account_id': new_account.id
+                })
         
-        db.session.add(new_account)
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': '账户创建成功',
-            'account_id': new_account.id
-        })
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"保存账户失败: {e}")
+            return jsonify({'status': 'error', 'message': f'保存失败: {str(e)}'}), 500
 
 @bp.route('/bot_accounts/<int:account_id>/toggle', methods=['POST'])
 @web_login_required
@@ -665,7 +888,7 @@ def toggle_account(account_id):
         
         status = '激活' if account.is_enabled else '停用'
         return jsonify({
-            'success': True,
+            'status': 'success',
             'message': f'账户已{status}',
             'is_enabled': account.is_enabled
         })
@@ -693,41 +916,47 @@ def manage_single_account(account_id):
             'id': account.id,
             'email': account.email,
             'password': account.password,
+            'auxiliary_email': account.auxiliary_email,
             'assigned_node_id': account.assigned_node_id,
             'node_name': node.node_name if node else '未分配',
             'is_enabled': account.is_enabled,
+            'proxy': account.proxy,
+            'user_agents': account.user_agents,
+            'hot_search_endpoints': account.hot_search_endpoints,
+            'user_agent_id': getattr(account, 'user_agent_id', None),  # 如果字段不存在则返回None
             'total_points': points_data.total_points if points_data else 0,
             'daily_gain': points_data.daily_gain if points_data else 0,
-            'desktop_points': points_data.desktop_points if points_data else 0,
-            'mobile_points': points_data.mobile_points if points_data else 0,
             'desktop_gain': points_data.desktop_gain if points_data else 0,
             'mobile_gain': points_data.mobile_gain if points_data else 0,
             'last_updated': points_data.last_updated if points_data else None,
-            'created_at': account.created_at.isoformat() if account.created_at else None
+            'created_at': safe_isoformat(account.created_at)
         }
         
-        return jsonify(account_data)
+        return jsonify({
+            'status': 'success',
+            'data': account_data
+        })
     
     elif request.method == 'DELETE':
         # 删除账户
         try:
             account = BotAccount.query.get(account_id)
             if not account:
-                return jsonify({'error': '账户不存在'}), 404
+                return jsonify({'status': 'error', 'message': '账户不存在'}), 404
             
-            # 删除关联的积分数据
-            points_data = Account.query.filter_by(bot_account_id=account_id).first()
-            if points_data:
-                db.session.delete(points_data)
-                
+            # 删除账户（相关数据会通过外键约束自动删除）
+            # accounts, account_points_history, tasks 表的数据会通过 ON DELETE CASCADE 自动删除
+            # user_agents 表的 used_by_account_id 会通过 ON DELETE SET NULL 自动设置为 NULL
             db.session.delete(account)
             db.session.commit()
             
+            current_app.logger.info(f'账户 {account_id} 删除成功')
             return jsonify({'status': 'success', 'message': '账户删除成功'})
         
         except Exception as e:
+            db.session.rollback()
             current_app.logger.error(f"删除账户失败: {e}")
-            return jsonify({'error': '删除账户失败'}), 500
+            return jsonify({'status': 'error', 'message': f'删除账户失败: {str(e)}'}), 500
 
 @bp.route('/bot_accounts/batch_delete', methods=['POST'])
 @web_login_required
@@ -738,31 +967,41 @@ def batch_delete_accounts():
         account_ids = data.get('ids', [])
         
         if not account_ids:
-            return jsonify({'error': '请选择要删除的账户'}), 400
+            return jsonify({'status': 'error', 'message': '请选择要删除的账户'}), 400
         
         deleted_count = 0
+        failed_accounts = []
+        
         for account_id in account_ids:
-            account = BotAccount.query.get(account_id)
-            if account:
-                # 删除关联的积分数据
-                points_data = Account.query.filter_by(bot_account_id=account_id).first()
-                if points_data:
-                    db.session.delete(points_data)
-                
-                db.session.delete(account)
-                deleted_count += 1
+            try:
+                account = BotAccount.query.get(account_id)
+                if account:
+                    # 删除账户（相关数据会通过外键约束自动删除）
+                    db.session.delete(account)
+                    deleted_count += 1
+                    current_app.logger.info(f'准备删除账户 {account_id}')
+                else:
+                    failed_accounts.append(f'账户 {account_id} 不存在')
+            except Exception as e:
+                failed_accounts.append(f'账户 {account_id} 删除失败: {str(e)}')
+                current_app.logger.error(f'删除账户 {account_id} 时出错: {e}')
         
         db.session.commit()
         
+        message = f'成功删除 {deleted_count} 个账户'
+        if failed_accounts:
+            message += f'，失败 {len(failed_accounts)} 个: {", ".join(failed_accounts)}'
+        
+        current_app.logger.info(f'批量删除完成: {message}')
         return jsonify({
             'status': 'success', 
-            'message': f'成功删除 {deleted_count} 个账户'
+            'message': message
         })
     
     except Exception as e:
-        current_app.logger.error(f"批量删除账户失败: {e}")
         db.session.rollback()
-        return jsonify({'error': '批量删除账户失败'}), 500
+        current_app.logger.error(f"批量删除账户失败: {e}")
+        return jsonify({'status': 'error', 'message': f'批量删除账户失败: {str(e)}'}), 500
 
 @bp.route('/push_configs', methods=['GET', 'POST'])
 @web_login_required
@@ -779,7 +1018,7 @@ def manage_push_configs():
                 'channel': config.channel,
                 'is_enabled': config.is_enabled,
                 'config_data': json.loads(config.config_data) if config.config_data else {},
-                'created_at': config.created_at.isoformat() if config.created_at else None
+                'created_at': safe_isoformat(config.created_at)
             })
         
         return jsonify(config_data)
@@ -834,46 +1073,6 @@ def delete_push_config(config_id):
         current_app.logger.error(f"删除推送配置失败: {e}")
         return jsonify({'error': '删除推送配置失败'}), 500
 
-@bp.route('/nodes/<int:node_id>/logs', methods=['GET'])
-@web_login_required
-def get_node_logs(node_id):
-    """获取节点日志"""
-    try:
-        node = BotNode.query.get(node_id)
-        if not node:
-            return jsonify({'error': '节点不存在'}), 404
-        
-        # 这里可以添加从数据库或文件系统读取日志的逻辑
-        # 目前返回空日志
-        logs = []
-        
-        return jsonify({
-            'success': True,
-            'logs': logs,
-            'node_name': node.node_name
-        })
-        
-    except Exception as e:
-        current_app.logger.error(f"获取节点日志失败: {e}")
-        return jsonify({'error': '获取节点日志失败'}), 500
-
-@bp.route('/nodes/<int:node_id>/logs/clear', methods=['POST'])
-@web_login_required
-def clear_node_logs(node_id):
-    """清空节点日志"""
-    try:
-        node = BotNode.query.get(node_id)
-        if not node:
-            return jsonify({'error': '节点不存在'}), 404
-        
-        # 这里可以添加清空日志的逻辑
-        # 目前只是简单返回成功
-        
-        return jsonify({'status': 'success', 'message': '日志已清空'})
-        
-    except Exception as e:
-        current_app.logger.error(f"清空节点日志失败: {e}")
-        return jsonify({'error': '清空节点日志失败'}), 500
 
 @bp.route('/mobile/get_points', methods=['GET'])
 def mobile_get_points():
@@ -885,8 +1084,8 @@ def mobile_get_points():
         if cached_data:
             return jsonify(cached_data)
         
-        # 获取所有节点和账户数据
-        nodes = BotNode.query.filter_by(status=1).all()  # 只获取在线节点
+        # 获取所有节点和账户数据，按节点名称排序
+        nodes = BotNode.query.filter_by(status=1).order_by(BotNode.node_name.asc()).all()  # 只获取在线节点
         node_data = []
         
         for node in nodes:
@@ -911,8 +1110,8 @@ def mobile_get_points():
                         'email': bot_account.email,
                         'total_points': account.total_points or 0,
                         'daily_gain': account.daily_gain or 0,
-                        'desktop_points': account.desktop_points or 0,
-                        'mobile_points': account.mobile_points or 0
+                        'desktop_gain': account.desktop_gain or 0,
+                        'mobile_gain': account.mobile_gain or 0
                     })
             
             if account_data:  # 只显示有账户的节点
@@ -995,8 +1194,8 @@ def get_points_history():
                 'daily_gain': history.daily_gain,
                 'desktop_gain': history.desktop_gain,
                 'mobile_gain': history.mobile_gain,
-                'record_date': history.record_date.isoformat(),
-                'created_at': history.created_at.isoformat() if history.created_at else None
+                'record_date': safe_isoformat(history.record_date),
+                'created_at': safe_isoformat(history.created_at)
             })
         
         return jsonify({
@@ -1043,7 +1242,7 @@ def get_points_analysis():
         daily_data = {}
         for result in results:
             history, email, node_name = result
-            date_str = history.record_date.isoformat()
+            date_str = safe_isoformat(history.record_date)
             
             if date_str not in daily_data:
                 daily_data[date_str] = {

@@ -110,23 +110,9 @@ def clear_node_tasks(node_id):
             scheduler.remove_job(job_id)
             logger.info(f'已移除节点 {node_id} 的调度任务')
 
-        # 删除数据库中的任务
-        try:
-            tasks = Task.query.filter_by(node_id=node_id).all()
-            task_count = len(tasks)
-            
-            if task_count > 0:
-                for task in tasks:
-                    db.session.delete(task)
-                db.session.commit()
-                logger.info(f'已清除节点 {node_id} 的 {task_count} 个任务')
-            else:
-                logger.info(f'节点 {node_id} 没有待删除的任务')
-                
-        except Exception as db_error:
-            logger.error(f'删除节点 {node_id} 的数据库任务时出错: {str(db_error)}')
-            db.session.rollback()
-            # 继续执行，不阻止节点删除
+        # 注意：数据库中的任务会通过外键约束的 CASCADE 自动删除
+        # 这里不需要手动删除，避免与外键约束冲突
+        logger.info(f'节点 {node_id} 的数据库任务将通过外键约束自动删除')
             
     except Exception as e:
         logger.error(f'清除节点 {node_id} 任务时发生未知错误: {str(e)}')
